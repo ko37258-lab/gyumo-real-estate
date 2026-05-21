@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# gyumo · 건축가능 규모검토 PJ
 
-## Getting Started
+> 디벨로퍼·토지투자자를 위한 건축 규모검토 도구
+> by 미스터홈즈 (미스터홈즈) × 공법의 신
 
-First, run the development server:
+## 시작하기
 
+### 1. v0.1 프로토타입 확인
+브라우저에서 `prototype.html`을 열면 v0.1 위젯이 작동합니다. 이것이 Next.js로 분해할 원본입니다.
+
+### 2. Next.js 프로젝트 부트스트랩
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npx create-next-app@latest . --typescript --tailwind --app --eslint
+npx shadcn@latest init
+npx shadcn@latest add slider select switch button input card label
+npm install zustand
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. 환경변수 설정
+```bash
+cp .env.example .env.local
+# VWORLD_API_KEY, SUPABASE_URL 등 채우기
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 4. 개발 서버 실행
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 프로젝트 컨텍스트
 
-## Learn More
+모든 상세 정보(타깃, 가격, 로드맵, 폴더 구조, 법령 근거)는 [`CLAUDE.md`](./CLAUDE.md) 참고.
 
-To learn more about Next.js, take a look at the following resources:
+## Claude Code에 첫 명령
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+prototype.html을 읽고 CLAUDE.md의 폴더 구조에 따라 
+Next.js 15 App Router 프로젝트로 분해해줘.
+shadcn/ui와 zustand를 사용하고, 
+components/simulator/ 아래에 6개 컴포넌트로 나눠줘.
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 라이선스 / 운영
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+© 2026 미스터홈즈 (미스터홈즈) FC. All rights reserved.
+법적 자문: 법무법인 윤강

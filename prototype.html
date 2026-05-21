@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>건축가능 규모검토 PJ v0.1 — by 미스터홈즈 × 공법의 신</title>
+<style>
+  :root {
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #5a5a5a;
+    --color-text-tertiary: #888;
+    --color-text-info: #185FA5;
+    --color-text-success: #0F6E56;
+    --color-text-danger: #A32D2D;
+    --color-background-primary: #ffffff;
+    --color-background-secondary: #f5f3ee;
+    --color-background-tertiary: #efece5;
+    --color-background-info: #E6F1FB;
+    --color-background-success: #E1F5EE;
+    --color-border-tertiary: rgba(0,0,0,0.12);
+    --color-border-secondary: rgba(0,0,0,0.25);
+    --color-border-primary: rgba(0,0,0,0.4);
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Noto Sans KR', 'Segoe UI', Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-text-primary: #f0f0f0;
+      --color-text-secondary: #b0b0b0;
+      --color-text-tertiary: #808080;
+      --color-text-info: #85B7EB;
+      --color-text-success: #5DCAA5;
+      --color-text-danger: #F09595;
+      --color-background-primary: #1a1a1a;
+      --color-background-secondary: #252525;
+      --color-background-tertiary: #2f2f2f;
+      --color-background-info: rgba(133, 183, 235, 0.15);
+      --color-border-tertiary: rgba(255,255,255,0.12);
+      --color-border-secondary: rgba(255,255,255,0.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-background-tertiary);
+    color: var(--color-text-primary);
+    margin: 0;
+    padding: 24px 16px;
+    line-height: 1.6;
+  }
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    background: var(--color-background-primary);
+    border-radius: var(--border-radius-lg);
+    padding: 24px;
+    border: 0.5px solid var(--color-border-tertiary);
+  }
+  h1 { font-size: 22px; font-weight: 500; margin: 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  input[type="text"], select {
+    height: 36px;
+    padding: 0 12px;
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: var(--border-radius-md);
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type="text"]:focus, select:focus {
+    border-color: var(--color-text-info);
+    box-shadow: 0 0 0 2px var(--color-background-info);
+  }
+  button {
+    height: 36px;
+    padding: 0 16px;
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: var(--border-radius-md);
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  button:hover { background: var(--color-background-secondary); }
+  button:active { transform: scale(0.98); }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--color-border-secondary);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-text-primary);
+    cursor: pointer;
+    border: 2px solid var(--color-background-primary);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-text-primary);
+    cursor: pointer;
+    border: 2px solid var(--color-background-primary);
+  }
+  code {
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 0.9em;
+    background: var(--color-background-secondary);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  .footer-note {
+    max-width: 720px;
+    margin: 16px auto 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+<h2 class="sr-only">건축가능 규모검토 프로토타입. 지번을 입력하고 용도지역을 선택하면 건폐율·용적률·일조권 사선제한이 적용된 건축 가능 매스를 시각화합니다.</h2>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 1rem;padding-bottom:12px;border-bottom:0.5px solid var(--color-border-tertiary)">
+  <div>
+    <h1>건축가능 규모검토 PJ</h1>
+    <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:3px">v0.1 prototype · by 공법의 신 × 미스터홈즈 (미스터홈즈)</div>
+  </div>
+  <div style="font-size:10px;color:var(--color-text-tertiary);background:var(--color-background-secondary);padding:4px 10px;border-radius:12px">SCALE REVIEW</div>
+</div>
+
+<div style="margin:0 0 14px">
+  <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px;font-weight:500">① 지번 조회</div>
+  <div style="display:flex;gap:8px">
+    <input id="addr" type="text" placeholder="예: 서울특별시 강남구 역삼동 123-45" style="flex:1" value="서울특별시 강남구 역삼동 825-3"/>
+    <button onclick="lookupAddr()" style="white-space:nowrap">조회</button>
+  </div>
+  <div id="lot-info" style="display:none;margin-top:10px;padding:10px 12px;background:var(--color-background-info);border-radius:var(--border-radius-md);font-size:12px;color:var(--color-text-info)">
+    <span id="lot-info-text"></span>
+  </div>
+</div>
+
+<div style="margin:0 0 14px">
+  <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px;font-weight:500">② 용도지역 선택 (국토계획법 시행령 제30조)</div>
+  <select id="zone" style="width:100%">
+    <option value="1jeon">제1종전용주거지역 (건폐율 50% · 용적률 50~100%)</option>
+    <option value="2jeon">제2종전용주거지역 (건폐율 50% · 용적률 100~150%)</option>
+    <option value="1il">제1종일반주거지역 (건폐율 60% · 용적률 100~200%)</option>
+    <option value="2il" selected>제2종일반주거지역 (건폐율 60% · 용적률 150~250%)</option>
+    <option value="3il">제3종일반주거지역 (건폐율 50% · 용적률 200~300%)</option>
+    <option value="junju">준주거지역 (건폐율 70% · 용적률 200~500%)</option>
+    <option value="gunin">근린상업지역 (건폐율 70% · 용적률 200~900%)</option>
+    <option value="ilsang">일반상업지역 (건폐율 80% · 용적률 300~1,300%)</option>
+    <option value="jungsang">중심상업지역 (건폐율 90% · 용적률 400~1,500%)</option>
+    <option value="yutong">유통상업지역 (건폐율 80% · 용적률 200~1,100%)</option>
+    <option value="jongon">전용공업지역 (건폐율 70% · 용적률 150~300%)</option>
+    <option value="ilbgon">일반공업지역 (건폐율 70% · 용적률 200~350%)</option>
+    <option value="jungon">준공업지역 (건폐율 70% · 용적률 200~400%)</option>
+  </select>
+</div>
+
+<div style="background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:14px;margin:0 0 14px">
+  <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:10px;font-weight:500">③ 규제값 조정</div>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+    <label style="font-size:12px;color:var(--color-text-secondary);min-width:78px">대지면적</label>
+    <input type="range" id="lot" min="50" max="2000" value="200" step="10" style="flex:1"/>
+    <span id="lot-out" style="font-size:12px;font-weight:500;min-width:64px;text-align:right">200평</span>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+    <label style="font-size:12px;color:var(--color-text-secondary);min-width:78px">건폐율 <span id="cov-max" style="color:var(--color-text-tertiary);font-size:10px">(최대60%)</span></label>
+    <input type="range" id="cov" min="10" max="60" value="60" step="1" style="flex:1"/>
+    <span id="cov-out" style="font-size:12px;font-weight:500;min-width:64px;text-align:right">60%</span>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+    <label style="font-size:12px;color:var(--color-text-secondary);min-width:78px">용적률 <span id="far-range" style="color:var(--color-text-tertiary);font-size:10px">(150~250%)</span></label>
+    <input type="range" id="far" min="150" max="250" value="250" step="10" style="flex:1"/>
+    <span id="far-out" style="font-size:12px;font-weight:500;min-width:64px;text-align:right">250%</span>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+    <label style="font-size:12px;color:var(--color-text-secondary);min-width:78px">전면도로</label>
+    <input type="range" id="road" min="3" max="20" value="6" step="1" style="flex:1"/>
+    <span id="road-out" style="font-size:12px;font-weight:500;min-width:64px;text-align:right">6m</span>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;padding-top:8px;border-top:0.5px solid var(--color-border-tertiary);margin-top:4px">
+    <label style="font-size:12px;color:var(--color-text-secondary);min-width:78px">일조권 사선</label>
+    <span style="position:relative;width:32px;height:18px;background:var(--color-text-info);border-radius:9px;display:inline-block;cursor:pointer" id="sun-toggle-track">
+      <input type="checkbox" id="sun" checked style="position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;margin:0"/>
+      <span id="sun-knob" style="position:absolute;top:2px;left:16px;width:14px;height:14px;background:#fff;border-radius:50%;transition:left .2s;pointer-events:none"></span>
+    </span>
+    <span style="font-size:11px;color:var(--color-text-tertiary);flex:1" id="sun-note">건축법 시행령 제86조 · 정북방향 인접대지경계선 적용</span>
+  </div>
+</div>
+
+<div style="background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:14px;margin:0 0 14px">
+  <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:500">④ 건축 가능 매스 시각화</div>
+  <svg id="sim" width="100%" viewBox="0 0 680 360" role="img" style="display:block">
+    <title>건축 가능 매스 시뮬레이션</title>
+    <desc>좌측 평면도와 우측 입면도. 일조권 사선제한이 적용되면 정북방향 상부가 깎인 형태로 표현됩니다.</desc>
+    <defs>
+      <pattern id="road-h" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="7" stroke="var(--color-text-tertiary)" stroke-width="0.8" opacity="0.4"/>
+      </pattern>
+      <pattern id="ground-h" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="var(--color-text-tertiary)" stroke-width="0.5" opacity="0.5"/>
+      </pattern>
+      <pattern id="no-build" patternUnits="userSpaceOnUse" width="6" height="6">
+        <rect width="6" height="6" fill="#FCEBEB" opacity="0.5"/>
+        <line x1="0" y1="6" x2="6" y2="0" stroke="#E24B4A" stroke-width="0.5" opacity="0.6"/>
+      </pattern>
+    </defs>
+    <text x="20" y="20" style="font-size:10px;font-weight:500;fill:var(--color-text-secondary)">평면도 · TOP VIEW</text>
+    <text x="380" y="20" style="font-size:10px;font-weight:500;fill:var(--color-text-secondary)">정북단면 · NORTH ELEVATION</text>
+    <g id="plan"></g>
+    <g id="elev"></g>
+  </svg>
+  <div style="display:flex;gap:14px;font-size:10px;color:var(--color-text-tertiary);margin-top:8px;flex-wrap:wrap">
+    <span><span style="display:inline-block;width:10px;height:10px;background:#F0997B;vertical-align:middle;margin-right:4px"></span>건축 가능 매스</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:#FCEBEB;border:1px solid #E24B4A;vertical-align:middle;margin-right:4px"></span>일조권 제한 영역</span>
+    <span><span style="display:inline-block;width:10px;height:2px;background:#E24B4A;vertical-align:middle;margin-right:4px"></span>일조권 사선</span>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:0 0 14px">
+  <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px">
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">대지면적</div>
+    <div style="font-size:18px;font-weight:500" id="r-lot">661㎡</div>
+    <div style="font-size:10px;color:var(--color-text-tertiary)" id="r-lot-py">200평</div>
+  </div>
+  <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px">
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">건축면적 (1F)</div>
+    <div style="font-size:18px;font-weight:500" id="r-bld">397㎡</div>
+    <div style="font-size:10px;color:var(--color-text-tertiary)" id="r-bld-py">120평</div>
+  </div>
+  <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px">
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">법정 연면적</div>
+    <div style="font-size:18px;font-weight:500;color:var(--color-text-info)" id="r-gfa">1,653㎡</div>
+    <div style="font-size:10px;color:var(--color-text-tertiary)" id="r-gfa-py">500평</div>
+  </div>
+  <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px">
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">실제 가능 연면적</div>
+    <div style="font-size:18px;font-weight:500;color:var(--color-text-success)" id="r-act">— ㎡</div>
+    <div style="font-size:10px;color:var(--color-text-tertiary)" id="r-act-note">일조권 반영 후</div>
+  </div>
+  <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px">
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">층수 · 높이</div>
+    <div style="font-size:18px;font-weight:500" id="r-floor">4층</div>
+    <div style="font-size:10px;color:var(--color-text-tertiary)" id="r-h">14.0m</div>
+  </div>
+</div>
+
+<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px 14px;font-size:11px;color:var(--color-text-secondary);line-height:1.7">
+  <div style="font-weight:500;color:var(--color-text-primary);margin-bottom:6px;font-size:12px">⚖️ 법적 근거</div>
+  · 용도지역별 건폐율 — <code>국토계획법 시행령 제84조</code><br/>
+  · 용도지역별 용적률 — <code>국토계획법 시행령 제85조</code><br/>
+  · 일조권 사선제한 — <code>건축법 제61조 · 시행령 제86조 제1항</code><br/>
+  <span style="color:var(--color-text-tertiary)">※ 도시계획조례에 따라 지자체별 강화 가능. 가각전제·채광방향·도로너비 가산 미반영. 실시설계 전 건축사·인허가 사전협의 필수.</span>
+</div>
+
+</div>
+
+<div class="footer-note">
+  © 2026 미스터홈즈 (미스터홈즈) FC · 공법의 신 · v0.1 prototype<br/>
+  본 프로토타입은 React/Next.js 컴포넌트로 분해하기 위한 참고 원본입니다.
+</div>
+
+<script>
+(function(){
+  const ZONES = {
+    '1jeon':  {name:'제1종전용주거지역', maxCov:50, farMin:50,  farMax:100, defFar:100, residential:true},
+    '2jeon':  {name:'제2종전용주거지역', maxCov:50, farMin:100, farMax:150, defFar:120, residential:true},
+    '1il':    {name:'제1종일반주거지역', maxCov:60, farMin:100, farMax:200, defFar:150, residential:true},
+    '2il':    {name:'제2종일반주거지역', maxCov:60, farMin:150, farMax:250, defFar:250, residential:true},
+    '3il':    {name:'제3종일반주거지역', maxCov:50, farMin:200, farMax:300, defFar:250, residential:true},
+    'junju':  {name:'준주거지역',         maxCov:70, farMin:200, farMax:500, defFar:400, residential:true},
+    'gunin':  {name:'근린상업지역',       maxCov:70, farMin:200, farMax:900, defFar:600, residential:false},
+    'ilsang': {name:'일반상업지역',       maxCov:80, farMin:300, farMax:1300,defFar:800, residential:false},
+    'jungsang':{name:'중심상업지역',      maxCov:90, farMin:400, farMax:1500,defFar:1000,residential:false},
+    'yutong': {name:'유통상업지역',       maxCov:80, farMin:200, farMax:1100,defFar:600, residential:false},
+    'jongon': {name:'전용공업지역',       maxCov:70, farMin:150, farMax:300, defFar:250, residential:false},
+    'ilbgon': {name:'일반공업지역',       maxCov:70, farMin:200, farMax:350, defFar:300, residential:false},
+    'jungon': {name:'준공업지역',         maxCov:70, farMin:200, farMax:400, defFar:350, residential:false},
+  };
+
+  const PY = 3.305785;
+  const FH = 3.5;
+  const $ = id => document.getElementById(id);
+  const fmt = (n,d=0) => n.toLocaleString('ko-KR',{minimumFractionDigits:d,maximumFractionDigits:d});
+
+  function applyZone(){
+    const z = ZONES[$('zone').value];
+    $('cov').max = z.maxCov;
+    $('cov').value = z.maxCov;
+    $('cov-max').textContent = '(최대' + z.maxCov + '%)';
+    $('far').min = z.farMin;
+    $('far').max = z.farMax;
+    $('far').value = Math.min(z.defFar, z.farMax);
+    $('far-range').textContent = '(' + z.farMin + '~' + z.farMax + '%)';
+    if(z.residential){
+      $('sun').checked = true;
+      $('sun-knob').style.left = '16px';
+      $('sun-toggle-track').style.background = 'var(--color-text-info)';
+      $('sun-note').textContent = '주거지역 · 정북방향 적용 (시행령 86조)';
+    } else {
+      $('sun').checked = false;
+      $('sun-knob').style.left = '2px';
+      $('sun-toggle-track').style.background = 'var(--color-border-secondary)';
+      $('sun-note').textContent = '상업·공업지역 · 일조권 사선제한 비적용';
+    }
+    render();
+  }
+
+  function lookupAddr(){
+    const a = $('addr').value.trim();
+    if(!a){ alert('지번을 입력하세요'); return; }
+    $('lot-info').style.display = 'block';
+    $('lot-info-text').innerHTML =
+      '<b>📍 ' + a + '</b><br/>' +
+      '<span style="font-size:11px">대지면적 661.16㎡ (200평) · 제2종일반주거지역 · 전면도로 6m · 정북방향 양호</span><br/>' +
+      '<span style="font-size:10px;opacity:0.7">※ v0.1 mock 데이터. v0.2부터 VWorld API 자동조회 예정</span>';
+    $('zone').value = '2il';
+    $('lot').value = 200;
+    $('road').value = 6;
+    applyZone();
+  }
+
+  function calcActualGFA(bldArea, floors, height, depthN, sunOn){
+    if(!sunOn) return bldArea * floors;
+    let total = 0;
+    for(let i=0; i<Math.ceil(floors); i++){
+      const fH = (i+1) * FH;
+      let setback = 0;
+      if(fH > 9) setback = (fH/2) - 1.5;
+      const effDepth = Math.max(0, depthN - setback);
+      const widthRatio = depthN > 0 ? effDepth/depthN : 0;
+      const floorPortion = (i+1 <= floors) ? 1 : (floors - i);
+      total += bldArea * widthRatio * floorPortion;
+    }
+    return total;
+  }
+
+  function render(){
+    const z = ZONES[$('zone').value];
+    const lotPy = parseInt($('lot').value);
+    const covPct = parseInt($('cov').value);
+    const farPct = parseInt($('far').value);
+    const roadM = parseInt($('road').value);
+    const sunOn = $('sun').checked && z.residential;
+
+    $('lot-out').textContent = lotPy + '평';
+    $('cov-out').textContent = covPct + '%';
+    $('far-out').textContent = farPct + '%';
+    $('road-out').textContent = roadM + 'm';
+
+    const lotSqm = lotPy * PY;
+    const bldArea = lotSqm * covPct/100;
+    const gfa = lotSqm * farPct/100;
+    const effCov = Math.min(covPct, farPct);
+    const floors = farPct / effCov;
+    const heightM = floors * FH;
+    const bldSide = Math.sqrt(bldArea);
+    const depthN = bldSide;
+
+    const actualGFA = calcActualGFA(bldArea, floors, heightM, depthN, sunOn);
+
+    $('r-lot').textContent = fmt(lotSqm,1) + '㎡';
+    $('r-lot-py').textContent = lotPy + '평';
+    $('r-bld').textContent = fmt(bldArea,1) + '㎡';
+    $('r-bld-py').textContent = fmt(bldArea/PY,0) + '평';
+    $('r-gfa').textContent = fmt(gfa,0) + '㎡';
+    $('r-gfa-py').textContent = fmt(gfa/PY,0) + '평';
+    $('r-act').textContent = fmt(actualGFA,0) + '㎡';
+    const lossRate = gfa>0 ? (1 - actualGFA/gfa)*100 : 0;
+    $('r-act-note').textContent = sunOn ? ('일조권 손실 ' + lossRate.toFixed(1) + '%') : '일조권 미적용';
+    $('r-floor').textContent = (Math.round(floors*10)/10) + '층';
+    $('r-h').textContent = fmt(heightM,1) + 'm';
+
+    // 평면도
+    const planCx = 175, planCy = 195;
+    const lotPx = 200;
+    const lx = planCx - lotPx/2;
+    const ly = planCy - lotPx/2;
+    const bldScale = Math.sqrt(covPct/100);
+    const bldPx = lotPx * bldScale;
+    const bx = planCx - bldPx/2;
+    const by = ly + (lotPx - bldPx) * 0.6;
+
+    let plan = '';
+    plan += '<g><circle cx="48" cy="58" r="13" fill="var(--color-background-primary)" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>';
+    plan += '<text x="48" y="54" text-anchor="middle" style="font-size:9px;fill:var(--color-text-secondary);font-weight:500">N</text>';
+    plan += '<polygon points="48,46 45,57 48,55 51,57" fill="var(--color-text-secondary)"/></g>';
+    plan += '<text x="' + planCx + '" y="' + (ly-22) + '" text-anchor="middle" style="font-size:9px;fill:#E24B4A;font-weight:500">↑ 정북방향 (인접대지)</text>';
+    plan += '<rect x="' + lx + '" y="' + ly + '" width="' + lotPx + '" height="' + lotPx + '" fill="var(--color-background-primary)" stroke="var(--color-text-secondary)" stroke-width="1" stroke-dasharray="4 3"/>';
+    plan += '<text x="' + planCx + '" y="' + (ly-6) + '" text-anchor="middle" style="font-size:9px;fill:var(--color-text-secondary)">대지경계선</text>';
+
+    if(sunOn){
+      const maxSetback = (heightM/2 - 1.5);
+      const setbackPx = (maxSetback / Math.sqrt(lotSqm)) * lotPx;
+      const limitY = ly + Math.min(setbackPx, lotPx*0.3);
+      plan += '<rect x="' + lx + '" y="' + ly + '" width="' + lotPx + '" height="' + (limitY-ly) + '" fill="url(#no-build)"/>';
+      plan += '<line x1="' + lx + '" y1="' + limitY + '" x2="' + (lx+lotPx) + '" y2="' + limitY + '" stroke="#E24B4A" stroke-width="1" stroke-dasharray="3 2"/>';
+      plan += '<text x="' + (lx+lotPx-4) + '" y="' + (limitY-3) + '" text-anchor="end" style="font-size:8px;fill:#E24B4A">사선이격 ' + fmt(maxSetback,1) + 'm</text>';
+    }
+
+    plan += '<rect x="' + bx + '" y="' + by + '" width="' + bldPx + '" height="' + bldPx + '" fill="#F0997B" stroke="#4A1B0C" stroke-width="0.8"/>';
+    if(bldPx > 50){
+      plan += '<text x="' + planCx + '" y="' + (by+bldPx/2-3) + '" text-anchor="middle" style="font-size:11px;fill:#4A1B0C;font-weight:500">건축면적</text>';
+      plan += '<text x="' + planCx + '" y="' + (by+bldPx/2+11) + '" text-anchor="middle" style="font-size:9px;fill:#4A1B0C">' + fmt(bldArea/PY,0) + '평</text>';
+    }
+
+    const rPx = Math.min(roadM*5, 60);
+    const ry = ly + lotPx + 6;
+    plan += '<rect x="' + lx + '" y="' + ry + '" width="' + lotPx + '" height="' + rPx + '" fill="url(#road-h)" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>';
+    plan += '<text x="' + planCx + '" y="' + (ry+rPx/2+3) + '" text-anchor="middle" style="font-size:10px;fill:var(--color-text-secondary);font-weight:500">전면도로 ' + roadM + 'm</text>';
+    $('plan').innerHTML = plan;
+
+    // 입면도
+    const eL = 380, eR = 660;
+    const baseY = 310;
+    const elevDepthPx = Math.min(220, depthN * 5);
+    const eBldL = eL + 30;
+    const eBldR = eBldL + elevDepthPx;
+
+    let phPx = 22;
+    const targetMax = 230;
+    if(floors * phPx > targetMax){
+      phPx = Math.max(5, targetMax / floors);
+    }
+
+    let elev = '';
+    elev += '<line x1="' + eL + '" y1="' + baseY + '" x2="' + eR + '" y2="' + baseY + '" stroke="var(--color-text-primary)" stroke-width="1"/>';
+    elev += '<rect x="' + eL + '" y="' + baseY + '" width="' + (eR-eL) + '" height="14" fill="url(#ground-h)"/>';
+    elev += '<rect x="' + eBldR + '" y="' + (baseY-3) + '" width="' + (eR-eBldR-2) + '" height="3" fill="var(--color-text-tertiary)" opacity="0.5"/>';
+    elev += '<text x="' + ((eBldR+eR)/2) + '" y="' + (baseY-7) + '" text-anchor="middle" style="font-size:8px;fill:var(--color-text-tertiary)">남측 도로</text>';
+    elev += '<rect x="' + eL + '" y="' + (baseY-3) + '" width="' + (eBldL-eL-2) + '" height="3" fill="var(--color-text-tertiary)" opacity="0.5"/>';
+    elev += '<text x="' + ((eL+eBldL)/2) + '" y="' + (baseY-7) + '" text-anchor="middle" style="font-size:8px;fill:#E24B4A">정북 인접대지</text>';
+    elev += '<line x1="' + eBldL + '" y1="' + (baseY-6) + '" x2="' + eBldL + '" y2="' + (baseY+6) + '" stroke="var(--color-text-secondary)" stroke-width="1"/>';
+    elev += '<line x1="' + eBldR + '" y1="' + (baseY-6) + '" x2="' + eBldR + '" y2="' + (baseY+6) + '" stroke="var(--color-text-secondary)" stroke-width="1"/>';
+
+    if(sunOn){
+      const mPx = 5;
+      const sb15 = 1.5 * mPx;
+      const h9px = 9 * mPx;
+      const sunStartY = baseY;
+      const sunV1Y = baseY - h9px;
+      const topY = baseY - heightM*mPx;
+      let path = 'M ' + (eBldL+sb15) + ' ' + sunStartY;
+      path += ' L ' + (eBldL+sb15) + ' ' + sunV1Y;
+      if(heightM > 9){
+        const extraH = heightM - 9;
+        const sb2 = extraH * 0.5 * mPx;
+        path += ' L ' + (eBldL+sb15+sb2) + ' ' + topY;
+      }
+      elev += '<path d="' + path + '" fill="none" stroke="#E24B4A" stroke-width="1" stroke-dasharray="4 3"/>';
+      elev += '<rect x="' + eBldL + '" y="' + (topY-20) + '" width="' + sb15 + '" height="' + (baseY-topY+20) + '" fill="url(#no-build)" opacity="0.5"/>';
+    }
+
+    for(let i=0; i<Math.ceil(floors); i++){
+      const fH = (i+1) * FH;
+      let setbackPx = 0;
+      if(sunOn && fH > 9){
+        setbackPx = (fH/2 - 1.5) * 5;
+      } else if(sunOn) {
+        setbackPx = 1.5 * 5;
+      }
+      let fL = sunOn ? (eBldL + setbackPx) : eBldL;
+      let fW = eBldR - fL;
+      if(fW < 0) fW = 0;
+      const portion = (i+1 <= floors) ? 1 : (floors - i);
+      if(portion <= 0) break;
+      const actualH = phPx * portion;
+      const actualY = baseY - i*phPx - actualH;
+      const isPartial = portion < 1;
+      elev += '<rect x="' + fL + '" y="' + actualY + '" width="' + fW + '" height="' + actualH + '" fill="' + (isPartial?'#F5C4B3':'#F0997B') + '" stroke="#4A1B0C" stroke-width="0.5" ' + (isPartial?'stroke-dasharray="3 2"':'') + '/>';
+      if(phPx >= 14 && fW > 30){
+        elev += '<text x="' + (eBldR-4) + '" y="' + (actualY+actualH/2+3) + '" text-anchor="end" style="font-size:8px;fill:#4A1B0C;opacity:0.6">' + (i+1) + 'F</text>';
+      }
+    }
+
+    const topYf = baseY - heightM*5;
+    const dimX = eBldR + 18;
+    if(dimX < 660){
+      elev += '<line x1="' + dimX + '" y1="' + topYf + '" x2="' + dimX + '" y2="' + baseY + '" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>';
+      elev += '<line x1="' + (dimX-3) + '" y1="' + topYf + '" x2="' + (dimX+3) + '" y2="' + topYf + '" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>';
+      elev += '<line x1="' + (dimX-3) + '" y1="' + baseY + '" x2="' + (dimX+3) + '" y2="' + baseY + '" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>';
+      elev += '<text x="' + (dimX+5) + '" y="' + ((topYf+baseY)/2+3) + '" style="font-size:9px;fill:var(--color-text-secondary)">' + fmt(heightM,1) + 'm</text>';
+    }
+
+    elev += '<text x="' + (eBldL-15) + '" y="' + (baseY+22) + '" style="font-size:9px;fill:#E24B4A;font-weight:500">← N</text>';
+    elev += '<text x="' + (eBldR+5) + '" y="' + (baseY+22) + '" style="font-size:9px;fill:var(--color-text-tertiary)">S →</text>';
+
+    $('elev').innerHTML = elev;
+  }
+
+  $('sun-toggle-track').addEventListener('click', function(e){
+    const cb = $('sun');
+    if(e.target.tagName !== 'INPUT') cb.checked = !cb.checked;
+    $('sun-knob').style.left = cb.checked ? '16px' : '2px';
+    $('sun-toggle-track').style.background = cb.checked ? 'var(--color-text-info)' : 'var(--color-border-secondary)';
+    render();
+  });
+
+  $('zone').addEventListener('change', applyZone);
+  ['lot','cov','far','road'].forEach(id => $(id).addEventListener('input', render));
+  window.lookupAddr = lookupAddr;
+  applyZone();
+})();
+</script>
+</body>
+</html>

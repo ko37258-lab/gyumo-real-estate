@@ -36,6 +36,15 @@ yarn-error.log*
 # vercel
 .vercel
 
+# netlify
+.netlify/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.claude/
+
+# 로컬 빌드/dev 로그 + 임시
+build.log
+dev.log
+_env_temp.json
