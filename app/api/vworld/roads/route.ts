@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
   const domain =
     process.env.VWORLD_DOMAIN ||
-    "stellar-buttercream-5d0da9.netlify.app";
+    "gyumo-mr-k.netlify.app";
 
   const delta = radius / 111000;
   const minX = (parseFloat(x) - delta).toFixed(7);

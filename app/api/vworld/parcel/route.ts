@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   // domain 파라미터: stellar 도메인을 사용 (키가 등록된 도메인). 빈 값도 시도 가능.
   const domain =
     process.env.VWORLD_DOMAIN ||
-    "stellar-buttercream-5d0da9.netlify.app";
+    "gyumo-mr-k.netlify.app";
 
   const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${key}&format=json&geomFilter=POINT(${x} ${y})&geometry=false&attribute=true&crs=EPSG:4326&size=1&domain=${domain}`;
 

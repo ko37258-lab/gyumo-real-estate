@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
   const domain =
     process.env.VWORLD_DOMAIN ||
-    "stellar-buttercream-5d0da9.netlify.app";
+    "gyumo-mr-k.netlify.app";
 
   const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_UQ111&key=${key}&format=json&geomFilter=POINT(${x} ${y})&geometry=false&attribute=true&crs=EPSG:4326&size=10&domain=${domain}`;
 
