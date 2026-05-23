@@ -29,13 +29,36 @@ export async function GET(request: Request) {
     "gyumo-mr-k.netlify.app";
 
   const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${key}&format=json&geomFilter=POINT(${x} ${y})&geometry=false&attribute=true&crs=EPSG:4326&size=1&domain=${domain}`;
+  const referer = `https://${domain}`;
+  const safeUrl = url.replace(/key=[^&]+/, "key=***");
+  console.log("[vworld/parcel] URL:", safeUrl);
+  console.log("[vworld/parcel] Referer:", referer);
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
   try {
     const res = await fetch(url, {
-      headers: { Referer: `https://${domain}` },
+      headers: {
+        Referer: referer,
+        "User-Agent": "Mozilla/5.0 (compatible; gyumo-mr-k/1.0)",
+        Accept: "application/json",
+      },
       cache: "no-store",
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     const text = await res.text();
+    if (text.trim().startsWith("<")) {
+      console.error("[vworld/parcel] HTML response:", text.slice(0, 300));
+      return NextResponse.json(
+        {
+          error: `VWorld returned HTML (status ${res.status}): ${text
+            .slice(0, 200)
+            .replace(/\s+/g, " ")}`,
+        },
+        { status: 502 },
+      );
+    }
     let data: unknown;
     try {
       data = JSON.parse(text);
@@ -61,9 +84,17 @@ export async function GET(request: Request) {
     }
     return NextResponse.json(parcel);
   } catch (e) {
+    clearTimeout(timeoutId);
+    const isAbort = e instanceof Error && e.name === "AbortError";
     console.error("[vworld/parcel] fetch error:", e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "VWorld 호출 실패" },
+      {
+        error: isAbort
+          ? "VWorld 응답 시간 초과 (8초)"
+          : e instanceof Error
+            ? e.message
+            : "VWorld 호출 실패",
+      },
       { status: 502 },
     );
   }
