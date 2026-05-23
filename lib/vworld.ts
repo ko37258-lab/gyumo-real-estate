@@ -1,6 +1,13 @@
-// VWorld 응답 파싱 헬퍼 + 클라이언트가 호출하는 thin wrapper (서버 API Route 경유).
-// 이전 버전은 클라이언트 JSONP였으나 VWorld 키의 도메인 제한 때문에 localhost에서 실패.
-// 현재 구조: 클라이언트 → /api/vworld/* → 서버에서 VWorld API 호출 → 결과 반환.
+// VWorld API 클라이언트 직접 호출 (브라우저에서 실행).
+// 서버사이드(Netlify Functions Lambda)에서 호출하면 도메인 인증/IP 제한으로 502가 나므로
+// stellar(real-estate-infographic)의 검증된 패턴을 따라 사용자 브라우저에서 fetch 시도 후
+// CORS 실패 시 JSONP로 fallback. 키는 NEXT_PUBLIC_VWORLD_KEY로 클라이언트 번들에 인라인되며,
+// VWorld 측 도메인 화이트리스트로 키 오용을 차단한다.
+
+const VWORLD_KEY =
+  (typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_VWORLD_KEY) ||
+  "";
 
 const JIMOK_MAP: Record<string, string> = {
   "01": "전", "02": "답", "03": "과수원", "04": "목장용지",
@@ -47,7 +54,61 @@ type FeatureResponse = {
   };
 };
 
-// ─── 응답 파싱 (서버 API Route에서 import) ──────────────────────────
+// ─── JSONP fallback (CORS 차단 시) ─────────────────────────────────
+
+function vworldJsonp<T>(url: string): Promise<T> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("VWorld JSONP는 브라우저에서만 호출 가능합니다"));
+  }
+  const w = window as unknown as Record<string, unknown>;
+  return new Promise<T>((resolve, reject) => {
+    const callbackName = `vworld_cb_${Date.now()}_${Math.floor(
+      Math.random() * 1000,
+    )}`;
+    const timeoutId = window.setTimeout(() => {
+      delete w[callbackName];
+      reject(new Error("VWorld 응답 시간 초과"));
+    }, 10000);
+
+    w[callbackName] = (data: T) => {
+      window.clearTimeout(timeoutId);
+      delete w[callbackName];
+      document.getElementById(callbackName)?.remove();
+      resolve(data);
+    };
+
+    const script = document.createElement("script");
+    script.id = callbackName;
+    script.src = `${url}&callback=${callbackName}`;
+    script.onerror = () => {
+      window.clearTimeout(timeoutId);
+      delete w[callbackName];
+      script.remove();
+      reject(new Error("VWorld 스크립트 로드 실패"));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+function currentDomain(): string {
+  if (typeof window === "undefined") return "";
+  return window.location.hostname;
+}
+
+async function callVworld<T>(url: string): Promise<T> {
+  // 1) 일반 fetch 시도 (CORS 허용된 경우)
+  try {
+    const r = await fetch(url);
+    if (r.ok) {
+      return (await r.json()) as T;
+    }
+  } catch {
+    // CORS 실패 → JSONP fallback
+  }
+  return vworldJsonp<T>(url);
+}
+
+// ─── 파서 (외부 호출 가능 — 서버 라우트가 import할 수 있음) ───────
 
 export function parseParcelInfo(raw: unknown): ParcelInfo | null {
   const data = raw as FeatureResponse;
@@ -157,27 +218,16 @@ export function parseVworldZone(raw: unknown): ZoneFromVworld {
   };
 }
 
-// ─── 클라이언트 wrappers (서버 API Route 호출) ──────────────────────
-
-async function jsonOrError(res: Response, label: string) {
-  if (res.ok) return res.json();
-  let msg = `${label} 실패 (${res.status})`;
-  try {
-    const j = (await res.json()) as { error?: string };
-    if (j?.error) msg = j.error;
-  } catch {
-    // ignore
-  }
-  throw new Error(msg);
-}
+// ─── 클라이언트 직접 호출 (브라우저 한국 IP + Origin 자동 첨부) ────
 
 export async function fetchParcelInfo(
   x: number | string,
   y: number | string,
 ): Promise<ParcelInfo | null> {
-  const res = await fetch(`/api/vworld/parcel?x=${x}&y=${y}`);
-  if (res.status === 404) return null;
-  return (await jsonOrError(res, "지적 조회")) as ParcelInfo;
+  if (!VWORLD_KEY) throw new Error("VWorld 키가 설정되지 않았습니다");
+  const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${VWORLD_KEY}&format=json&geomFilter=POINT(${x} ${y})&geometry=false&attribute=true&crs=EPSG:4326&size=1&domain=${currentDomain()}`;
+  const data = await callVworld<unknown>(url);
+  return parseParcelInfo(data);
 }
 
 export async function fetchNearbyRoads(
@@ -185,22 +235,27 @@ export async function fetchNearbyRoads(
   y: number | string,
   radius = 60,
 ): Promise<RoadCheck> {
-  const res = await fetch(
-    `/api/vworld/roads?x=${x}&y=${y}&radius=${radius}`,
-  );
-  return (await jsonOrError(res, "도로 조회")) as RoadCheck;
+  if (!VWORLD_KEY) throw new Error("VWorld 키가 설정되지 않았습니다");
+  const delta = radius / 111000;
+  const minX = (parseFloat(String(x)) - delta).toFixed(7);
+  const maxX = (parseFloat(String(x)) + delta).toFixed(7);
+  const minY = (parseFloat(String(y)) - delta).toFixed(7);
+  const maxY = (parseFloat(String(y)) + delta).toFixed(7);
+  const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${VWORLD_KEY}&format=json&geomFilter=BOX(${minX},${minY},${maxX},${maxY})&geometry=false&attribute=true&crs=EPSG:4326&size=50&domain=${currentDomain()}`;
+  const data = await callVworld<unknown>(url);
+  return parseRoadCheck(data);
 }
 
 export async function fetchZoneByCoord(
   x: number | string,
   y: number | string,
 ): Promise<ZoneFromVworld> {
-  const res = await fetch(`/api/vworld/zone?x=${x}&y=${y}`);
-  return (await jsonOrError(res, "용도지역 조회")) as ZoneFromVworld;
+  if (!VWORLD_KEY) throw new Error("VWorld 키가 설정되지 않았습니다");
+  const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_UQ111&key=${VWORLD_KEY}&format=json&geomFilter=POINT(${x} ${y})&geometry=false&attribute=true&crs=EPSG:4326&size=10&domain=${currentDomain()}`;
+  const data = await callVworld<unknown>(url);
+  return parseVworldZone(data);
 }
 
-/** 더 이상 클라이언트 키를 직접 확인하지 않음 — 서버 API Route가 환경변수를 검증. */
 export function hasVworldKey(): boolean {
-  // 호환성을 위해 항상 true 반환. 키 부재는 서버에서 500 에러로 표시됨.
-  return true;
+  return Boolean(VWORLD_KEY);
 }
