@@ -23,12 +23,28 @@ export default function SimulatorPage() {
     <main className="notranslate min-h-screen px-4 py-6" translate="no">
       <div className="max-w-5xl mx-auto bg-card rounded-xl p-6 border border-border">
         <header className="flex items-center justify-between gap-3 pb-3 mb-4 border-b border-border">
-          <div>
-            <h1 className="text-[22px] font-medium leading-tight">
-              {SITE_HEADER.title}
-            </h1>
-            <div className="text-[11px] text-muted-foreground mt-1">
-              {SITE_HEADER.subtitle}
+          <div className="flex items-center gap-3 min-w-0">
+            <Link
+              href="/"
+              className="flex-shrink-0 inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md border border-border hover:bg-secondary transition-colors"
+              aria-label="홈으로"
+              title="홈으로"
+            >
+              <span aria-hidden>←</span>
+              <span className="hidden sm:inline">홈</span>
+            </Link>
+            <div className="min-w-0">
+              <h1 className="text-[22px] font-medium leading-tight">
+                <Link
+                  href="/"
+                  className="hover:text-[var(--info)] hover:underline underline-offset-4 transition-colors"
+                >
+                  {SITE_HEADER.title}
+                </Link>
+              </h1>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                {SITE_HEADER.subtitle}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
