@@ -20,6 +20,17 @@ import {
   RISK_LABEL,
 } from "@/lib/jimok";
 
+type BuildingArea = {
+  area: number | null; // 대지면적 ㎡ (건축물대장 platArea)
+  source: "building" | "landledger" | null;
+  bcRat?: number;
+  vlRat?: number;
+  mainUse?: string;
+  grndFloors?: number;
+  ugrndFloors?: number;
+  bldName?: string;
+};
+
 type ApiResult = {
   parcel: ParcelInfo | null;
   roads: RoadCheck | null;
@@ -27,6 +38,7 @@ type ApiResult = {
   zoneFromLanduse: string | null;
   landprice: number | null;
   landpriceArea: number | null;
+  buildingArea: BuildingArea | null;
   pnu: string | null;
   refinedAddress: string | null;
   errors: string[];
@@ -70,7 +82,8 @@ export function LandLookup() {
       const useVworld = hasVworldKey();
 
       // 2) VWorld (클라이언트) + 공공데이터 (서버) 동시
-      const [parcel, roads, zoneVW, landuseRes, landpriceRes] = await Promise.all([
+      const [parcel, roads, zoneVW, landuseRes, landpriceRes, landareaRes] =
+        await Promise.all([
         useVworld
           ? fetchParcelInfo(geo.x, geo.y).catch((e: unknown) => {
               errors.push(`지적: ${e instanceof Error ? e.message : "실패"}`);
@@ -100,6 +113,12 @@ export function LandLookup() {
               : null,
           )
           .catch(() => null),
+        // 대지면적 — 승인된 건축물대장 기반 (다중 소스 순차 시도). 면적 자동화 1순위.
+        fetch(`/api/landarea?pnu=${geo.pnu}`)
+          .then(async (r) =>
+            r.ok ? ((await r.json()) as BuildingArea) : null,
+          )
+          .catch(() => null),
       ]);
 
       const out: ApiResult = {
@@ -109,6 +128,7 @@ export function LandLookup() {
         zoneFromLanduse: landuseRes,
         landprice: landpriceRes?.price ?? null,
         landpriceArea: landpriceRes?.area ?? null,
+        buildingArea: landareaRes ?? null,
         pnu: geo.pnu,
         refinedAddress: geo.refined,
         errors,
@@ -124,8 +144,9 @@ export function LandLookup() {
         setZone(zoneCode);
       }
 
-      // 면적: VWorld parcel.area 우선, 없으면 landprice.area fallback
+      // 면적 우선순위: ① 건축물대장 platArea(승인됨) → ② VWorld parcel.area → ③ landprice.area
       const areaSqm =
+        (landareaRes?.area && landareaRes.area > 0 ? landareaRes.area : 0) ||
         (parcel?.area && parcel.area > 0 ? parcel.area : 0) ||
         (landpriceRes?.area && landpriceRes.area > 0 ? landpriceRes.area : 0);
       if (areaSqm > 0) {
@@ -205,6 +226,25 @@ export function LandLookup() {
   const zoneShown = result?.zoneFromLanduse || result?.zoneFromVworld;
   const matchedZoneCode = findZoneCodeByName(zoneShown);
 
+  // 면적 단일 소스 of truth — 우선순위: 건축물대장 → VWorld → 공시지가
+  const resolvedArea =
+    (result?.buildingArea?.area && result.buildingArea.area > 0
+      ? result.buildingArea.area
+      : 0) ||
+    (result?.parcel?.area && result.parcel.area > 0 ? result.parcel.area : 0) ||
+    (result?.landpriceArea && result.landpriceArea > 0
+      ? result.landpriceArea
+      : 0);
+  const areaSourceLabel =
+    resolvedArea > 0 && result?.buildingArea?.area
+      ? "건축물대장"
+      : resolvedArea > 0 && result?.parcel?.area
+        ? "지적도"
+        : resolvedArea > 0
+          ? "공시지가"
+          : null;
+  const bld = result?.buildingArea;
+
   return (
     <div>
       <div className="text-xs text-muted-foreground mb-1.5 font-medium">
@@ -241,18 +281,9 @@ export function LandLookup() {
           <div className="px-3 py-2 rounded-md bg-[var(--info-bg)] text-[var(--info)]">
             <div className="font-semibold">📍 {result.refinedAddress}</div>
             <div className="mt-0.5 text-[11px] opacity-90">
-              {(() => {
-                const area =
-                  (result.parcel?.area && result.parcel.area > 0
-                    ? result.parcel.area
-                    : 0) ||
-                  (result.landpriceArea && result.landpriceArea > 0
-                    ? result.landpriceArea
-                    : 0);
-                return area > 0
-                  ? `${area.toLocaleString("ko-KR")}㎡ (${Math.round(area / 3.305785)}평)`
-                  : "면적 정보 없음 (수동 입력 필요)";
-              })()}
+              {resolvedArea > 0
+                ? `${resolvedArea.toLocaleString("ko-KR")}㎡ (${Math.round(resolvedArea / 3.305785)}평)${areaSourceLabel ? ` · ${areaSourceLabel}` : ""}`
+                : "면적 정보 없음 (수동 입력 필요)"}
               {zoneShown ? ` · ${zoneShown}` : ""}
               {matchedZoneCode
                 ? ` (${ZONES[matchedZoneCode].name} 자동 매칭)`
@@ -316,15 +347,46 @@ export function LandLookup() {
             </div>
           )}
 
+          {/* 건축물대장 참고 정보 (실제 건폐율·용적률·주용도) */}
+          {bld?.source === "building" &&
+            (bld.bcRat || bld.vlRat || bld.mainUse) && (
+              <div className="px-3 py-2 rounded-md bg-card border border-border text-[11px]">
+                <div className="text-[10px] text-muted-foreground mb-1">
+                  🏢 등록 건축물 (건축물대장 · 참고용)
+                  {bld.bldName ? ` — ${bld.bldName}` : ""}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                  {bld.mainUse && (
+                    <span>
+                      주용도 <b className="text-foreground">{bld.mainUse}</b>
+                    </span>
+                  )}
+                  {bld.bcRat ? (
+                    <span>
+                      건폐율 <b className="text-foreground">{bld.bcRat}%</b>
+                    </span>
+                  ) : null}
+                  {bld.vlRat ? (
+                    <span>
+                      용적률 <b className="text-foreground">{bld.vlRat}%</b>
+                    </span>
+                  ) : null}
+                  {bld.grndFloors ? (
+                    <span>
+                      지상 <b className="text-foreground">{bld.grndFloors}층</b>
+                      {bld.ugrndFloors ? ` · 지하 ${bld.ugrndFloors}층` : ""}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground/80">
+                  ※ 기존 건물 실측값입니다. 시뮬레이션 법정 한도는 용도지역 기준을 따릅니다.
+                </div>
+              </div>
+            )}
+
           {/* 공시지가 */}
           {result.landprice !== null && result.landprice > 0 && (() => {
-            const area =
-              (result.parcel?.area && result.parcel.area > 0
-                ? result.parcel.area
-                : 0) ||
-              (result.landpriceArea && result.landpriceArea > 0
-                ? result.landpriceArea
-                : 0);
+            const area = resolvedArea;
             return (
               <div className="px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-[11px]">
                 💰 개별공시지가{" "}

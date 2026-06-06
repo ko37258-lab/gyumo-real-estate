@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
@@ -7,7 +8,11 @@ import { useSimulatorStore } from "@/store/simulator";
 import { ZONES, getEffectiveFloorRatioMax } from "@/lib/zones";
 import { SunlightLearnSheet } from "@/components/simulator/SunlightLearnSheet";
 
+const SQM_PER_PYEONG = 3.305785; // 1평 = 3.305785㎡
+
 export function ControlPanel() {
+  // 대지면적 입력 단위 토글 ("py" 평 | "sqm" ㎡). store는 항상 평(lotPy) 기준 유지.
+  const [areaUnit, setAreaUnit] = useState<"py" | "sqm">("py");
   const zone = useSimulatorStore((s) => s.zone);
   const lotPy = useSimulatorStore((s) => s.lotPy);
   const covPct = useSimulatorStore((s) => s.covPct);
@@ -32,17 +37,57 @@ export function ControlPanel() {
         ③ 규제값 조정
       </div>
 
-      <SliderInputPair
-        label="대지면적"
-        value={lotPy}
-        onChange={setLotPy}
-        min={50}
-        max={2000}
-        step={10}
-        unit="평"
-        inputMin={0}
-        inputMax={50000}
-      />
+      <div className="space-y-1.5">
+        {/* ㎡ ↔ 평 단위 토글 */}
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-[12.5px] font-medium text-foreground/90">
+            대지면적
+          </Label>
+          <div className="inline-flex rounded-md border border-border overflow-hidden text-[11px]">
+            {(["py", "sqm"] as const).map((u) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => setAreaUnit(u)}
+                className={`px-2 py-0.5 transition-colors ${
+                  areaUnit === u
+                    ? "bg-[var(--info)] text-[var(--info-foreground)] font-semibold"
+                    : "bg-card text-muted-foreground hover:bg-secondary"
+                }`}
+                aria-pressed={areaUnit === u}
+              >
+                {u === "py" ? "평" : "㎡"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {areaUnit === "py" ? (
+          <SliderInputPair
+            value={lotPy}
+            onChange={setLotPy}
+            min={50}
+            max={2000}
+            step={10}
+            unit="평"
+            conversion={`(${Math.round(lotPy * SQM_PER_PYEONG).toLocaleString("ko-KR")}㎡)`}
+            inputMin={0}
+            inputMax={50000}
+          />
+        ) : (
+          <SliderInputPair
+            value={Math.round(lotPy * SQM_PER_PYEONG)}
+            onChange={(sqm) => setLotPy(Math.round(sqm / SQM_PER_PYEONG))}
+            min={165}
+            max={6600}
+            step={1}
+            unit="㎡"
+            conversion={`(${lotPy.toLocaleString("ko-KR")}평)`}
+            inputMin={0}
+            inputMax={165000}
+          />
+        )}
+      </div>
 
       <SliderInputPair
         label="건폐율"

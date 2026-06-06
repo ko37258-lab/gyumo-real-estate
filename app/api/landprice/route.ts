@@ -1,4 +1,9 @@
-// NSDI 개별공시지가 조회 — 최근 5년 fallback
+// NSDI 개별공시지가 조회 — 최근 5년 fallback (data.go.kr 15124014)
+//
+// serviceKey 인코딩: DATAGO_KEY(디코딩 키)를 encodeURIComponent()로 1회 인코딩.
+//   현재 키는 순수 영숫자라 인코딩 영향 없음(건축물대장에서 동일 키 정상 작동 검증됨).
+//   → "Unexpected errors"의 원인은 키 오류가 아니라 이 서비스 활용신청(승인) 미완료임.
+//   면적 자동화는 /api/landarea(건축물대장)가 담당하고, 본 라우트는 공시지가 표시용.
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -34,20 +39,17 @@ export async function GET(request: Request) {
       } catch {
         if (
           text.includes("SERVICE_KEY_IS_NOT_REGISTERED_ERROR") ||
-          text.includes("등록되지 않은")
+          text.includes("등록되지 않은") ||
+          text.includes("Unexpected errors")
         ) {
+          // 키 자체는 유효(건축물대장 정상). 이 서비스에 활용신청 미승인 상태.
           return NextResponse.json(
             {
               error:
-                "공시지가 API 키가 등록되지 않았습니다. data.go.kr에서 NSDI 개별공시지가 API 활용신청해주세요.",
+                "개별공시지가(NSDI) API가 아직 승인되지 않았습니다. data.go.kr에서 15124014 활용신청 승인 후 자동 활성화됩니다.",
+              pending: true,
             },
-            { status: 401 },
-          );
-        }
-        if (text.includes("Unexpected errors")) {
-          return NextResponse.json(
-            { error: "공시지가 API 키가 올바르지 않습니다." },
-            { status: 401 },
+            { status: 503 },
           );
         }
         continue;
