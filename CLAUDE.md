@@ -252,6 +252,16 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-06-09** — 면적 조회 장애 진단 + VWorld 토지특성정보(나대지 면적·공시지가) 통합.
+  - **진단 (라이브 호출)**: "면적 안 들어옴" 증상의 원인은 **건축물대장 API가 아님** — getBrTitleInfo는 `resultCode:"00" NORMAL SERVICE`로 완전 정상(성내동 562 PNU `1174010800005620000` → platArea **201.6㎡** 라이브 확인, Node/undici 3/3). 트래픽 한도(`LIMITED_NUMBER_OF_SERVICE_REQUESTS`)·키 미인가 아님. 성내동 562가 0건이던 건 법정동코드 오해(성내동=`1174010800`, `1174010100` 아님)였고, 역삼동 825-3은 표제부가 **진짜 0건(나대지)**. data.go.kr이 헤더 최소 요청(urllib)엔 **빈 200 응답**을 반환하는 현상 재현 → 현 코드가 이를 "면적없음"으로 조용히 삼킴(= production "200인데 빈 값" 증상). `/api/landuse`·`/api/landprice` 503은 LandUseService·NSDI 개별공시지가가 이 키에 **미승인**("Unexpected errors" 500) — 토지특성정보가 VWorld로 이전된 배경과 일치.
+  - **lib/vworld-data.ts 신규 (서버사이드 전용)**: VWorld 데이터 API 래퍼. `LP_PA_CBND_BUBUN`(면적·개별공시지가 `jiga`·지목 `jibun`) + `LT_C_UQ111`(용도지역 `uname`). 면적은 속성에 없어 `geometry=true` 폴리곤을 위도보정 평면근사로 계산(성내동 562 201.6㎡ 일치, 역삼 825-3 394.8㎡). **VWorld PNU는 11번째 자리 1=일반토지/2=산**(건축물대장 PNU의 0/1과 다름) → `toVworldPnu()` 변환 필수. 키 `VWORLD_DATA_KEY`(신규) → 없으면 `VWORLD_KEY` fallback. 502 회피 위해 `Referer: VWORLD_DOMAIN` 헤더. `callVworldData`가 전송실패·빈응답=throw(transient), status!=OK=null(데이터없음)로 구분.
+  - **app/api/vworld/route.ts 신규**: VWorld 서버 프록시 — `?kind=landchar&pnu=` / `?kind=zone&x&y` / `?kind=roads&x&y`. **브라우저 직접 호출(CORS) 제거**.
+  - **lib/vworld.ts 전면 교체**: api.vworld.kr 직접 호출 + JSONP + `NEXT_PUBLIC_VWORLD_KEY` 전부 삭제 → `/api/vworld` 서버 프록시만 호출하는 얇은 래퍼. 콘솔 CORS 에러(LP_PA_C·LT_C_UQ) 잔재 해소.
+  - **app/api/landarea/route.ts 강화**: 캐시 TTL **6h→24h**, 소스에 **VWorld 토지특성정보 추가**(우선순위 건축물대장→VWorld, 나대지 면적+공시지가 자동 입력). 빈/비정상 응답을 "나대지(정상 0건)"와 구분해 **transient 재시도(2회 백오프)** + 마지막 성공 캐시 stale 제공 + `transient:true`+"잠시 후 다시" 메시지(200평 기본값 회피). 응답에 `price`(공시지가)·`priceYear`·`jimok` 추가.
+  - **components/simulator/LandLookup.tsx**: 모든 조회를 서버 경유로 — 죽은 `/api/landuse`·`/api/landprice` 호출 제거, 면적·공시지가·지목은 `/api/landarea`, 용도지역·도로는 `/api/vworld`. 공시지가 카드(VWorld·연도 표시), transient 시 "⏳ 잠시 후 다시" 안내.
+  - **환경변수**: `.env.local`·`.env.local.example`에 `VWORLD_DATA_KEY=`(신규 키 자리, 비면 VWORLD_KEY fallback) 추가. (둘 다 `.env*`로 gitignore — 커밋 안 됨.) ⚠️ **운영자 조치**: 발급받은 새 VWorld 키를 `.env.local`과 Netlify 환경변수에 `VWORLD_DATA_KEY`로 등록.
+  - 검증: tsc 0 / eslint 0 / `next build` 13 routes ✓. `next start` 스모크 — 성내동562=201.6(building)·역삼825-3=394.8(vworld)+공시지가 85,100,000·용도지역 제2종일반주거지역·캐시 `cached:true`·미등록 PNU graceful "면적 정보 없음" 모두 확인.
+
 - **2026-05-22** — Day 14 stellar(real-estate-infographic) 통합 1단계 — Option C 데이터 레이어 이식.
   - **빌드 사전 점검 (TS 에러 3건 fix)**:
     - `components/ui/button.tsx`: `asChild` prop 지원 추가 — base-ui `render` prop으로 위임 (Slot 패턴). 마케팅 페이지·Nav·ReportDialog 등 6곳에서 사용 중이라 일괄 호환.
