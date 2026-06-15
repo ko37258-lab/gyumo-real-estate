@@ -57,41 +57,6 @@ type FeatureResponse = {
   };
 };
 
-/**
- * WGS84(EPSG:4326) 폴리곤 링을 위도 보정 평면 근사로 면적(㎡) 계산.
- * 작은 필지(수백~수천 ㎡) 기준 오차 < 0.3% (성내동 562: 201.96 vs 실측 201.6).
- */
-function ringAreaSqm(ring: number[][], lat: number): number {
-  const phi = (lat * Math.PI) / 180;
-  // WGS84 위도별 1도당 미터 (표준 근사식)
-  const mPerLat =
-    111132.92 - 559.82 * Math.cos(2 * phi) + 1.175 * Math.cos(4 * phi);
-  const mPerLon = 111412.84 * Math.cos(phi) - 93.5 * Math.cos(3 * phi);
-  let acc = 0;
-  for (let i = 0; i < ring.length - 1; i++) {
-    acc += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
-  }
-  return Math.abs(acc / 2) * mPerLat * mPerLon;
-}
-
-function polygonAreaSqm(
-  geometry: { type?: string; coordinates?: unknown } | undefined,
-  lat: number,
-): number {
-  if (!geometry?.coordinates) return 0;
-  const coords = geometry.coordinates as number[][][] | number[][][][];
-  try {
-    const outer =
-      geometry.type === "MultiPolygon"
-        ? (coords as number[][][][])[0][0]
-        : (coords as number[][][])[0];
-    if (!Array.isArray(outer) || outer.length < 4) return 0;
-    return ringAreaSqm(outer, lat);
-  } catch {
-    return 0;
-  }
-}
-
 /** jibun("562대" / "12-3도")에서 지목명(끝 한글) 추출 */
 function jimokFromJibun(jibun: string): string {
   const m = jibun.match(/([가-힣]+)\s*$/);
@@ -120,17 +85,47 @@ async function callVworldData(url: string): Promise<FeatureResponse> {
 
 export interface VworldLandChar {
   pnu: string; // VWorld PNU
-  area: number; // 면적 ㎡ (폴리곤 계산)
-  price: number; // 개별공시지가 원/㎡ (jiga)
-  priceYear: number; // 공시 기준연도
-  jimok: string; // 지목명 (대/전/답/임야 등)
-  jibun: string; // 지번 표기 (예: "562대")
-  address: string; // 주소
+  area: number; // 면적 ㎡ (lndpclAr — 속성 직접 제공)
+  price: number; // 개별공시지가 원/㎡ (pblntfPclnd)
+  priceYear: number; // 공시 기준연도 (stdrYear)
+  jimok: string; // 지목명 (대/전/답/임야 등 — 정식명으로 정규화)
+  zone: string; // 용도지역 (prposArea1Nm — 비도시지역 포함)
+  jibun: string; // 지번 표기 (현재 NED 미제공 → 빈 문자열, backward-compat)
+  address: string; // 주소 (현재 NED 미제공 → 빈 문자열)
+}
+
+const VWORLD_NED_ENDPOINT = "https://api.vworld.kr/ned/data";
+
+type NedResponse = {
+  landCharacteristicss?: {
+    field?: Record<string, unknown> | Array<Record<string, unknown>>;
+    resultCode?: string;
+    resultMsg?: string;
+  };
+  response?: { totalCount?: string; resultMsg?: string };
+};
+
+/** NED 응답의 field(단건 객체 또는 배열) → 최신 stdrYear 행 선택. */
+function pickLatestField(
+  raw: Record<string, unknown> | Array<Record<string, unknown>> | undefined,
+): Record<string, unknown> | null {
+  const rows = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter(
+    (x): x is Record<string, unknown> => !!x && typeof x === "object",
+  );
+  if (!rows.length) return null;
+  rows.sort((a, b) => (Number(b.stdrYear) || 0) - (Number(a.stdrYear) || 0));
+  return rows[0];
 }
 
 /**
- * VWorld 토지특성정보 — PNU로 조회 → 면적·개별공시지가·지목.
- * 건축물대장이 없는 나대지의 면적/공시지가 자동 입력에 사용.
+ * VWorld NED 토지특성정보(getLandCharacteristics) — PNU 한 번에
+ * 면적(lndpclAr)·개별공시지가(pblntfPclnd)·지목(lndcgrCodeNm)·용도지역(prposArea1Nm).
+ *
+ * 라이브 검증(2026-06): 도시(성내동562 대/201.6㎡/제2종일반주거)·나대지(역삼825-3 대/394.8㎡/
+ *   일반상업)·비도시(파주 송촌동578-11 공장용지/624㎡/계획관리지역)·임야(춘천 산1 임야/5,157㎡)
+ *   모두 정상. 폴리곤 면적 계산·LT_C_UQ111(비도시 NOT_FOUND) 의존 제거.
+ *
+ * stdrYear 생략 → 전 연도 반환되므로 최신 행 선택. 전송실패/빈응답/비정상 본문은 throw(transient).
  */
 export async function fetchVworldLandChar(
   pnu: string,
@@ -139,38 +134,35 @@ export async function fetchVworldLandChar(
   if (!key) return null;
   const vpnu = toVworldPnu(pnu);
   const url =
-    `${VWORLD_DATA_ENDPOINT}?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN` +
-    `&key=${key}&format=json&attrFilter=pnu:=:${vpnu}` +
-    `&geometry=true&attribute=true&crs=EPSG:4326&size=1&domain=${vworldDomain()}`;
-  const data = await callVworldData(url);
-  if (data?.response?.status !== "OK") return null;
-  const feature = data.response.result?.featureCollection?.features?.[0];
-  if (!feature) return null;
+    `${VWORLD_NED_ENDPOINT}/getLandCharacteristics` +
+    `?key=${key}&domain=${vworldDomain()}&pnu=${vpnu}&format=json&numOfRows=50&pageNo=1`;
 
-  const p = (feature.properties ?? {}) as Record<string, unknown>;
-  const jibun = String(p.jibun ?? "");
-  // 부호(약어) → 정식 명칭으로 환원 (예: "임" → "임야", "장" → "공장용지")
-  const jimok = normalizeJimok(jimokFromJibun(jibun));
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; gyumo/1.0)",
+      Accept: "application/json",
+      ...(vworldDomain() ? { Referer: `https://${vworldDomain()}` } : {}),
+    },
+  });
+  if (!res.ok) throw new Error(`VWorld NED HTTP ${res.status}`);
+  const text = await res.text();
+  if (!text.trim()) throw new Error("VWorld NED 빈 응답");
+  const data = JSON.parse(text) as NedResponse; // 비정상 본문이면 throw
 
-  // 면적: 폴리곤 중심 위도 추정 → 위도 보정 면적
-  const ring =
-    feature.geometry?.type === "MultiPolygon"
-      ? (feature.geometry.coordinates as number[][][][])?.[0]?.[0]
-      : (feature.geometry?.coordinates as number[][][])?.[0];
-  const lat =
-    Array.isArray(ring) && ring.length
-      ? ring.reduce((s, pt) => s + pt[1], 0) / ring.length
-      : 37.5;
-  const area = polygonAreaSqm(feature.geometry, lat);
+  // 인증키 오류 등은 데이터 없음으로 취급(무한 재시도 방지).
+  const field = pickLatestField(data.landCharacteristicss?.field);
+  if (!field) return null; // 해당 필지 없음(나대지 외 미등록) 또는 totalCount 0
 
+  const zoneRaw = String(field.prposArea1Nm ?? "").trim();
   return {
-    pnu: String(p.pnu ?? vpnu),
-    area: Math.round(area * 10) / 10,
-    price: Number(p.jiga) || 0,
-    priceYear: Number(p.gosi_year) || 0,
-    jimok,
-    jibun,
-    address: String(p.addr ?? ""),
+    pnu: vpnu,
+    area: Math.round((Number(field.lndpclAr) || 0) * 10) / 10,
+    price: Number(field.pblntfPclnd) || 0,
+    priceYear: Number(field.stdrYear) || 0,
+    jimok: normalizeJimok(String(field.lndcgrCodeNm ?? "")),
+    zone: zoneRaw && zoneRaw !== "지정되지않음" ? zoneRaw : "",
+    jibun: "",
+    address: "",
   };
 }
 

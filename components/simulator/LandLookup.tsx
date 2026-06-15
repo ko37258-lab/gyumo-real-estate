@@ -30,6 +30,7 @@ type LandArea = {
   price?: number; // 개별공시지가 원/㎡ (VWorld)
   priceYear?: number;
   jimok?: string; // 지목 (VWorld)
+  zone?: string; // 용도지역 (NED — 비도시지역 포함)
   transient?: boolean; // 일시 장애 (재시도 안내)
   message?: string;
 };
@@ -102,9 +103,12 @@ export function LandLookup() {
         );
       }
 
+      // 용도지역: NED 토지특성(비도시 포함) 우선 → 좌표 기반(LT_C_UQ111) 폴백.
+      const zoneName = landAreaRes?.zone || zoneVW;
+
       const out: ApiResult = {
         roads,
-        zone: zoneVW,
+        zone: zoneName,
         landArea: landAreaRes,
         pnu: geo.pnu,
         refinedAddress: geo.refined,
@@ -115,7 +119,7 @@ export function LandLookup() {
       // 3) store 반영 — 각각 독립 적용.
       setAddress(geo.refined);
 
-      const zoneCode = findZoneCodeByName(zoneVW);
+      const zoneCode = findZoneCodeByName(zoneName);
       if (zoneCode) setZone(zoneCode);
 
       const areaSqm =

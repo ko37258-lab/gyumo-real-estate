@@ -1,10 +1,12 @@
-// 대지면적 다중 소스 조회 — 승인된 API를 우선순위대로 시도.
+// 대지면적·용도지역·공시지가·지목 통합 조회 — 두 소스를 병합.
 //
-// 소스 우선순위:
+// 소스:
 //   ① 건축HUB 건축물대장 표제부(getBrTitleInfo) — platArea(대지면적) + 건폐율·용적률·주용도.
-//        건물 있는 땅에만 존재. DATAGO_KEY.
-//   ② VWorld 토지특성정보(LP_PA_CBND_BUBUN) — 나대지 면적(폴리곤 계산) + 개별공시지가 + 지목.
-//        건축물대장이 없는 나대지를 커버. VWORLD_DATA_KEY(또는 VWORLD_KEY).
+//        건물 있는 땅에만 존재. DATAGO_KEY. (해외 IP OK)
+//   ② VWorld NED 토지특성정보(getLandCharacteristics) — 면적(lndpclAr) + 개별공시지가 +
+//        지목 + 용도지역(prposArea1Nm, 비도시지역 포함). PNU 한 호출. VWORLD_DATA_KEY(또는 VWORLD_KEY).
+//        ※ NED는 api.vworld.kr — production(해외 IP)에서 차단 시 한국 리전 프록시 필요.
+//   병합: 면적은 건축물대장 우선(인허가 기준)→NED 폴백, 용도지역·공시지가·지목은 NED.
 //
 // 견고성(2026-06 장애 대응):
 //   - data.go.kr이 간헐적으로 "빈 200 응답"을 반환하면(특히 해외 IP) JSON.parse 실패.
@@ -32,6 +34,7 @@ interface AreaResult {
   price?: number; // 개별공시지가 원/㎡
   priceYear?: number; // 공시 기준연도
   jimok?: string; // 지목
+  zone?: string; // 용도지역 (비도시지역 포함 — NED getLandCharacteristics)
 }
 
 // 소스 호출 결과 — 정상 / 데이터없음(나대지) / 일시오류 3분기.
@@ -141,7 +144,7 @@ async function fromBuildingLedger(
   };
 }
 
-/** VWorld 토지특성정보 → 나대지 면적 + 개별공시지가 + 지목 */
+/** VWorld NED 토지특성정보 → 면적 + 개별공시지가 + 지목 + 용도지역(비도시 포함) */
 async function fromVworldLandChar(pnu: string): Promise<SourceOutcome> {
   let lc;
   try {
@@ -150,33 +153,27 @@ async function fromVworldLandChar(pnu: string): Promise<SourceOutcome> {
     // 전송 실패·빈응답 = 일시 장애 → 재시도 대상
     return { status: "transient" };
   }
-  // VWorld 정상 응답이나 해당 필지 없음(NOT_FOUND) = 진짜 데이터 없음
+  // NED 정상 응답이나 해당 필지 없음 = 진짜 데이터 없음
   if (!lc) return { status: "empty" };
+
+  const extra = {
+    price: lc.price || undefined,
+    priceYear: lc.priceYear || undefined,
+    jimok: lc.jimok || undefined,
+    zone: lc.zone || undefined,
+  };
+  const hasExtra = lc.price > 0 || !!lc.jimok || !!lc.zone;
+
   if (!lc.area || lc.area <= 0) {
-    // 면적은 못 구해도 공시지가/지목은 있을 수 있음 — 면적 없으면 다음 소스로.
-    if (lc.price > 0 || lc.jimok) {
-      return {
-        status: "ok",
-        data: {
-          area: null,
-          source: "vworld",
-          price: lc.price || undefined,
-          priceYear: lc.priceYear || undefined,
-          jimok: lc.jimok || undefined,
-        },
-      };
+    // 면적은 못 구해도 공시지가/지목/용도지역은 있을 수 있음.
+    if (hasExtra) {
+      return { status: "ok", data: { area: null, source: "vworld", ...extra } };
     }
     return { status: "empty" };
   }
   return {
     status: "ok",
-    data: {
-      area: lc.area,
-      source: "vworld",
-      price: lc.price || undefined,
-      priceYear: lc.priceYear || undefined,
-      jimok: lc.jimok || undefined,
-    },
+    data: { area: lc.area, source: "vworld", ...extra },
   };
 }
 
@@ -218,33 +215,61 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 소스 순차 시도 (우선순위: 건축물대장 → VWorld 토지특성). 추가 소스는 배열에 더하면 됨.
-    const sources: Array<() => Promise<SourceOutcome>> = [
-      () => fromBuildingLedger(pnu, pkey),
-      () => fromVworldLandChar(pnu),
-    ];
+    // 두 소스를 모두 시도해 병합한다.
+    //   - 건축물대장(getBrTitleInfo): 건물 있는 땅의 대지면적 + 건폐율·용적률·주용도.
+    //   - VWorld NED(getLandCharacteristics): 면적 + 공시지가 + 지목 + 용도지역(비도시 포함).
+    // 면적은 건축물대장 우선(인허가 기준), 나머지(용도지역·공시지가·지목)는 NED에서.
+    const [building, vworld] = await Promise.all([
+      trySourceWithRetry(() => fromBuildingLedger(pnu, pkey)),
+      trySourceWithRetry(() => fromVworldLandChar(pnu)),
+    ]);
 
-    let sawTransient = false;
-    // 면적은 없지만 공시지가/지목만 얻은 부분 결과(나대지 직전 단계) 보관.
-    let partial: AreaResult | null = null;
+    const b = building.status === "ok" ? building.data : null;
+    const v = vworld.status === "ok" ? vworld.data : null;
+    const sawTransient =
+      building.status === "transient" || vworld.status === "transient";
 
-    for (const source of sources) {
-      const outcome = await trySourceWithRetry(source);
-      if (outcome.status === "ok") {
-        if (outcome.data.area && outcome.data.area > 0) {
-          cache.set(pnu, { at: Date.now(), data: outcome.data });
-          return NextResponse.json(outcome.data);
-        }
-        // 면적 없는 부분 정보(공시지가 등)는 누적하고 계속 — 다음 소스가 면적을 줄 수도.
-        partial = { ...(partial ?? {}), ...outcome.data, area: null };
-      } else if (outcome.status === "transient") {
-        sawTransient = true;
-      }
+    // 면적: 건축물대장 우선 → NED 폴백.
+    const bArea = b?.area && b.area > 0 ? b.area : 0;
+    const vArea = v?.area && v.area > 0 ? v.area : 0;
+    const area = bArea || vArea || null;
+    const areaSource: AreaSource | null = bArea
+      ? "building"
+      : vArea
+        ? "vworld"
+        : null;
+
+    if (b || v) {
+      const merged: AreaResult = {
+        area,
+        source: areaSource,
+        // 건축물대장 부가정보
+        bcRat: b?.bcRat,
+        vlRat: b?.vlRat,
+        mainUse: b?.mainUse,
+        grndFloors: b?.grndFloors,
+        ugrndFloors: b?.ugrndFloors,
+        bldName: b?.bldName,
+        archArea: b?.archArea,
+        totArea: b?.totArea,
+        // NED 토지특성 (용도지역·공시지가·지목)
+        price: v?.price,
+        priceYear: v?.priceYear,
+        jimok: v?.jimok,
+        zone: v?.zone,
+      };
+      cache.set(pnu, { at: Date.now(), data: merged });
+      if (area) return NextResponse.json(merged);
+      // 면적만 없는 경우(나대지) — 나머지 정보라도 반환.
+      return NextResponse.json({
+        ...merged,
+        message:
+          "대지면적 미확인(나대지/미등록) — 용도지역·공시지가·지목은 조회됨. 면적은 수동 입력.",
+      });
     }
 
-    // 모든 소스가 면적을 못 줌. transient가 있었으면 일시 장애로 안내(기본값 회피).
-    if (sawTransient && !partial) {
-      // 마지막 성공 캐시가 있으면 stale 이라도 제공.
+    // 양쪽 다 데이터 없음. transient가 있었으면 일시 장애로 안내(기본값 회피).
+    if (sawTransient) {
       if (cached) {
         return NextResponse.json({ ...cached.data, cached: true, stale: true });
       }
@@ -258,16 +283,6 @@ export async function GET(request: Request) {
         },
         { status: 200 },
       );
-    }
-
-    // 나대지 + 부분 정보(공시지가/지목)만 있는 경우 — 그 정보라도 반환(캐시).
-    if (partial) {
-      cache.set(pnu, { at: Date.now(), data: partial });
-      return NextResponse.json({
-        ...partial,
-        message:
-          "건축물대장 미등록(나대지) — 공시지가/지목만 조회됨. 면적은 수동 입력 필요.",
-      });
     }
 
     // 진짜 데이터 없음 — 나대지이거나 미등록 필지.
