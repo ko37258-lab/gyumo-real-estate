@@ -48,3 +48,5 @@ next-env.d.ts
 build.log
 dev.log
 _env_temp.json
+
+.vercel
