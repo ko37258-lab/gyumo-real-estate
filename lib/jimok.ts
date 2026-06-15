@@ -54,6 +54,53 @@ export const JIMOK_INFO: Record<string, JimokInfo> = {
   광천지: { value: "low", emoji: "⛲", desc: "광천. 매우 제한적", risk: "high" },
 };
 
+/**
+ * 지목 부호(약어) → 정식 명칭 매핑.
+ *
+ * 배경: VWorld LP_PA_CBND_BUBUN의 jibun 필드는 지번 끝에 지목을 표기하는데,
+ *   "대"처럼 정식명과 약어가 같은 경우도 있지만 대부분은 1글자 부호로 온다.
+ *   (예: "578-11전" → 전(정식), "산12임" → 임(=임야), "장"(=공장용지))
+ *   지적법 시행령 제58조의 지목 부호 28종을 정식 명칭으로 환원한다.
+ *
+ * 약어와 정식명이 동일한 지목(전·답·대·도로 등)은 JIMOK_INFO에서 직접 매칭되므로 생략.
+ */
+export const JIMOK_ALIAS: Record<string, string> = {
+  과: "과수원",
+  목: "목장용지",
+  임: "임야",
+  광: "광천지",
+  염: "염전",
+  장: "공장용지",
+  학: "학교용지",
+  차: "주차장",
+  주: "주유소용지",
+  창: "창고용지",
+  철: "철도용지",
+  제: "제방",
+  천: "하천",
+  구: "구거",
+  유: "유지",
+  양: "양어장",
+  수: "수도용지",
+  공: "공원",
+  체: "체육용지",
+  원: "유원지",
+  종: "종교용지",
+  사: "사적지",
+  묘: "묘지",
+  잡: "잡종지",
+  // 도로는 부호도 "도"이지만 jibun이 "도"로 끝나는 경우가 흔해 명시 (JIMOK_INFO에 "도로"로 존재)
+  도: "도로",
+};
+
+/** 지목명(약어 또는 정식명) → 정식 명칭으로 정규화. */
+export function normalizeJimok(name: string | null | undefined): string {
+  if (!name) return "";
+  const trimmed = name.trim();
+  if (JIMOK_INFO[trimmed]) return trimmed; // 이미 정식명
+  return JIMOK_ALIAS[trimmed] ?? trimmed; // 약어면 환원, 미지정이면 원본
+}
+
 export const VALUE_LABEL: Record<JimokValue, string> = {
   high: "높음",
   "medium-high": "중상",
@@ -89,9 +136,11 @@ export const BUILT_JIMOK: ReadonlyArray<string> = [
 ];
 
 export function getJimokInfo(name: string | null | undefined): JimokInfo {
-  if (!name) return { value: "low", emoji: "❓", desc: "지목 정보 미확인", risk: "medium" };
+  const normalized = normalizeJimok(name);
+  if (!normalized)
+    return { value: "low", emoji: "❓", desc: "지목 정보 미확인", risk: "medium" };
   return (
-    JIMOK_INFO[name] ?? {
+    JIMOK_INFO[normalized] ?? {
       value: "low",
       emoji: "❓",
       desc: "지목 정보 미확인",
@@ -101,5 +150,6 @@ export function getJimokInfo(name: string | null | undefined): JimokInfo {
 }
 
 export function isBuiltJimok(name: string | null | undefined): boolean {
-  return !!name && BUILT_JIMOK.includes(name);
+  const normalized = normalizeJimok(name);
+  return !!normalized && BUILT_JIMOK.includes(normalized);
 }

@@ -11,6 +11,8 @@
 //   LP_PA_CBND_BUBUN → jiga=5,832,000원/㎡(2025), jibun="562대"(지목 대), 폴리곤 면적 201.96㎡(≈201.6)
 //   LT_C_UQ111       → uname="제2종일반주거지역"
 
+import { normalizeJimok } from "./jimok";
+
 const VWORLD_DATA_ENDPOINT = "https://api.vworld.kr/req/data";
 
 function vworldKey(): string {
@@ -147,7 +149,8 @@ export async function fetchVworldLandChar(
 
   const p = (feature.properties ?? {}) as Record<string, unknown>;
   const jibun = String(p.jibun ?? "");
-  const jimok = jimokFromJibun(jibun);
+  // 부호(약어) → 정식 명칭으로 환원 (예: "임" → "임야", "장" → "공장용지")
+  const jimok = normalizeJimok(jimokFromJibun(jibun));
 
   // 면적: 폴리곤 중심 위도 추정 → 위도 보정 면적
   const ring =

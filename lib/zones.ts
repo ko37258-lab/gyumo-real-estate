@@ -9,7 +9,8 @@
  * - 자치구별로 추가 변형이 있을 수 있음 (강남구, 송파구 등)
  * - 정비사업·지구단위계획 등으로 한도 상향 가능 (별도 검토 필요)
  * - 서울도심(사대문 안 — 종로구·중구 일부)은 floorRatioCBD 적용
- * - 비도시지역(관리·농림·자연환경)은 gyumo 미지원
+ * - 비도시지역(관리·농림·자연환경)은 국토계획법 시행령 제84·85조 상한 사용
+ *   (실제 한도는 해당 시·군 도시·군계획조례에 따름 — 인허가 시 별도 확인)
  */
 
 export type ZoneCode =
@@ -32,9 +33,20 @@ export type ZoneCode =
   // 녹지
   | "bojeon"
   | "saengsan"
-  | "jayeon";
+  | "jayeon"
+  // 관리·농림·자연환경 (비도시지역 — 국토계획법 시행령 별표)
+  | "gyehoek"
+  | "saengsangwan"
+  | "bojeongwan"
+  | "nongrim"
+  | "jayeonbo";
 
-export type ZoneCategory = "residential" | "commercial" | "industrial" | "green";
+export type ZoneCategory =
+  | "residential"
+  | "commercial"
+  | "industrial"
+  | "green"
+  | "management";
 
 export type Zone = {
   code: ZoneCode;
@@ -215,6 +227,51 @@ export const ZONES: Record<ZoneCode, Zone> = {
     floorRatioMax: 50,
     category: "green",
     aliases: ["자연녹지"],
+  }),
+
+  // ─── 관리·농림·자연환경보전 (비도시지역) ────────────────────────
+  // 국토계획법 시행령 제84조(건폐율 상한)·제85조(용적률 상한).
+  // 용적률 하한은 모두 50% — 슬라이더 기본은 farMin 50.
+  // 실제 한도는 시·군 도시·군계획조례로 정해지나, 여기서는 시행령 상한을 사용.
+  gyehoek: zone({
+    code: "gyehoek",
+    name: "계획관리지역",
+    coverRatioMax: 40, // 시행령 제84조 제1항 — 40% 이하
+    floorRatioMax: 100, // 시행령 제85조 제1항 — 50% 이상 100% 이하
+    category: "management",
+    aliases: ["계획관리"],
+  }),
+  saengsangwan: zone({
+    code: "saengsangwan",
+    name: "생산관리지역",
+    coverRatioMax: 20, // 시행령 제84조 — 20% 이하
+    floorRatioMax: 80, // 시행령 제85조 — 50% 이상 80% 이하
+    category: "management",
+    aliases: ["생산관리"],
+  }),
+  bojeongwan: zone({
+    code: "bojeongwan",
+    name: "보전관리지역",
+    coverRatioMax: 20, // 시행령 제84조 — 20% 이하
+    floorRatioMax: 80, // 시행령 제85조 — 50% 이상 80% 이하
+    category: "management",
+    aliases: ["보전관리"],
+  }),
+  nongrim: zone({
+    code: "nongrim",
+    name: "농림지역",
+    coverRatioMax: 20, // 시행령 제84조 — 20% 이하
+    floorRatioMax: 80, // 시행령 제85조 — 50% 이상 80% 이하
+    category: "management",
+    aliases: ["농림"],
+  }),
+  jayeonbo: zone({
+    code: "jayeonbo",
+    name: "자연환경보전지역",
+    coverRatioMax: 20, // 시행령 제84조 — 20% 이하
+    floorRatioMax: 80, // 시행령 제85조 — 50% 이상 80% 이하
+    category: "management",
+    aliases: ["자연환경보전"],
   }),
 };
 
