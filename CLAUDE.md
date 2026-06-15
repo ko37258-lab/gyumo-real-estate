@@ -70,7 +70,7 @@ AI        : Anthropic Claude API
 - [x] 3D 360° 시각화 (Three.js + React Three Fiber + drei) (2026-05-21)
 - [x] 5단계 통합 도구 구조(규모/비용/사업성 탭) + 비용·부담금 시뮬레이션 (2026-05-21, Day 4-A)
 - [ ] 사업성 분석(IRR·손익분기) — Phase 5
-- [ ] 지번 조회 → VWorld API 자동 입력
+- [x] 지번 조회 → 면적·용도지역(비도시 포함)·공시지가·지목 자동 입력 (VWorld NED, 2026-06-15)
 - [ ] 서울/광역시 도시계획조례 강화 적용
 
 ### Phase 2 (v0.3 · 3주차)
@@ -251,6 +251,16 @@ TOSS_SECRET_KEY=
 ---
 
 ## 10. 작업 로그
+
+- **2026-06-15** — 비도시 용도지역 + 토지데이터 NED 통합 + **Netlify→Vercel 이전**.
+  - **Fix A — 비도시 용도지역 5종 + 지목 약어 매핑** (`1d05b8b`):
+    - `lib/zones.ts`: 계획관리(건폐 40%/용적 100%)·생산관리·보전관리·농림·자연환경보전(나머지 20%/80%) 추가. 국토계획법 시행령 제84·85조 상한. `ZoneCategory`에 `"management"` 추가, ZoneSelector 드롭다운 자동 노출(16→21종).
+    - `lib/jimok.ts`: `JIMOK_ALIAS`(지적법 부호 28종) + `normalizeJimok()` — VWorld jibun 단축어 환원(임→임야, 장→공장용지, 차→주차장 등). `getJimokInfo`/`isBuiltJimok`/`fetchVworldLandChar`가 정규화 거침.
+  - **토지데이터 NED 통합** (`b698dca`): 면적·용도지역·공시지가·지목을 VWorld **NED `getLandCharacteristics`** 단일 호출로 통합(`lib/vworld-data.ts` `fetchVworldLandChar` 재작성). 응답 필드 `lndpclAr`(면적)·`pblntfPclnd`(공시지가)·`lndcgrCodeNm`(지목)·`prposArea1Nm`(용도지역, 비도시 포함). stdrYear 생략→최신연도 행. PNU는 `toVworldPnu`로 변환(평지 0→1/산 1→2). 폐기: `LT_C_UQ111`(비도시 NOT_FOUND)·폴리곤 면적 근사계산. `/api/landarea`는 건축물대장+NED 병합(면적은 건축물대장 우선→NED 폴백, 용도지역·공시지가·지목은 NED). `LandLookup`은 용도지역을 NED 우선→좌표기반 폴백.
+    - **조사 결론**: 토지특성·개별공시지가는 2024.1 data.go.kr→VWorld 이전(data.go.kr는 LINK만). 토지이용규제 15058410은 DATAGO_KEY로 `Unexpected errors`(미구독) — 미사용. getLandCharacteristics는 **VWorld API**(VWORLD_KEY 전용, DATAGO_KEY는 `INVALID_KEY`).
+    - 로컬 5종 검증: 성내동(제2종일반주거)·역삼동(일반상업)·파주(계획관리)·춘천 산1(임야/계획관리)·순천(자연녹지) 면적·용도지역·공시지가(2026) 정상.
+  - **Netlify→Vercel 이전** (`49ff431`): Netlify 벨로쉬 팀 크레딧 소진으로 배포 중단 → Vercel 이전. **핵심: `vercel.json` `regions:["icn1"]`(서울)** — API route가 한국 IP(AWS ap-northeast-2)에서 실행돼 VWorld NED 해외 IP 차단 우회(Netlify는 서울 리전 없어 막혔던 것). **프록시 불필요.** 라이브 **https://gyumo.vercel.app** (`kosangchuls-projects/gyumo`, GitHub 자동배포 연결). production 실측: 파주→계획관리지역 624㎡, 역삼동 나대지→일반상업 394.8㎡·공시지가 90,770,000(2026). 환경변수 4종(DATAGO_KEY·KAKAO_KEY·VWORLD_KEY·VWORLD_DOMAIN) Production 등록. ⚠️ Vercel env는 PowerShell 파이프 시 BOM(U+FEFF) 혼입 → bash `printf '%s'`로 등록. VWORLD_DOMAIN은 `gyumo-mr-k.netlify.app` 유지(VWorld는 domain 파라미터 값만 검증). 구 Netlify 사이트는 미사용.
+  - 검증: tsc 0 / eslint 0 / `next build` 13 routes. (909F1919 키 테스트 보류.)
 
 - **2026-06-09** — 면적 조회 장애 진단 + VWorld 토지특성정보(나대지 면적·공시지가) 통합.
   - **진단 (라이브 호출)**: "면적 안 들어옴" 증상의 원인은 **건축물대장 API가 아님** — getBrTitleInfo는 `resultCode:"00" NORMAL SERVICE`로 완전 정상(성내동 562 PNU `1174010800005620000` → platArea **201.6㎡** 라이브 확인, Node/undici 3/3). 트래픽 한도(`LIMITED_NUMBER_OF_SERVICE_REQUESTS`)·키 미인가 아님. 성내동 562가 0건이던 건 법정동코드 오해(성내동=`1174010800`, `1174010100` 아님)였고, 역삼동 825-3은 표제부가 **진짜 0건(나대지)**. data.go.kr이 헤더 최소 요청(urllib)엔 **빈 200 응답**을 반환하는 현상 재현 → 현 코드가 이를 "면적없음"으로 조용히 삼킴(= production "200인데 빈 값" 증상). `/api/landuse`·`/api/landprice` 503은 LandUseService·NSDI 개별공시지가가 이 키에 **미승인**("Unexpected errors" 500) — 토지특성정보가 VWorld로 이전된 배경과 일치.
