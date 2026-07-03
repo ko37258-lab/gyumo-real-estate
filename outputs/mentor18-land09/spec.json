@@ -1,0 +1,77 @@
+{
+  "total_duration": 55.77,
+  "scenes": [
+    {
+      "layout": "hero",
+      "typeTitle": true,
+      "kicker": "AI 토지 분석",
+      "title": ["AI로 분석하되,", "사람이 마무리한다"],
+      "subtitle": "정부 API + AI로 토지를 읽는 법",
+      "illus": "ai_analysis",
+      "captions": [
+        {"t": "AI는 강력하다 — 단, *사람이 마무리*", "big": true},
+        "토지 분석, AI 어떻게 씁니까?"
+      ]
+    },
+    {
+      "layout": "points",
+      "title": "정부 API로 읽는 데이터",
+      "items": [
+        "건축물대장·인허가 기록 API 자동 수집",
+        "반경 500m 최근 인허가 건수 즉시 조회",
+        "인허가 없음 → 재개발 예정지 가능성 ↑"
+      ],
+      "captions": [
+        "정부 *API*로 인허가 데이터 수집",
+        {"t": "건축물대장·인허가 기록 *자동 조회*", "big": true},
+        "반경 *500m* 인허가 건수 즉시 확인",
+        "인허가 없음 → *재개발 예정지* 가능성"
+      ]
+    },
+    {
+      "layout": "highlight",
+      "title": "시세 자동 수집",
+      "badge": "시세 조회",
+      "illusData": {
+        "type": "cmp",
+        "items": [
+          {"name": "수동 시세 조사", "val": "시간 소모", "sub": "부정확할 수 있음"},
+          {"name": "API 자동 조회", "val": "즉시 산정", "sub": "월세·실거래가 동시", "win": true}
+        ]
+      },
+      "captions": [
+        "월세 시세·평당 실거래가 *API 조회*",
+        {"t": "데이터로 *실거래가 사이트* 직접 제작 가능", "big": true}
+      ]
+    },
+    {
+      "layout": "highlight",
+      "title": "AI 입력 → 자동 분석",
+      "badge": "AI 활용",
+      "illusData": {
+        "type": "cmp",
+        "items": [
+          {"name": "AI 담당", "val": "데이터 분석", "sub": "배율·적정가·수익성"},
+          {"name": "사람 담당", "val": "마무리 판단", "sub": "현장감각·협상·목적", "win": true}
+        ]
+      },
+      "captions": [
+        "AI 입력 → 배율·적정가·*수익성 자동 분석*",
+        "현장 감각·협상 판단은 *사람의 몫*",
+        {"t": "AI = 데이터 분석 / 마무리 = *사람*", "big": true}
+      ]
+    },
+    {
+      "layout": "outro",
+      "typeTitle": true,
+      "title": "AI는 도구, 판단은 사람",
+      "subtitle": "정부 API + AI = 분석 자동화의 시작",
+      "cta": "팔로우하고 계속 배우기",
+      "captions": [
+        {"t": "AI = 데이터 분석 / 마무리 = *사람*", "big": true},
+        "AI 부동산 활용 전문가, *미스터 케이* 였습니다",
+        "팔로우 하시면 계속 좋은 정보 올려드리겠습니다"
+      ]
+    }
+  ]
+}

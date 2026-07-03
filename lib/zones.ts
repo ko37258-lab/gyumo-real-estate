@@ -278,7 +278,7 @@ export const ZONES: Record<ZoneCode, Zone> = {
 export const ZONE_LIST: Zone[] = Object.values(ZONES);
 
 export const ZONE_LABEL = (z: Zone) =>
-  `${z.name} (건폐율 ${z.coverRatioMax}% · 용적률 ${z.floorRatioMax.toLocaleString("ko-KR")}%${z.floorRatioCBD ? ` / 도심 ${z.floorRatioCBD}%` : ""})`;
+  `${z.name} (건폐율 ${z.coverRatioMax}% · 용적률 ${z.floorRatioMax.toLocaleString("ko-KR")}%)`;
 
 /**
  * API 응답 zone 이름 → ZoneCode 매핑.
@@ -291,22 +291,28 @@ export function findZoneCodeByName(
 ): ZoneCode | null {
   if (!apiZoneName) return null;
   const trimmed = apiZoneName.trim();
+  // VWorld가 "제3종 일반주거지역" 처럼 공백 포함 반환하는 경우를 대비
+  const normalized = trimmed.replace(/\s+/g, "");
 
-  // 1) 정확 일치
+  // 1) 정확 일치 (원문 + 공백 정규화)
   for (const z of ZONE_LIST) {
-    if (z.name === trimmed) return z.code;
+    if (z.name === trimmed || z.name.replace(/\s+/g, "") === normalized) return z.code;
   }
-  // 2) 별칭
+  // 2) 별칭 (원문 + 공백 정규화)
   for (const z of ZONE_LIST) {
-    if (z.aliases?.some((a) => a === trimmed)) return z.code;
+    if (z.aliases?.some((a) => a === trimmed || a.replace(/\s+/g, "") === normalized)) return z.code;
   }
   // 3) 부분 매칭 — 응답이 zone 이름을 포함
   for (const z of ZONE_LIST) {
-    if (trimmed.includes(z.name)) return z.code;
+    const zNorm = z.name.replace(/\s+/g, "");
+    if (trimmed.includes(z.name) || normalized.includes(zNorm)) return z.code;
   }
   // 4) 별칭 부분 매칭
   for (const z of ZONE_LIST) {
-    if (z.aliases?.some((a) => trimmed.includes(a))) return z.code;
+    if (z.aliases?.some((a) => {
+      const aNorm = a.replace(/\s+/g, "");
+      return trimmed.includes(a) || normalized.includes(aNorm);
+    })) return z.code;
   }
   return null;
 }
@@ -314,7 +320,7 @@ export function findZoneCodeByName(
 /** 서울도심(사대문 안) 자동 추정 — 자치구 기준 약식. 실제 행정동 경계는 별도 데이터 필요. */
 export function isLikelyCBD(address: string | null | undefined): boolean {
   if (!address) return false;
-  return /\b종로구\b|\b중구\b/.test(address);
+  return /종로구|중구/.test(address);
 }
 
 /**

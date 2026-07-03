@@ -13,7 +13,7 @@ import {
 import { DEFAULT_BRAND } from "@/lib/branding/defaults";
 import type { BrandConfig } from "@/lib/branding/types";
 
-export function BrandCard() {
+export function BrandCard({ canEdit = false }: { canEdit?: boolean }) {
   const saved = useBrandConfig();
   const [draft, setDraft] = useState<BrandConfig>(saved);
   const [savedAt, setSavedAt] = useState<string>("");
@@ -36,6 +36,27 @@ export function BrandCard() {
     setDraft(DEFAULT_BRAND);
     setSavedAt(new Date().toLocaleTimeString("ko-KR"));
   };
+
+  if (!canEdit) {
+    return (
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold">📋 보고서 브랜드 설정</h2>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
+            정회원 이상
+          </span>
+        </div>
+        <div className="rounded-lg px-4 py-6 text-center"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.12)" }}>
+          <div className="text-2xl mb-2">🔒</div>
+          <div className="text-sm font-medium text-foreground mb-1">정회원 이상 이용 가능</div>
+          <div className="text-xs text-muted-foreground">
+            정회원·VIP·미스터홈즈센터·멘토스쿨 회원은 PDF 브랜드를 자신의 상호로 변경할 수 있습니다.
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="p-4 space-y-4">

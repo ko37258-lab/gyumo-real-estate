@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { LandLookup } from "@/components/simulator/LandLookup";
 import { ZoneSelector } from "@/components/simulator/ZoneSelector";
@@ -17,8 +19,19 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { useSimulatorStore } from "@/store/simulator";
+import { useCostStore } from "@/store/cost";
 
 export default function SimulatorPage() {
+  // 탭 전환 시 simulator → cost store 동기화
+  const handleTabChange = (tab: string) => {
+    if (tab === "cost") {
+      const { lotPy, farPct } = useSimulatorStore.getState();
+      const gfaPy = Math.round(lotPy * farPct / 100);
+      if (gfaPy > 0) useCostStore.getState().set("abovePyeong", gfaPy);
+    }
+  };
+
   return (
     <main className="notranslate min-h-screen px-4 py-6" translate="no">
       <div className="max-w-5xl mx-auto bg-card rounded-xl p-6 border border-border">
@@ -61,7 +74,7 @@ export default function SimulatorPage() {
           </div>
         </header>
 
-        <Tabs defaultValue="scale">
+        <Tabs defaultValue="scale" onValueChange={handleTabChange}>
           <TabsList className="mb-4 w-full grid grid-cols-3 gap-3 h-auto p-0 bg-transparent">
             <StepTrigger value="scale" step={1} label="규모 검토" sub="건폐율·용적률·일조" />
             <StepTrigger value="cost" step={2} label="비용·부담금" sub="건축비·농지·산지·개발" />

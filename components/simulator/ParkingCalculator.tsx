@@ -33,6 +33,10 @@ import {
   calculateFloor1Indoor,
   calculateGroundParking,
 } from "@/lib/calc/groundParking";
+import {
+  resolveAreaPerSpace,
+  ordinanceSearchUrl,
+} from "@/lib/parking-regions";
 import { formatArea, sqmToPyeong } from "@/lib/utils/area";
 import { lotPyToSqm, buildingFootprintSqm } from "@/lib/calc/coverage";
 import { legalGfaSqm } from "@/lib/calc/far";
@@ -73,11 +77,22 @@ export function ParkingCalculator() {
     (s) => s.setParkingPilotiMode,
   );
 
+  const parkingLawdCd = useSimulatorStore((s) => s.parkingLawdCd);
+
   const lotSqm = lotPyToSqm(lotPy);
   const footprint = buildingFootprintSqm(lotSqm, covPct);
   const gfa = legalGfaSqm(lotSqm, farPct);
 
   const std = PARKING_STANDARDS[usage];
+
+  // 지자체 조례 자동 판별 (지번 조회 시)
+  const basis = resolveAreaPerSpace(usage, parkingLawdCd);
+  const basisLabel =
+    basis.sourceType === "ordinance"
+      ? `${basis.region!.regionName} 조례`
+      : basis.sourceType === "decree"
+        ? "시행령"
+        : "서울조례";
 
   const result = (() => {
     if (std.mode === "area") {
@@ -129,11 +144,51 @@ export function ParkingCalculator() {
             ⑤ 주차장 산정
           </div>
           <div className="text-[11px] text-muted-foreground/80 mt-0.5">
-            주차장법 시행령 별표1 + 서울특별시 조례 기준
+            주차장법 시행령 별표1 + 지자체 조례 자동 적용
           </div>
         </div>
         <ParkingLearnSheet />
       </div>
+
+      {/* 적용 조례 배너 — 지번 조회 시 지자체 자동 판별 */}
+      {parkingLawdCd && basis.sourceType === "ordinance" && (
+        <div
+          className="mb-3 px-3 py-2 rounded-md text-[11px] flex items-start gap-1.5"
+          style={{ background: "var(--info-bg)", color: "var(--info)" }}
+        >
+          <span>📍</span>
+          <span>
+            <b>{basis.region!.ordinanceName}</b> 자동 적용 — 조회하신 지번의
+            지자체 조례 기준으로 산정합니다.
+          </span>
+        </div>
+      )}
+      {parkingLawdCd && basis.sourceType === "decree" && (
+        <div className="mb-3 px-3 py-2 rounded-md text-[11px] bg-amber-50 border border-amber-300 text-amber-800 flex items-start gap-1.5">
+          <span>📍</span>
+          <span>
+            <b>{basis.regionName ?? "해당 지자체"}</b> 주차장 조례는 아직
+            미수록입니다 — <b>시행령 별표1 기준</b>으로 산정합니다 (조례가
+            강화 기준이면 실제 필요 대수가 더 많을 수 있음).{" "}
+            {basis.regionName && (
+              <a
+                href={ordinanceSearchUrl(basis.regionName)}
+                target="_blank"
+                rel="noreferrer"
+                className="underline font-medium"
+              >
+                조례 원문 확인 →
+              </a>
+            )}
+          </span>
+        </div>
+      )}
+      {!parkingLawdCd && (
+        <div className="mb-3 px-3 py-1.5 rounded-md text-[10.5px] bg-card border border-border text-muted-foreground">
+          💡 지번 미조회 상태 — 서울특별시 조례 기준. ① 지번 조회 시 해당
+          지자체 조례가 자동 적용됩니다.
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-3 mb-3">
         <div className="flex-1">
@@ -181,7 +236,7 @@ export function ParkingCalculator() {
                 {std.legalBasis}
               </div>
             </Card>
-            <Card title="적용 기준" highlight>
+            <Card title={`적용 기준 (${basisLabel})`} highlight>
               <div className="flex items-center gap-1.5">
                 <Input
                   type="number"

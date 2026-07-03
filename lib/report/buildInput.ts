@@ -23,6 +23,7 @@ import { calculateProfit } from "@/lib/calc/profit";
 import { useSimulatorStore } from "@/store/simulator";
 import { useCostStore } from "@/store/cost";
 import { useProfitStore } from "@/store/profit";
+import { useMarketStore } from "@/store/market";
 import type { ReportInputs } from "@/lib/ai/types";
 import { PY_TO_SQM } from "@/lib/constants";
 
@@ -131,9 +132,56 @@ export function buildReportInputs(): ReportInputs {
       })
     : null;
 
+  // 주변 시세·임대료 (사업성 탭에서 조회된 경우)
+  const marketState = useMarketStore.getState();
+  const md = marketState.data;
+  const market: ReportInputs["market"] = md
+    ? {
+        lawdCd: md.lawdCd,
+        months: md.months,
+        fetchedAt: md.fetchedAt,
+        baseAddress: marketState.baseAddress ?? undefined,
+        aptTrade: md.aptTrade
+          ? {
+              count: md.aptTrade.count,
+              avgPy: md.aptTrade.avgPy,
+              medianPy: md.aptTrade.medianPy,
+              maxPy: md.aptTrade.maxPy,
+              minPy: md.aptTrade.minPy,
+            }
+          : undefined,
+        nrgTrade: md.nrgTrade
+          ? {
+              count: md.nrgTrade.count,
+              avgPy: md.nrgTrade.avgPy,
+              medianPy: md.nrgTrade.medianPy,
+            }
+          : undefined,
+        aptRent: md.aptRent
+          ? {
+              jeonseCount: md.aptRent.jeonseCount,
+              avgJeonseDeposit: md.aptRent.avgJeonseDeposit,
+              wolseCount: md.aptRent.wolseCount,
+              avgWolseDeposit: md.aptRent.avgWolseDeposit,
+              avgMonthlyRent: md.aptRent.avgMonthlyRent,
+              avgMonthlyRentPerPy: md.aptRent.avgMonthlyRentPerPy,
+            }
+          : undefined,
+        offiRent: md.offiRent
+          ? {
+              wolseCount: md.offiRent.wolseCount,
+              avgWolseDeposit: md.offiRent.avgWolseDeposit,
+              avgMonthlyRent: md.offiRent.avgMonthlyRent,
+              avgMonthlyRentPerPy: md.offiRent.avgMonthlyRentPerPy,
+            }
+          : undefined,
+      }
+    : undefined;
+
   return {
     address: sim.address || undefined,
     reviewDate: new Date().toISOString().slice(0, 10),
+    market,
     scale: {
       landAreaSqm: lotSqm,
       landAreaPyeong: sim.lotPy,

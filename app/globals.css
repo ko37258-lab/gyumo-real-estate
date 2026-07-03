@@ -100,6 +100,24 @@
   --sidebar-ring: oklch(0.461 0.130 250);
 }
 
+/* ─── Hero building background animations ──────────────────────────── */
+@keyframes hero-driveR {
+  from { transform: translateX(-340px); }
+  to   { transform: translateX(calc(100vw + 340px)); }
+}
+@keyframes hero-driveL {
+  from { transform: translateX(calc(100vw + 340px)); }
+  to   { transform: translateX(-340px); }
+}
+@keyframes hero-carbob {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-car  { animation: none !important; }
+  .hero-carbob { animation: none !important; }
+}
+
 /* ─── Day 13 [C] 화면 색상 테마 ─────────────────────────────────────
    `<html data-theme="...">` 속성으로 토글. mrhomes는 :root 위에 코랄을
    명시적으로 덮어 의도 명확화. PDF 색상은 별도 BrandConfig에서 관리. */

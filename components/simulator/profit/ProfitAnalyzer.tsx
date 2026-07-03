@@ -11,6 +11,8 @@ import { SalesRevenueInputs } from "./SalesRevenueInputs";
 import { LoanCalculator } from "./LoanCalculator";
 import { ScheduleInputs } from "./ScheduleInputs";
 import { ProfitResults } from "./ProfitResults";
+import { NearbyLandPrice } from "./NearbyLandPrice";
+import { MarketInsight } from "./MarketInsight";
 
 const METHOD_LABEL: Record<string, string> = {
   bullet: "만기일시상환",
@@ -100,6 +102,9 @@ export function ProfitAnalyzer() {
           기본값으로
         </Button>
       </header>
+
+      <NearbyLandPrice />
+      <MarketInsight />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(360px,440px)] gap-4">
         <div className="space-y-4">

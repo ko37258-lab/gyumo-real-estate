@@ -25,9 +25,7 @@ export function ZoneSelector() {
       <Select value={zone} onValueChange={(v) => setZone(v as ZoneCode)}>
         <SelectTrigger className="w-full">
           <SelectValue>
-            {(value: ZoneCode) =>
-              ZONES[value] ? ZONE_LABEL(ZONES[value]) : null
-            }
+            {ZONES[zone] ? ZONE_LABEL(ZONES[zone]) : null}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>

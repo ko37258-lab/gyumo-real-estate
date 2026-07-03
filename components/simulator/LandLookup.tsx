@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSimulatorStore } from "@/store/simulator";
@@ -9,7 +9,8 @@ import {
   fetchNearbyRoads,
   type RoadCheck,
 } from "@/lib/vworld";
-import { findZoneCodeByName, ZONES } from "@/lib/zones";
+import { findZoneCodeByName, ZONES, isLikelyCBD } from "@/lib/zones";
+import { useCostStore } from "@/store/cost";
 import {
   getJimokInfo,
   isBuiltJimok,
@@ -35,6 +36,13 @@ type LandArea = {
   message?: string;
 };
 
+type MergedParcelRow = {
+  label: string;
+  areaSqm: number;
+  zone: string | null;
+  price: number | null;
+};
+
 type ApiResult = {
   roads: RoadCheck | null;
   zone: string | null;
@@ -42,7 +50,16 @@ type ApiResult = {
   pnu: string | null;
   refinedAddress: string | null;
   errors: string[];
+  /** 합필 조회 결과 (2필지 이상) */
+  merged?: {
+    parcels: MergedParcelRow[];
+    totalSqm: number;
+    zoneMismatch: boolean;
+  };
 };
+
+/** 전체 주소에서 지번만 추출 (예: "서울 강남구 역삼동 825-3" → "825-3") */
+const jibunOf = (full: string) => full.split(" ").pop() ?? full;
 
 export function LandLookup() {
   const address = useSimulatorStore((s) => s.address);
@@ -50,19 +67,60 @@ export function LandLookup() {
   const setAddress = useSimulatorStore((s) => s.setAddress);
   const applyLotInfo = useSimulatorStore((s) => s.applyLotInfo);
   const setZone = useSimulatorStore((s) => s.setZone);
+  const setIsCBD = useSimulatorStore((s) => s.setIsCBD);
   const setLotPy = useSimulatorStore((s) => s.setLotPy);
   const setRoadM = useSimulatorStore((s) => s.setRoadM);
+  const setMergedParcels = useSimulatorStore((s) => s.setMergedParcels);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ApiResult | null>(null);
+  const [mergeMode, setMergeMode] = useState(false);
+  const [extraAddresses, setExtraAddresses] = useState<string[]>([""]);
+  const [usage, setUsage] = useState<{
+    isLoggedIn: boolean; used: number; limit: number; remaining: number; allowed: boolean; role: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/usage")
+      .then((r) => r.json())
+      .then(setUsage)
+      .catch(() => null);
+  }, []);
 
   const onLookup = async () => {
     const q = address.trim();
     if (!q) return;
+
+    // 로그인 체크
+    if (usage !== null && !usage.isLoggedIn) {
+      window.location.href = "/login?redirect=/simulator";
+      return;
+    }
+
+    // 한도 체크 (클라이언트 사전 검사)
+    if (usage !== null && usage.isLoggedIn && !usage.allowed) {
+      setError(`오늘 사용 한도(${usage.limit}회)를 모두 사용하셨습니다. 내일 다시 이용하거나 등급을 업그레이드하세요.`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
+
+    // 사용량 증가 (서버에서 원자적으로 처리)
+    if (usage?.isLoggedIn) {
+      const incRes = await fetch("/api/usage", { method: "POST" });
+      if (incRes.status === 429) {
+        const data = await incRes.json().catch(() => ({})) as { limit?: number };
+        setError(`오늘 사용 한도(${data.limit ?? usage.limit}회)를 모두 사용하셨습니다.`);
+        setLoading(false);
+        setUsage((prev) => prev ? { ...prev, allowed: false, remaining: 0 } : prev);
+        return;
+      }
+      const updated = await incRes.json().catch(() => null) as typeof usage | null;
+      if (updated) setUsage((prev) => prev ? { ...prev, ...updated } : prev);
+    }
 
     try {
       // 1) 주소 → 좌표 + PNU (서버 프록시, KAKAO_KEY)
@@ -106,6 +164,54 @@ export function LandLookup() {
       // 용도지역: NED 토지특성(비도시 포함) 우선 → 좌표 기반(LT_C_UQ111) 폴백.
       const zoneName = landAreaRes?.zone || zoneVW;
 
+      const primaryArea =
+        landAreaRes?.area && landAreaRes.area > 0 ? landAreaRes.area : 0;
+
+      // 합필: 추가 지번들 조회 + 면적 합산
+      const extras = mergeMode
+        ? extraAddresses.map((a) => a.trim()).filter(Boolean)
+        : [];
+      let merged: ApiResult["merged"] = undefined;
+      if (extras.length > 0) {
+        const extraResults = await Promise.all(
+          extras.map(async (addr) => {
+            try {
+              const gRes = await fetch(`/api/geocode?address=${encodeURIComponent(addr)}`);
+              if (!gRes.ok) throw new Error();
+              const g = (await gRes.json()) as { pnu: string; refined: string };
+              const la = await fetch(`/api/landarea?pnu=${g.pnu}`)
+                .then(async (r) => (r.ok ? ((await r.json()) as LandArea) : null))
+                .catch(() => null);
+              return {
+                label: jibunOf(g.refined),
+                areaSqm: la?.area && la.area > 0 ? la.area : 0,
+                zone: la?.zone ?? null,
+                price: la?.price ?? null,
+              };
+            } catch {
+              errors.push(`합필 지번 "${addr}" 조회 실패`);
+              return null;
+            }
+          }),
+        );
+        const okExtras = extraResults.filter(Boolean) as MergedParcelRow[];
+        okExtras
+          .filter((e) => e.areaSqm === 0)
+          .forEach((e) => errors.push(`합필 지번 "${e.label}" 면적 정보 없음 — 합산에서 제외`));
+        const valid = okExtras.filter((e) => e.areaSqm > 0);
+        if (valid.length > 0 && primaryArea > 0) {
+          const parcels: MergedParcelRow[] = [
+            { label: jibunOf(geo.refined), areaSqm: primaryArea, zone: zoneName, price: landAreaRes?.price ?? null },
+            ...valid,
+          ];
+          const totalSqm = parcels.reduce((s, p) => s + p.areaSqm, 0);
+          const zoneMismatch = parcels.some(
+            (p) => p.zone && zoneName && p.zone !== zoneName,
+          );
+          merged = { parcels, totalSqm, zoneMismatch };
+        }
+      }
+
       const out: ApiResult = {
         roads,
         zone: zoneName,
@@ -113,18 +219,28 @@ export function LandLookup() {
         pnu: geo.pnu,
         refinedAddress: geo.refined,
         errors,
+        merged,
       };
       setResult(out);
 
       // 3) store 반영 — 각각 독립 적용.
       setAddress(geo.refined);
+      // 서울도심(종로구·중구) 자동 판별 — 그 외 지역은 CBD 토글 OFF
+      setIsCBD(isLikelyCBD(geo.refined));
 
       const zoneCode = findZoneCodeByName(zoneName);
       if (zoneCode) setZone(zoneCode);
 
-      const areaSqm =
-        landAreaRes?.area && landAreaRes.area > 0 ? landAreaRes.area : 0;
+      // 합필이면 합산 면적으로 시뮬레이션
+      const areaSqm = merged ? merged.totalSqm : primaryArea;
       if (areaSqm > 0) setLotPy(Math.round(areaSqm / 3.305785));
+
+      // 2D/3D 필지 경계 표시용
+      setMergedParcels(
+        merged
+          ? merged.parcels.map((p) => ({ label: p.label, areaSqm: p.areaSqm }))
+          : [],
+      );
 
       // 도로: 직접 검출 OR 건축 지목으로 접도 추정 → 6m, 그 외 0m.
       const jimokName = landAreaRes?.jimok ?? null;
@@ -133,6 +249,17 @@ export function LandLookup() {
       const roadM = directRoad || presumed ? 6 : 0;
       setRoadM(roadM);
 
+      // 공시지가: 합필 시 면적 가중 평균
+      const pricedParcels = merged
+        ? merged.parcels.filter((p) => p.price && p.areaSqm > 0)
+        : [];
+      const effectivePrice = merged && pricedParcels.length > 0
+        ? Math.round(
+            pricedParcels.reduce((s, p) => s + p.price! * p.areaSqm, 0) /
+              pricedParcels.reduce((s, p) => s + p.areaSqm, 0),
+          )
+        : landAreaRes?.price ?? undefined;
+
       if (zoneCode && areaSqm > 0) {
         applyLotInfo({
           address: geo.refined,
@@ -140,7 +267,14 @@ export function LandLookup() {
           zone: zoneCode,
           roadM,
           source: "vworld",
+          pnu: geo.pnu,
+          publicPricePerSqm: effectivePrice,
+          publicPriceYear: landAreaRes?.priceYear ?? undefined,
         });
+        // 비용 탭 연면적 자동 동기화 (lotPy × defFar)
+        const z = ZONES[zoneCode];
+        const gfaPy = Math.round((areaSqm / 3.305785) * z.defFar / 100);
+        if (gfaPy > 0) useCostStore.getState().set("abovePyeong", gfaPy);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 실패");
@@ -208,10 +342,21 @@ export function LandLookup() {
   const zoneShown = result?.zone ?? null;
   const matchedZoneCode = findZoneCodeByName(zoneShown);
 
+  const usageBadge = usage?.isLoggedIn
+    ? usage.remaining === 0
+      ? { text: `오늘 ${usage.used}/${usage.limit}회 사용`, color: "text-red-500" }
+      : { text: `오늘 ${usage.used}/${usage.limit}회 사용`, color: "text-muted-foreground" }
+    : usage !== null
+      ? { text: "로그인 후 이용", color: "text-amber-500" }
+      : null;
+
   return (
     <div>
-      <div className="text-xs text-muted-foreground mb-1.5 font-medium">
-        ① 지번 조회
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-xs text-muted-foreground font-medium">① 지번 조회</div>
+        {usageBadge && (
+          <span className={`text-[10px] ${usageBadge.color}`}>{usageBadge.text}</span>
+        )}
       </div>
       <div className="flex gap-2">
         <Input
@@ -222,10 +367,99 @@ export function LandLookup() {
           onKeyDown={(e) => e.key === "Enter" && !loading && onLookup()}
           disabled={loading}
         />
-        <Button onClick={onLookup} disabled={loading || !address.trim()} variant="outline">
-          {loading ? "조회 중..." : "조회"}
+        <Button
+          onClick={onLookup}
+          disabled={loading || !address.trim() || (usage !== null && usage.isLoggedIn && !usage.allowed)}
+          variant="outline"
+        >
+          {loading
+            ? "조회 중..."
+            : usage !== null && !usage.isLoggedIn
+              ? "로그인 후 조회"
+              : mergeMode
+                ? "합필 조회"
+                : "조회"}
         </Button>
       </div>
+
+      {/* 합필 토글 */}
+      <div className="mt-1.5">
+        <button
+          type="button"
+          onClick={() => {
+            setMergeMode((v) => {
+              const next = !v;
+              if (!next) {
+                setMergedParcels([]);
+                setExtraAddresses([""]);
+              }
+              return next;
+            });
+          }}
+          className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
+            mergeMode
+              ? "bg-[var(--info)] text-[var(--info-foreground,#fff)] border-[var(--info)]"
+              : "bg-transparent text-[var(--info)] border-[var(--info)] hover:bg-[var(--info-bg)]"
+          }`}
+        >
+          {mergeMode ? "🔗 합필 모드 ON — 취소하기" : "➕ 합필하실 경우 (옆 필지 합쳐서 검토)"}
+        </button>
+      </div>
+
+      {/* 합필 추가 지번 입력 */}
+      {mergeMode && (
+        <div
+          className="mt-2 rounded-md p-2.5 space-y-1.5 border border-dashed"
+          style={{ borderColor: "var(--info)", background: "var(--info-bg)" }}
+        >
+          <div className="text-[10.5px] font-medium" style={{ color: "var(--info)" }}>
+            🔗 합필 검토 — 위 대표 지번 + 아래 지번들의 면적을 합산해 하나의 대지로 시뮬레이션합니다.
+          </div>
+          {extraAddresses.map((a, i) => (
+            <div key={i} className="flex gap-1.5">
+              <Input
+                value={a}
+                onChange={(e) =>
+                  setExtraAddresses((prev) =>
+                    prev.map((v, idx) => (idx === i ? e.target.value : v)),
+                  )
+                }
+                placeholder={`추가 지번 ${i + 1} — 예: 서울 강남구 역삼동 825-4`}
+                className="flex-1 h-8 text-xs bg-card"
+                onKeyDown={(e) => e.key === "Enter" && !loading && onLookup()}
+                disabled={loading}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setExtraAddresses((prev) =>
+                    prev.length <= 1 ? [""] : prev.filter((_, idx) => idx !== i),
+                  )
+                }
+                disabled={loading}
+                className="h-8 px-2 text-xs"
+              >
+                ✕
+              </Button>
+            </div>
+          ))}
+          <div className="flex items-center justify-between">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExtraAddresses((prev) => [...prev, ""])}
+              disabled={loading || extraAddresses.length >= 9}
+              className="h-7 text-[11px]"
+            >
+              + 지번 추가
+            </Button>
+            <span className="text-[10px] text-muted-foreground">
+              용도지역·도로는 대표 지번 기준 (최대 10필지)
+            </span>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mt-2.5 px-3 py-2 rounded-md text-xs bg-red-50 border-l-4 border-red-500 text-red-700">
@@ -258,6 +492,57 @@ export function LandLookup() {
             </div>
             <div className="mt-0.5 text-[10px] opacity-80">PNU: {result.pnu}</div>
           </div>
+
+          {/* 합필 결과 카드 */}
+          {result.merged && (
+            <div
+              className="rounded-md border p-2.5"
+              style={{ borderColor: "var(--info)", background: "var(--card)" }}
+            >
+              <div className="flex items-baseline justify-between mb-1.5">
+                <span className="text-[11px] font-bold" style={{ color: "var(--info)" }}>
+                  🔗 합필 {result.merged.parcels.length}필지 검토
+                </span>
+                <span className="text-[12px] font-bold">
+                  합계 {result.merged.totalSqm.toLocaleString("ko-KR")}㎡ (
+                  {Math.round(result.merged.totalSqm / 3.305785)}평)
+                </span>
+              </div>
+              <div className="space-y-0.5">
+                {result.merged.parcels.map((p, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between text-[11px] px-2 py-1 rounded bg-secondary/50"
+                  >
+                    <span>
+                      <b
+                        className="inline-block w-4 text-center mr-1 rounded text-[9px] font-bold"
+                        style={{ background: "var(--info-bg)", color: "var(--info)" }}
+                      >
+                        {String.fromCharCode(65 + i)}
+                      </b>
+                      {p.label}
+                      {i === 0 && (
+                        <span className="ml-1 text-[9px] text-muted-foreground">(대표)</span>
+                      )}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {p.areaSqm.toLocaleString("ko-KR")}㎡
+                      {p.zone ? ` · ${p.zone}` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {result.merged.zoneMismatch && (
+                <div className="mt-1.5 px-2 py-1 rounded bg-amber-50 border border-amber-300 text-[10px] text-amber-800">
+                  ⚠ 필지별 용도지역이 다릅니다 — 시뮬레이션은 대표 지번 기준. 실제 합필 시 관할청 확인 필수
+                </div>
+              )}
+              <div className="mt-1 text-[9.5px] text-muted-foreground">
+                ※ 합필은 지적법상 동일 소유자·연접 필지 등 요건 충족 시 가능 — 정식 검토는 토지이동 신청 전 확인
+              </div>
+            </div>
+          )}
 
           {/* 지목 + 도로 카드 */}
           {(jimokName || roadVerdict) && (

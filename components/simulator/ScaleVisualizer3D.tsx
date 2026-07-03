@@ -25,8 +25,10 @@ const MASS_EDGE = "#4A1B0C";
 const DANGER = "#E24B4A";
 const PARKING_COLOR = "#9CA3AF";
 const PARKING_EDGE = "#4B5563";
-const ROAD_COLOR = "#cfcfc6";
+const ROAD_COLOR = "#8B8D91";
 const LOT_COLOR = "#fbfaf6";
+const GLASS_COLOR = "#9CC3E5";
+const CAR_COLORS = ["#DC2626", "#2563EB", "#F1F5F9", "#64748B", "#0F766E", "#D97706", "#1E293B"];
 
 type PresetKey = "iso" | "top" | "south" | "north";
 
@@ -88,10 +90,17 @@ export default function ScaleVisualizer3D() {
           🔄 자동 회전 {autoRotate ? "ON" : "OFF"}
         </Button>
       </div>
-      <div style={{ height: isMobile ? 360 : 480 }} className="bg-[#f5f3ee]">
+      <div
+        style={{
+          height: isMobile ? 360 : 480,
+          background: "linear-gradient(180deg, #cfe3f5 0%, #e8eee6 55%, #f5f3ee 100%)",
+        }}
+      >
         <Canvas
-          shadows={false}
+          frameloop="demand"
+          shadows
           dpr={[1, 2]}
+          performance={{ min: 0.5 }}
           camera={{ position: PRESETS.iso, fov: 35, near: 0.1, far: 2000 }}
           gl={{ antialias: true, preserveDrawingBuffer: true }}
         >
@@ -140,6 +149,7 @@ function Scene({
   const parkingGroundRatio = useSimulatorStore((s) => s.parkingGroundRatio);
   const parkingUnitArea = useSimulatorStore((s) => s.parkingUnitArea);
   const parkingPilotiMode = useSimulatorStore((s) => s.parkingPilotiMode);
+  const mergedParcels = useSimulatorStore((s) => s.mergedParcels);
 
   const z = ZONES[zone];
   const sunOn = sunOnRaw && z.residential;
@@ -197,8 +207,20 @@ function Scene({
 
   return (
     <>
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[20, 30, 20]} intensity={1.0} />
+      <ambientLight intensity={0.5} color="#fff7ec" />
+      <directionalLight
+        position={[28, 42, 20]}
+        intensity={1.2}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-left={-80}
+        shadow-camera-right={80}
+        shadow-camera-top={80}
+        shadow-camera-bottom={-80}
+        shadow-camera-far={200}
+        shadow-bias={-0.0005}
+      />
       <directionalLight position={[-15, 20, -15]} intensity={0.25} />
 
       <CameraRig preset={preset} autoRotate={autoRotate} />
@@ -219,22 +241,118 @@ function Scene({
         />
       )}
 
+      {/* 주변 지반 (그림자 수신) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]} receiveShadow>
+        <planeGeometry args={[240, 240]} />
+        <meshStandardMaterial color="#e9ebe0" roughness={1} />
+      </mesh>
+
       {/* 대지 */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[lotSide, lotSide]} />
         <meshStandardMaterial color={LOT_COLOR} roughness={1} />
       </mesh>
       <LotBoundary side={lotSide} />
 
+      {/* 합필 필지 경계 (지면 점선 + 라벨) */}
+      {mergedParcels.length >= 2 && (() => {
+        const total = mergedParcels.reduce((s, p) => s + p.areaSqm, 0);
+        if (total <= 0) return null;
+        const items: React.ReactNode[] = [];
+        let acc = 0;
+        mergedParcels.forEach((p, i) => {
+          const x0 = -lotSide / 2 + (acc / total) * lotSide;
+          acc += p.areaSqm;
+          const x1 = -lotSide / 2 + (acc / total) * lotSide;
+          if (i < mergedParcels.length - 1) {
+            items.push(
+              <Line
+                key={`mb-${i}`}
+                points={[
+                  [x1, 0.03, -lotSide / 2],
+                  [x1, 0.03, lotSide / 2],
+                ]}
+                color="#2563EB"
+                lineWidth={1.8}
+                dashed
+                dashSize={0.9}
+                gapSize={0.6}
+              />,
+            );
+          }
+          if (x1 - x0 > lotSide * 0.12) {
+            items.push(
+              <Text
+                key={`mt-${i}`}
+                position={[(x0 + x1) / 2, 0.04, lotSide / 2 - 1.6]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                fontSize={Math.min(1.3, lotSide * 0.045)}
+                color="#2563EB"
+                anchorX="center"
+                anchorY="middle"
+              >
+                {`${String.fromCharCode(65 + i)} ${p.label}`}
+              </Text>,
+            );
+          }
+        });
+        items.push(
+          <Text
+            key="mbadge"
+            position={[0, 0.04, -lotSide / 2 + 1.5]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            fontSize={Math.min(1.5, lotSide * 0.05)}
+            color="#2563EB"
+            anchorX="center"
+            anchorY="middle"
+          >
+            {`합필 ${mergedParcels.length}필지`}
+          </Text>,
+        );
+        return <group>{items}</group>;
+      })()}
+
+      {/* 인도 (대지-도로 사이) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, lotSide / 2 + 0.7]} receiveShadow>
+        <planeGeometry args={[lotSide + 6, 1.4]} />
+        <meshStandardMaterial color="#d8d5ca" roughness={1} />
+      </mesh>
+
       {/* 도로 (남쪽) */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.005, roadZ]}
+        position={[0, 0.005, roadZ + 1.4]}
+        receiveShadow
       >
-        <planeGeometry args={[lotSide, roadDepth]} />
-        <meshStandardMaterial color={ROAD_COLOR} roughness={0.9} />
+        <planeGeometry args={[lotSide + 6, roadDepth]} />
+        <meshStandardMaterial color={ROAD_COLOR} roughness={0.95} />
       </mesh>
-      <RoadLabel side={lotSide} z={roadZ} text={`전면도로 ${roadM}m`} />
+      {/* 도로 중앙선 (황색 점선) */}
+      {roadDepth >= 5 && (
+        <Line
+          points={[
+            [-(lotSide + 6) / 2 + 0.5, 0.02, roadZ + 1.4],
+            [(lotSide + 6) / 2 - 0.5, 0.02, roadZ + 1.4],
+          ]}
+          color="#F2C744"
+          lineWidth={2.5}
+          dashed
+          dashSize={1.4}
+          gapSize={1.0}
+        />
+      )}
+      <RoadLabel side={lotSide} z={roadZ + 1.4} text={`전면도로 ${roadM}m`} />
+
+      {/* 가로수 */}
+      {lotSide > 10 && (
+        <>
+          <TreeMesh position={[-lotSide / 2 - 3, 0, -lotSide / 2 + 2]} scale={Math.min(1.5, lotSide / 16)} />
+          <TreeMesh position={[lotSide / 2 + 3, 0, -lotSide / 2 + 4]} scale={Math.min(1.3, lotSide / 18)} />
+          <TreeMesh position={[-lotSide / 2 - 3.4, 0, 1]} scale={Math.min(1.4, lotSide / 17)} />
+          <TreeMesh position={[lotSide / 2 + 3.2, 0, lotSide / 4]} scale={Math.min(1.5, lotSide / 16)} />
+          <TreeMesh position={[-lotSide / 2 - 2.8, 0, lotSide / 2 - 1.5]} scale={Math.min(1.2, lotSide / 19)} />
+        </>
+      )}
 
       {/* 정북 표시 */}
       <NorthArrow z={-lotSide / 2 - 4} />
@@ -269,6 +387,7 @@ function Scene({
 
       <OrbitControls
         makeDefault
+        regress
         enableDamping
         dampingFactor={0.08}
         autoRotate={autoRotate}
@@ -302,14 +421,15 @@ function CameraRig({
   preset: PresetKey;
   autoRotate: boolean;
 }) {
-  const { camera } = useThree();
+  const { camera, invalidate } = useThree();
   const target = useRef(new THREE.Vector3(...PRESETS[preset]));
   const lerping = useRef(false);
 
   useEffect(() => {
     target.current.set(...PRESETS[preset]);
     lerping.current = true;
-  }, [preset]);
+    invalidate(); // frameloop="demand" 모드에서 lerp 시작 트리거
+  }, [preset, invalidate]);
 
   useFrame(() => {
     if (autoRotate) return; // OrbitControls가 회전 중일 때는 우리가 손대지 않음
@@ -318,6 +438,8 @@ function CameraRig({
     if (camera.position.distanceTo(target.current) < 0.5) {
       camera.position.copy(target.current);
       lerping.current = false;
+    } else {
+      invalidate(); // lerp가 끝날 때까지 매 프레임 요청
     }
   });
   return null;
@@ -464,10 +586,17 @@ function BuildingMass({
           {/* 실내 (북쪽) */}
           {indoorDepth > 0 && (
             <group position={[0, y, indoorCz]}>
-              <mesh>
+              <mesh castShadow>
                 <boxGeometry args={[bldSide, floorH, indoorDepth]} />
                 <meshStandardMaterial color={MASS_COLOR} roughness={0.85} />
               </mesh>
+              {/* 유리창 밴드 */}
+              {floorH >= 2.5 && (
+                <mesh position={[0, floorH * 0.05, 0]}>
+                  <boxGeometry args={[bldSide + 0.08, floorH * 0.4, indoorDepth + 0.08]} />
+                  <meshStandardMaterial color={GLASS_COLOR} roughness={0.12} metalness={0.35} />
+                </mesh>
+              )}
               <BoxEdges
                 side={[bldSide, floorH, indoorDepth]}
                 color={MASS_EDGE}
@@ -490,6 +619,27 @@ function BuildingMass({
                 side={[bldSide, floorH, parkingDepth]}
                 color={PARKING_EDGE}
               />
+              {/* 3D 자동차 */}
+              {day10GroundSpaces > 0 && (() => {
+                const slotW = 2.6, slotD = 5.5;
+                const cols = Math.max(1, Math.floor(bldSide / slotW));
+                const rows = Math.max(1, Math.floor(parkingDepth / slotD));
+                const shown = Math.min(day10GroundSpaces, cols * rows);
+                return Array.from({ length: shown }, (_, i) => {
+                  const col = i % cols;
+                  const row = Math.floor(i / cols);
+                  const cx = -bldSide / 2 + col * slotW + slotW / 2;
+                  const cz = -parkingDepth / 2 + row * slotD + slotD / 2;
+                  return (
+                    <CarMesh
+                      key={i}
+                      position={[cx, -floorH / 2 + 0.07, cz]}
+                      rotY={row % 2 === 1 ? Math.PI : 0}
+                      color={CAR_COLORS[i % CAR_COLORS.length]}
+                    />
+                  );
+                });
+              })()}
               <Html
                 position={[0, floorH / 2 + 0.3, 0]}
                 center
@@ -532,7 +682,7 @@ function BuildingMass({
 
     boxes.push(
       <group key={`f-${i}`} position={[0, y, cz]}>
-        <mesh>
+        <mesh castShadow>
           <boxGeometry args={[bldSide, floorH, depth]} />
           <meshStandardMaterial
             color={color}
@@ -541,6 +691,13 @@ function BuildingMass({
             opacity={useOldPiloti && isPilotis ? 0.7 : 1}
           />
         </mesh>
+        {/* 유리창 밴드 (일반 매스 층만) */}
+        {portion >= 1 && !(useOldPiloti && isPilotis) && floorH >= 2.5 && (
+          <mesh position={[0, floorH * 0.05, 0]}>
+            <boxGeometry args={[bldSide + 0.08, floorH * 0.4, depth + 0.08]} />
+            <meshStandardMaterial color={GLASS_COLOR} roughness={0.12} metalness={0.35} />
+          </mesh>
+        )}
         <BoxEdges side={[bldSide, floorH, depth]} color={edge} />
         {useOldPiloti && isPilotisPartial && (
           <PilotisOverlay
@@ -552,6 +709,29 @@ function BuildingMass({
         )}
       </group>,
     );
+  }
+
+  // 옥탑 (2층 이상일 때)
+  if (floors >= 2) {
+    const hM = floors * FLOOR_HEIGHT_M;
+    let sb = 0;
+    if (sunOn && hM > SUNLIGHT_THRESHOLD_M) sb = hM / 2 - 1.5;
+    else if (sunOn) sb = 1.5;
+    const depthTop = Math.max(0, bldSide - sb);
+    if (depthTop > 3) {
+      const czTop = bldCenterZ + sb / 2;
+      const pw = Math.min(bldSide * 0.28, 5.5);
+      const pd = Math.min(depthTop * 0.3, 4.5);
+      boxes.push(
+        <group key="penthouse" position={[-bldSide * 0.2, hM + 0.65, czTop - depthTop * 0.15]}>
+          <mesh castShadow>
+            <boxGeometry args={[pw, 1.3, pd]} />
+            <meshStandardMaterial color="#E8E4DA" roughness={0.8} />
+          </mesh>
+          <BoxEdges side={[pw, 1.3, pd]} color={MASS_EDGE} />
+        </group>,
+      );
+    }
   }
 
   return <>{boxes}</>;
@@ -718,6 +898,67 @@ function TiltedPlane({
   );
 }
 
+function CarMesh({
+  position,
+  rotY = 0,
+  color = "#DC2626",
+}: {
+  position: [number, number, number];
+  rotY?: number;
+  color?: string;
+}) {
+  return (
+    <group position={position} rotation={[0, rotY, 0]}>
+      {/* 차체 */}
+      <mesh position={[0, 0.55, 0]} castShadow>
+        <boxGeometry args={[1.7, 0.55, 4.1]} />
+        <meshStandardMaterial color={color} roughness={0.35} metalness={0.25} />
+      </mesh>
+      {/* 루프 */}
+      <mesh position={[0, 1.05, 0.25]} castShadow>
+        <boxGeometry args={[1.5, 0.5, 2.1]} />
+        <meshStandardMaterial color={color} roughness={0.3} metalness={0.2} />
+      </mesh>
+      {/* 앞 유리 */}
+      <mesh position={[0, 1.05, -0.82]}>
+        <boxGeometry args={[1.42, 0.42, 0.08]} />
+        <meshStandardMaterial color={GLASS_COLOR} roughness={0.1} metalness={0.4} />
+      </mesh>
+      {/* 뒷 유리 */}
+      <mesh position={[0, 1.05, 1.32]}>
+        <boxGeometry args={[1.42, 0.36, 0.08]} />
+        <meshStandardMaterial color={GLASS_COLOR} roughness={0.1} metalness={0.4} />
+      </mesh>
+      {/* 바퀴 4개 */}
+      {([[-0.85, 1.3], [0.85, 1.3], [-0.85, -1.3], [0.85, -1.3]] as const).map(([wx, wz], i) => (
+        <mesh key={i} position={[wx, 0.3, wz]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.3, 0.3, 0.22, 12]} />
+          <meshStandardMaterial color="#1F2937" roughness={0.9} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function TreeMesh({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
+  return (
+    <group position={position} scale={scale}>
+      <mesh position={[0, 0.6, 0]} castShadow>
+        <cylinderGeometry args={[0.14, 0.2, 1.2, 8]} />
+        <meshStandardMaterial color="#8B5E3C" roughness={0.95} />
+      </mesh>
+      <mesh position={[0, 1.7, 0]} castShadow>
+        <coneGeometry args={[1.0, 1.8, 8]} />
+        <meshStandardMaterial color="#3E7C4F" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 2.7, 0]} castShadow>
+        <coneGeometry args={[0.7, 1.3, 8]} />
+        <meshStandardMaterial color="#4C9160" roughness={0.9} />
+      </mesh>
+    </group>
+  );
+}
+
 function BasementBoxes({
   bldSide,
   levels,
@@ -748,6 +989,27 @@ function BasementBoxes({
           />
         </mesh>
         <BoxEdges side={[bldSide, h, bldSide]} color={PARKING_EDGE} />
+        {/* 지하 자동차 */}
+        {h >= 2 && (() => {
+          const slotW = 2.6, slotD = 5.5;
+          const carCols = Math.max(1, Math.floor(bldSide / slotW));
+          const carRows = Math.max(1, Math.floor(bldSide / slotD));
+          const carsShown = Math.min(carCols * carRows, 8);
+          return Array.from({ length: carsShown }, (_, ci) => {
+            const col = ci % carCols;
+            const row = Math.floor(ci / carCols);
+            const cx = -bldSide / 2 + col * slotW + slotW / 2;
+            const cz = -bldSide / 2 + row * slotD + slotD / 2;
+            return (
+              <CarMesh
+                key={ci}
+                position={[cx, -h / 2 + 0.07, cz]}
+                rotY={row % 2 === 1 ? Math.PI : 0}
+                color={CAR_COLORS[ci % CAR_COLORS.length]}
+              />
+            );
+          });
+        })()}
         <Text
           position={[0, 0, bldSide / 2 + 0.05]}
           fontSize={Math.min(1.4, h * 0.5)}

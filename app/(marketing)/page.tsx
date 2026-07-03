@@ -1,43 +1,287 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { SITE_HEADER } from "@/lib/branding/constants";
 
 export default function LandingPage() {
   return (
     <main>
-      {/* HERO */}
-      <section className="border-b border-border bg-gradient-to-b from-background to-secondary/40">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-card border border-border text-[11px] text-muted-foreground mb-6">
-            <span className="size-1.5 rounded-full bg-[var(--success)]" />
+      {/* ── HERO ── */}
+      <section
+        className="relative overflow-hidden"
+        style={{ minHeight: "100dvh", background: "#020425" }}
+      >
+        {/* 배경: 건물 사진 블러 충전 레이어 */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "url(/hero-building.png)",
+            backgroundSize: "cover",
+            backgroundPosition: "center 30%",
+            filter: "blur(36px) brightness(0.80) saturate(1.1)",
+            transform: "scale(1.28)",
+            zIndex: 1,
+          }}
+        />
+        {/* 배경: 건물 사진 선명 레이어 */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "url(/hero-building.png)",
+            backgroundSize: "contain",
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "center top",
+            filter: "brightness(0.95) saturate(1.05)",
+            zIndex: 2,
+          }}
+        />
+        {/* 네이비 오버레이 */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0"
+          style={{ background: "#020425", opacity: 0.46, zIndex: 3 }}
+        />
+        {/* 하단 그라디언트 */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, transparent 40%, rgba(2,4,37,0.38) 66%, rgba(2,4,37,0.90) 100%)",
+            zIndex: 4,
+          }}
+        />
+
+        {/* ── 자동차 애니메이션 ── */}
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ zIndex: 5 }}>
+
+          {/* car 1 – 세단 우측 */}
+          <div className="hero-car" style={{ position: "absolute", bottom: 128, left: 0, animation: "hero-driveR 20s linear infinite", animationDelay: "-3s" }}>
+            <div className="hero-carbob" style={{ animation: "hero-carbob 1.1s ease-in-out infinite" }}>
+              <svg viewBox="0 0 220 90" style={{ display: "block", height: 62, width: "auto", color: "rgba(9,11,26,0.88)", filter: "drop-shadow(0 5px 8px rgba(0,0,0,0.38))" }}>
+                <path fill="currentColor" d="M6 60 Q6 50 18 48 L60 46 L86 22 Q92 16 104 16 L142 16 Q154 16 162 24 L182 46 L206 50 Q214 52 214 62 L214 68 Q214 72 210 72 L12 72 Q6 72 6 66 Z"/>
+                <circle fill="currentColor" cx="58" cy="72" r="16"/>
+                <circle fill="currentColor" cx="166" cy="72" r="16"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* car 2 – SUV 우측 */}
+          <div className="hero-car" style={{ position: "absolute", bottom: 106, left: 0, animation: "hero-driveR 24s linear infinite", animationDelay: "-13s" }}>
+            <div className="hero-carbob" style={{ animation: "hero-carbob 1.25s ease-in-out infinite" }}>
+              <svg viewBox="0 0 220 90" style={{ display: "block", height: 72, width: "auto", color: "rgba(11,13,30,0.90)", filter: "drop-shadow(0 5px 8px rgba(0,0,0,0.38))" }}>
+                <path fill="currentColor" d="M6 58 Q6 46 18 44 L54 42 L74 18 Q80 12 92 12 L150 12 Q164 12 172 20 L190 44 L206 46 Q214 48 214 58 L214 66 Q214 70 210 70 L12 70 Q6 70 6 64 Z"/>
+                <circle fill="currentColor" cx="58" cy="70" r="17"/>
+                <circle fill="currentColor" cx="168" cy="70" r="17"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* car 3 – 세단 좌측 (원거리) */}
+          <div className="hero-car" style={{ position: "absolute", bottom: 152, left: 0, animation: "hero-driveL 18s linear infinite", animationDelay: "-8s" }}>
+            <div className="hero-carbob" style={{ animation: "hero-carbob 1.05s ease-in-out infinite" }}>
+              <svg viewBox="0 0 220 90" style={{ display: "block", height: 54, width: "auto", transform: "scale(-0.82, 0.82)", transformOrigin: "bottom center", color: "rgba(20,23,42,0.82)", filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.30))" }}>
+                <path fill="currentColor" d="M6 60 Q6 50 18 48 L60 46 L86 22 Q92 16 104 16 L142 16 Q154 16 162 24 L182 46 L206 50 Q214 52 214 62 L214 68 Q214 72 210 72 L12 72 Q6 72 6 66 Z"/>
+                <circle fill="currentColor" cx="58" cy="72" r="16"/>
+                <circle fill="currentColor" cx="166" cy="72" r="16"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* car 4 – SUV 우측 (근거리) */}
+          <div className="hero-car" style={{ position: "absolute", bottom: 90, left: 0, animation: "hero-driveR 16s linear infinite", animationDelay: "-1s" }}>
+            <div className="hero-carbob" style={{ animation: "hero-carbob 0.95s ease-in-out infinite" }}>
+              <svg viewBox="0 0 220 90" style={{ display: "block", height: 80, width: "auto", color: "rgba(7,9,22,0.93)", filter: "drop-shadow(0 7px 10px rgba(0,0,0,0.42))" }}>
+                <path fill="currentColor" d="M6 58 Q6 46 18 44 L54 42 L74 18 Q80 12 92 12 L150 12 Q164 12 172 20 L190 44 L206 46 Q214 48 214 58 L214 66 Q214 70 210 70 L12 70 Q6 70 6 64 Z"/>
+                <circle fill="currentColor" cx="58" cy="70" r="17"/>
+                <circle fill="currentColor" cx="168" cy="70" r="17"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* car 5 – 세단 좌측 */}
+          <div className="hero-car" style={{ position: "absolute", bottom: 118, left: 0, animation: "hero-driveL 22s linear infinite", animationDelay: "-16s" }}>
+            <div className="hero-carbob" style={{ animation: "hero-carbob 1.15s ease-in-out infinite" }}>
+              <svg viewBox="0 0 220 90" style={{ display: "block", height: 60, width: "auto", transform: "scale(-0.90, 0.90)", transformOrigin: "bottom center", color: "rgba(13,15,32,0.86)", filter: "drop-shadow(0 5px 7px rgba(0,0,0,0.32))" }}>
+                <path fill="currentColor" d="M6 60 Q6 50 18 48 L60 46 L86 22 Q92 16 104 16 L142 16 Q154 16 162 24 L182 46 L206 50 Q214 52 214 62 L214 68 Q214 72 210 72 L12 72 Q6 72 6 66 Z"/>
+                <circle fill="currentColor" cx="58" cy="72" r="16"/>
+                <circle fill="currentColor" cx="166" cy="72" r="16"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 텍스트 오버레이 ── */}
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center text-center px-6"
+          style={{ zIndex: 10 }}
+        >
+          {/* 뱃지 */}
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-5"
+            style={{
+              background: "rgba(255,255,255,0.09)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              backdropFilter: "blur(8px)",
+              fontSize: 11,
+              color: "rgba(255,255,255,0.68)",
+            }}
+          >
+            <span
+              className="size-1.5 rounded-full"
+              style={{ background: "#FFCF0D" }}
+            />
             {SITE_HEADER.subtitle}
           </div>
-          <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-[1.15] max-w-2xl">
+
+          {/* 아이브로 */}
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              letterSpacing: "0.20em",
+              textTransform: "uppercase",
+              color: "#FFCF0D",
+              textShadow: "0 2px 14px rgba(0,0,0,0.55)",
+              marginBottom: 14,
+            }}
+          >
+            # SCALE REVIEW · 건축가능 규모검토
+          </div>
+
+          {/* 헤드라인 */}
+          <h1
+            style={{
+              margin: 0,
+              color: "#FFFFFF",
+              fontSize: "clamp(30px, 5.2vw, 66px)",
+              fontWeight: 700,
+              letterSpacing: "-0.015em",
+              lineHeight: 1.2,
+              textShadow: "0 6px 34px rgba(0,0,0,0.60)",
+              maxWidth: 820,
+              marginBottom: 18,
+            }}
+          >
             지번 한 줄 →
             <br />
-            <span className="text-[var(--info)]">30초</span> 안에
-            건축가능 규모까지.
+            <span style={{ color: "#FFCF0D" }}>30초</span> 안에 건축가능
+            규모까지.
           </h1>
-          <p className="mt-5 text-base sm:text-lg text-muted-foreground max-w-xl leading-relaxed">
-            건폐율·용적률·일조권 사선제한을 자동 계산하고, 평면도와 정북단면을
-            시각화합니다. 디벨로퍼·토지투자자의 첫 번째 의사결정 도구.
+
+          {/* 본문 */}
+          <p
+            style={{
+              color: "rgba(255,255,255,0.78)",
+              fontSize: "clamp(14px, 1.5vw, 18px)",
+              fontWeight: 500,
+              lineHeight: 1.68,
+              maxWidth: 520,
+              marginBottom: 30,
+              textShadow: "0 2px 12px rgba(0,0,0,0.45)",
+            }}
+          >
+            건폐율·용적률·일조권 사선제한을 자동 계산하고,
+            <br className="hidden sm:block" />
+            평면도와 정북단면을 시각화합니다.
+            <br className="hidden sm:block" />
+            디벨로퍼·토지투자자의 첫 번째 의사결정 도구.
           </p>
-          <div className="mt-7 flex items-center gap-3">
-            <Button asChild size="lg">
-              <Link href="/simulator">지번 조회 시작 →</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/pricing">요금제 보기</Link>
-            </Button>
+
+          {/* CTA 버튼 */}
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+              justifyContent: "center",
+              marginBottom: 24,
+            }}
+          >
+            <Link href="/simulator">
+              <button
+                className="transition-opacity hover:opacity-85"
+                style={{
+                  background: "#FFCF0D",
+                  color: "#020425",
+                  padding: "14px 30px",
+                  borderRadius: 9,
+                  fontWeight: 700,
+                  fontSize: 16,
+                  border: "none",
+                  cursor: "pointer",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                지번 조회 시작 →
+              </button>
+            </Link>
+            <Link href="/pricing">
+              <button
+                className="transition-colors hover:border-white/60"
+                style={{
+                  background: "transparent",
+                  color: "#FFFFFF",
+                  padding: "14px 30px",
+                  borderRadius: 9,
+                  fontWeight: 600,
+                  fontSize: 16,
+                  border: "1.5px solid rgba(255,255,255,0.30)",
+                  cursor: "pointer",
+                  backdropFilter: "blur(4px)",
+                }}
+              >
+                요금제 보기
+              </button>
+            </Link>
           </div>
-          <div className="mt-8 text-[12px] text-muted-foreground">
+
+          {/* 법령 */}
+          <div style={{ color: "rgba(255,255,255,0.42)", fontSize: 12 }}>
             ⚖️ 국토계획법 시행령 제84·85조 · 건축법 시행령 제86조 자동 적용 ·
             법무법인 윤강 자문
           </div>
+
+          {/* 금색 선 */}
+          <div
+            style={{
+              width: 48,
+              height: 3,
+              background: "#FFCF0D",
+              borderRadius: 2,
+              opacity: 0.85,
+              marginTop: 22,
+            }}
+          />
+        </div>
+
+        {/* 스크롤 힌트 */}
+        <div
+          className="absolute bottom-8 left-1/2 -translate-x-1/2"
+          style={{
+            zIndex: 10,
+            color: "rgba(255,255,255,0.32)",
+            fontSize: 12,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 5,
+          }}
+        >
+          <span style={{ letterSpacing: "0.08em" }}>SCROLL</span>
+          <svg width="12" height="18" viewBox="0 0 12 18" fill="none">
+            <path
+              d="M6 1v16M1 11l5 6 5-6"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </div>
       </section>
 
-      {/* FEATURES */}
+      {/* ── FEATURES ── */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
         <div className="text-[12px] text-muted-foreground font-medium mb-3">
           핵심 기능
@@ -65,7 +309,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* AUTHORITY */}
+      {/* ── AUTHORITY ── */}
       <section className="border-y border-border bg-secondary/30">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-16 grid sm:grid-cols-2 gap-10 items-start">
           <div>
@@ -102,15 +346,15 @@ export default function LandingPage() {
             <li className="flex gap-3">
               <span className="text-[var(--info)] mt-0.5">●</span>
               <span>
-                <span className="font-medium">미스터홈즈 (미스터홈즈) FC</span> —
-                전국 가맹점 중개사 실무 검증
+                <span className="font-medium">미스터홈즈 (미스터홈즈) FC</span>{" "}
+                — 전국 가맹점 중개사 실무 검증
               </span>
             </li>
           </ul>
         </div>
       </section>
 
-      {/* PRICING TEASER */}
+      {/* ── PRICING TEASER ── */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
         <div className="flex items-end justify-between mb-8">
           <div>
@@ -168,25 +412,65 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FINAL CTA */}
-      <section className="border-t border-border bg-foreground text-background">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+      {/* ── FINAL CTA ── */}
+      <section
+        className="relative overflow-hidden"
+        style={{ background: "#020425" }}
+      >
+        {/* 배경 건물 희미하게 */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "url(/hero-building.png)",
+            backgroundSize: "cover",
+            backgroundPosition: "center 20%",
+            filter: "blur(20px) brightness(0.5) saturate(0.8)",
+            transform: "scale(1.1)",
+            opacity: 0.4,
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0"
+          style={{ background: "rgba(2,4,37,0.72)" }}
+        />
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div>
-            <h2 className="text-2xl sm:text-3xl font-medium tracking-tight">
+            <h2
+              className="text-2xl sm:text-3xl font-medium tracking-tight"
+              style={{ color: "#FFFFFF" }}
+            >
               지번 한 줄, 지금 바로.
             </h2>
-            <p className="mt-2 text-sm text-background/70 max-w-md">
+            <p className="mt-2 text-sm max-w-md" style={{ color: "rgba(255,255,255,0.60)" }}>
               회원가입 없이 일 3건까지 무료로 사용해 보세요.
             </p>
           </div>
-          <Button asChild size="lg" variant="secondary" className="text-foreground">
-            <Link href="/simulator">시뮬레이터 열기 →</Link>
-          </Button>
+          <Link href="/simulator">
+            <button
+              className="transition-opacity hover:opacity-85 whitespace-nowrap"
+              style={{
+                background: "#FFCF0D",
+                color: "#020425",
+                padding: "14px 28px",
+                borderRadius: 9,
+                fontWeight: 700,
+                fontSize: 16,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              시뮬레이터 열기 →
+            </button>
+          </Link>
         </div>
       </section>
     </main>
   );
 }
+
+/* ── sub-components ── */
 
 function Feature({
   badge,
@@ -201,13 +485,9 @@ function Feature({
 }) {
   return (
     <div className="bg-card border border-border rounded-lg p-5 sm:p-6">
-      <div className="text-[11px] text-muted-foreground font-medium">
-        {badge}
-      </div>
+      <div className="text-[11px] text-muted-foreground font-medium">{badge}</div>
       <div className="mt-2 text-base font-medium">{title}</div>
-      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-        {body}
-      </p>
+      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{body}</p>
       {note && (
         <div className="mt-3 text-[11px] text-[var(--info)]">{note}</div>
       )}

@@ -88,6 +88,31 @@ export interface ReportInputs {
     isLoss: boolean;
     isHighRisk: boolean;
   };
+
+  /** 주변 시세·임대료 (국토교통부 실거래가, 시군구 단위) — 사업성 탭에서 조회된 경우 포함. */
+  market?: {
+    lawdCd: string;
+    months: number;
+    fetchedAt: string;
+    baseAddress?: string;
+    /** 만원/평 */
+    aptTrade?: { count: number; avgPy: number; medianPy: number; maxPy: number; minPy: number };
+    nrgTrade?: { count: number; avgPy: number; medianPy: number };
+    aptRent?: {
+      jeonseCount: number;
+      avgJeonseDeposit: number;
+      wolseCount: number;
+      avgWolseDeposit: number;
+      avgMonthlyRent: number;
+      avgMonthlyRentPerPy: number;
+    };
+    offiRent?: {
+      wolseCount: number;
+      avgWolseDeposit: number;
+      avgMonthlyRent: number;
+      avgMonthlyRentPerPy: number;
+    };
+  };
 }
 
 export interface AIAnalysis {

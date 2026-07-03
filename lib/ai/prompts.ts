@@ -84,8 +84,37 @@ export function buildUserPrompt(input: ReportInputs): string {
 - 총 연면적: ${formatPyeongAsArea(c.totalArea)} · 총 사업비 ${eok(c.total)}억원
 - 연면적 ㎡당 사업비: ${won(c.total / Math.max(1, pyeongToSqm(c.totalArea)))}원
 - 연면적 평당 사업비: ${won(perPy)}원
-${input.profit ? buildProfitSection(input.profit) : ""}
-위 데이터에 대해 사업성 종합 평가·핵심 리스크 3가지·추천 검토 사항 3가지·평당 사업비 적정성·다음 단계 권고 3가지·한 줄 요약(30자)을 JSON으로 응답.`;
+${input.profit ? buildProfitSection(input.profit) : ""}${input.market ? buildMarketSection(input.market) : ""}
+위 데이터에 대해 사업성 종합 평가·핵심 리스크 3가지·추천 검토 사항 3가지·평당 사업비 적정성·다음 단계 권고 3가지·한 줄 요약(30자)을 JSON으로 응답. 주변 시세 데이터가 있으면 설정 분양가·임대료가 시장 시세 대비 적정한지 반드시 평가할 것.`;
+}
+
+function buildMarketSection(m: NonNullable<ReportInputs["market"]>): string {
+  const lines: string[] = [];
+  if (m.aptTrade) {
+    lines.push(
+      `- 아파트 매매 (${m.aptTrade.count}건): 평균 ${m.aptTrade.avgPy.toLocaleString("ko-KR")}만원/평 · 중간 ${m.aptTrade.medianPy.toLocaleString("ko-KR")} · 범위 ${m.aptTrade.minPy.toLocaleString("ko-KR")}~${m.aptTrade.maxPy.toLocaleString("ko-KR")}`,
+    );
+  }
+  if (m.nrgTrade) {
+    lines.push(
+      `- 상업·업무 매매 (${m.nrgTrade.count}건): 평균 ${m.nrgTrade.avgPy.toLocaleString("ko-KR")}만원/평 · 중간 ${m.nrgTrade.medianPy.toLocaleString("ko-KR")}`,
+    );
+  }
+  if (m.aptRent && m.aptRent.wolseCount > 0) {
+    lines.push(
+      `- 아파트 월세 (${m.aptRent.wolseCount}건): 평당 월 ${m.aptRent.avgMonthlyRentPerPy}만원 · 평균 보증금 ${m.aptRent.avgWolseDeposit.toLocaleString("ko-KR")}만원 · 평균 월세 ${m.aptRent.avgMonthlyRent.toLocaleString("ko-KR")}만원${m.aptRent.jeonseCount > 0 ? ` (전세 ${m.aptRent.jeonseCount}건 평균 ${m.aptRent.avgJeonseDeposit.toLocaleString("ko-KR")}만원)` : ""}`,
+    );
+  }
+  if (m.offiRent && m.offiRent.wolseCount > 0) {
+    lines.push(
+      `- 오피스텔 월세 (${m.offiRent.wolseCount}건): 평당 월 ${m.offiRent.avgMonthlyRentPerPy}만원 · 평균 보증금 ${m.offiRent.avgWolseDeposit.toLocaleString("ko-KR")}만원 · 평균 월세 ${m.offiRent.avgMonthlyRent.toLocaleString("ko-KR")}만원`,
+    );
+  }
+  if (lines.length === 0) return "";
+  return `
+
+[주변 시세·임대료 — 국토교통부 실거래가, 최근 ${m.months}개월, 시군구(법정동코드 ${m.lawdCd}) 단위]
+${lines.join("\n")}`;
 }
 
 function buildProfitSection(p: NonNullable<ReportInputs["profit"]>): string {

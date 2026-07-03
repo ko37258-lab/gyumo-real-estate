@@ -1480,6 +1480,58 @@ function ProfitPage({
         </View>
       </View>
 
+      {/* (f) 주변 시세·임대료 — 국토부 실거래가 */}
+      {input.market &&
+        (input.market.aptTrade ||
+          input.market.nrgTrade ||
+          input.market.aptRent ||
+          input.market.offiRent) && (
+          <View wrap={false} style={{ marginTop: 14 }}>
+            <PdfText style={styles.h3}>
+              (f) 주변 시세·임대료 (국토교통부 실거래가 · 최근 {input.market.months}
+              개월 · 시군구 단위)
+            </PdfText>
+            <View style={{ padding: 12, backgroundColor: COLORS.CREAM }}>
+              {input.market.aptTrade && (
+                <ProfitRow
+                  label={`아파트 매매 평균 (${input.market.aptTrade.count}건)`}
+                  value={`${input.market.aptTrade.avgPy.toLocaleString("ko-KR")}만원/평 (중간 ${input.market.aptTrade.medianPy.toLocaleString("ko-KR")})`}
+                />
+              )}
+              {input.market.nrgTrade && (
+                <ProfitRow
+                  label={`상업·업무 매매 평균 (${input.market.nrgTrade.count}건)`}
+                  value={`${input.market.nrgTrade.avgPy.toLocaleString("ko-KR")}만원/평`}
+                />
+              )}
+              {input.market.aptRent && input.market.aptRent.wolseCount > 0 && (
+                <ProfitRow
+                  label={`아파트 월세 평균 (${input.market.aptRent.wolseCount}건)`}
+                  value={`평당 월 ${input.market.aptRent.avgMonthlyRentPerPy}만원 · 보증금 ${input.market.aptRent.avgWolseDeposit.toLocaleString("ko-KR")}만원`}
+                />
+              )}
+              {input.market.offiRent && input.market.offiRent.wolseCount > 0 && (
+                <ProfitRow
+                  label={`오피스텔 월세 평균 (${input.market.offiRent.wolseCount}건)`}
+                  value={`평당 월 ${input.market.offiRent.avgMonthlyRentPerPy}만원 · 보증금 ${input.market.offiRent.avgWolseDeposit.toLocaleString("ko-KR")}만원`}
+                />
+              )}
+              <PdfText
+                style={{
+                  fontSize: 8,
+                  color: COLORS.GRAY,
+                  marginTop: 6,
+                  fontFamily: "Pretendard",
+                }}
+              >
+                ※ 시군구 단위 통계로 개별 입지·상품에 따라 차이가 큼. 설정 분양가{" "}
+                {p.salesPricePerPyeong.toLocaleString("ko-KR")}만원/평의 시장 적정성
+                판단 참고용.
+              </PdfText>
+            </View>
+          </View>
+        )}
+
       {/* 경고/안내 */}
       {p.isLoss ? (
         <View

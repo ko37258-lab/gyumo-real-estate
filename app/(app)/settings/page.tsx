@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,12 +17,23 @@ import {
 import { testKey } from "@/lib/ai/analyze";
 import { BrandCard } from "@/components/settings/BrandCard";
 import { ThemeCard } from "@/components/settings/ThemeCard";
+import { canEditBrandSettings } from "@/lib/membership";
 
 type TestState = { status: "idle" | "ok" | "fail"; message?: string };
 
 export default function SettingsPage() {
   const [geminiInput, setGeminiInput] = useState("");
   const [claudeInput, setClaudeInput] = useState("");
+  const [canBrand, setCanBrand] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/usage")
+      .then((r) => r.json())
+      .then((d: { role?: string; isLoggedIn?: boolean }) => {
+        setCanBrand(canEditBrandSettings(d.role, false));
+      })
+      .catch(() => null);
+  }, []);
   const savedGemini = useGeminiKey();
   const savedClaude = useClaudeKey();
   const [testing, setTesting] = useState<"gemini" | "claude" | null>(null);
@@ -123,7 +134,7 @@ export default function SettingsPage() {
         </p>
 
         <ThemeCard />
-        <BrandCard />
+        <BrandCard canEdit={canBrand} />
       </div>
     </main>
   );

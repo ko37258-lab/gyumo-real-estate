@@ -7,6 +7,7 @@ import {
   type ParkingUsageCode,
   type ProgressiveSpec,
 } from "@/lib/parking-standards";
+import { resolveAreaPerSpace } from "@/lib/parking-regions";
 import type { ParkingMode } from "@/lib/calc/parking";
 
 export type LotInfo = {
@@ -16,6 +17,15 @@ export type LotInfo = {
   roadM: number;
   northAzimuth?: number;
   source: "mock" | "vworld";
+  pnu?: string;
+  publicPricePerSqm?: number;  // 공시지가 원/㎡ (VWorld NED)
+  publicPriceYear?: number;
+};
+
+/** 합필 구성 필지 — 2개 이상일 때 2D/3D에 필지 경계 표시 */
+export type MergedParcel = {
+  label: string;   // 지번 표시 (예: "825-3")
+  areaSqm: number;
 };
 
 type SimulatorState = {
@@ -44,11 +54,17 @@ type SimulatorState = {
   parkingUnitArea: number;
   /** 필로티 구조 여부 — true: 건축면적 제외, false: 벽체식 산입 */
   parkingPilotiMode: boolean;
+  /** 지번 조회로 확정된 법정동코드 (지자체 주차 조례 자동 적용용). null = 미조회 → 서울 기준 */
+  parkingLawdCd: string | null;
 
   /** 3D Canvas의 toDataURL 캡쳐 함수 — Canvas 마운트 시 등록, 언마운트 시 null. */
   capture3D: (() => string) | null;
 
+  /** 합필 구성 필지 (2개 이상일 때만 시각화에 경계 표시, 빈 배열 = 단일 필지) */
+  mergedParcels: MergedParcel[];
+
   setAddress: (v: string) => void;
+  setMergedParcels: (parcels: MergedParcel[]) => void;
   applyLotInfo: (info: LotInfo) => void;
   setZone: (z: ZoneCode) => void;
   setLotPy: (v: number) => void;
@@ -88,6 +104,7 @@ const initialParking = (() => {
     parkingGroundRatio: 30,
     parkingUnitArea: 30,
     parkingPilotiMode: true,
+    parkingLawdCd: null as string | null,
   };
 })();
 
@@ -103,12 +120,15 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   isCBD: false,
   ...initialParking,
   capture3D: null,
+  mergedParcels: [],
 
   setAddress: (v) => set({ address: v }),
+  setMergedParcels: (parcels) => set({ mergedParcels: parcels }),
 
   applyLotInfo: (info) => {
     const z = ZONES[info.zone];
-    set({
+    const lawdCd = info.pnu ? info.pnu.slice(0, 5) : null;
+    const next: Partial<SimulatorState> = {
       address: info.address,
       lotInfo: info,
       zone: info.zone,
@@ -117,7 +137,14 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
       farPct: Math.min(z.defFar, z.farMax),
       roadM: info.roadM,
       sunOn: z.residential,
-    });
+      parkingLawdCd: lawdCd,
+    };
+    // 지자체 조례 기준으로 주차 원단위 자동 갱신 (area 모드 용도만)
+    const usage = get().parkingUsage;
+    if (PARKING_STANDARDS[usage].mode === "area") {
+      next.parkingAreaPerSpace = resolveAreaPerSpace(usage, lawdCd).areaPerSpace;
+    }
+    set(next);
   },
 
   setZone: (code) => {
@@ -149,12 +176,15 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   setSunOn: (v) => set({ sunOn: v }),
   setIsCBD: (v) => set({ isCBD: v }),
 
-  // 주차장 — 용도 변경 시 해당 용도의 서울 기준값으로 user-editable 필드 리셋
+  // 주차장 — 용도 변경 시 해당 지자체(미조회 시 서울) 기준값으로 user-editable 필드 리셋
   setParkingUsage: (code) => {
     const s = PARKING_STANDARDS[code];
     const next: Partial<SimulatorState> = { parkingUsage: code };
     if (s.mode === "area") {
-      next.parkingAreaPerSpace = s.seoulAreaPerSpace;
+      next.parkingAreaPerSpace = resolveAreaPerSpace(
+        code,
+        get().parkingLawdCd,
+      ).areaPerSpace;
     } else if (s.mode === "progressive") {
       next.parkingProgressiveSpec = { ...s.seoul };
     } else {

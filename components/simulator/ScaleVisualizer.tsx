@@ -40,6 +40,42 @@ const fmt = (n: number, d = 0) =>
     maximumFractionDigits: d,
   });
 
+// 자동차 색상 팔레트 (index 순환)
+const CAR_PALETTE = ["#DC2626", "#2563EB", "#E2E8F0", "#64748B", "#0F766E", "#D97706", "#1E293B"];
+
+// 위에서 본 자동차 (평면도용)
+function SvgCarTop({ cx, cy, w = 9, h = 14, color = "#374151" }: { cx: number; cy: number; w?: number; h?: number; color?: string }) {
+  return (
+    <g>
+      <rect x={cx - w / 2} y={cy - h / 2} width={w} height={h} rx={2.2} fill={color} stroke="#00000033" strokeWidth={0.4} />
+      {/* 앞유리 */}
+      <rect x={cx - w / 2 + 1.2} y={cy - h / 2 + 2} width={w - 2.4} height={h * 0.24} rx={0.8} fill="#BFDBFE" opacity={0.9} />
+      {/* 뒷유리 */}
+      <rect x={cx - w / 2 + 1.2} y={cy + h / 2 - h * 0.18 - 1.2} width={w - 2.4} height={h * 0.16} rx={0.8} fill="#BFDBFE" opacity={0.7} />
+      {/* 루프 하이라이트 */}
+      <rect x={cx - w / 2 + 1.5} y={cy - h * 0.08} width={w - 3} height={h * 0.2} rx={0.8} fill="#ffffff" opacity={0.18} />
+    </g>
+  );
+}
+
+// 옆에서 본 자동차 (입면도용)
+function SvgCarSide({ x, bottomY, scale = 1, color = "#374151" }: { x: number; bottomY: number; scale?: number; color?: string }) {
+  const s = scale;
+  const bw = 14 * s, bh = 5.5 * s, rw = 8.5 * s, rh = 4 * s, wr = 2 * s;
+  return (
+    <g>
+      <rect x={x} y={bottomY - bh - wr * 0.6} width={bw} height={bh} rx={2 * s} fill={color} stroke="#00000033" strokeWidth={0.4} />
+      <rect x={x + 2.2 * s} y={bottomY - bh - rh - wr * 0.6 + 0.5} width={rw} height={rh} rx={1.4 * s} fill={color} />
+      <rect x={x + 3 * s} y={bottomY - bh - rh - wr * 0.6 + 1.2 * s} width={3.2 * s} height={rh - 1.8 * s} rx={0.6} fill="#BFDBFE" opacity={0.9} />
+      <rect x={x + 7 * s} y={bottomY - bh - rh - wr * 0.6 + 1.2 * s} width={2.6 * s} height={rh - 1.8 * s} rx={0.6} fill="#BFDBFE" opacity={0.75} />
+      <circle cx={x + 3 * s} cy={bottomY} r={wr} fill="#111827" />
+      <circle cx={x + 3 * s} cy={bottomY} r={wr * 0.45} fill="#9CA3AF" />
+      <circle cx={x + bw - 3 * s} cy={bottomY} r={wr} fill="#111827" />
+      <circle cx={x + bw - 3 * s} cy={bottomY} r={wr * 0.45} fill="#9CA3AF" />
+    </g>
+  );
+}
+
 const MASS_FILL = "#F0997B";
 const MASS_FILL_PARTIAL = "#F5C4B3";
 const MASS_EDGE = "#4A1B0C";
@@ -63,6 +99,7 @@ export function ScaleVisualizer() {
   const parkingGroundRatio = useSimulatorStore((s) => s.parkingGroundRatio);
   const parkingUnitArea = useSimulatorStore((s) => s.parkingUnitArea);
   const parkingPilotiMode = useSimulatorStore((s) => s.parkingPilotiMode);
+  const mergedParcels = useSimulatorStore((s) => s.mergedParcels);
 
   const z = ZONES[zone];
   const sunOn = sunOnRaw && z.residential;
@@ -190,11 +227,33 @@ export function ScaleVisualizer() {
           y={actualY}
           width={fW}
           height={actualH}
-          fill={isPartial ? MASS_FILL_PARTIAL : MASS_FILL}
+          fill={isPartial ? MASS_FILL_PARTIAL : "url(#mass-grad)"}
           stroke={MASS_EDGE}
           strokeWidth={0.5}
           strokeDasharray={isPartial ? "3 2" : undefined}
         />
+        {/* 유리창 */}
+        {!isPartial && actualH >= 12 && fW >= 34 && (() => {
+          const winW = 7.5, gapW = 5.5, pitch = winW + gapW;
+          const count = Math.min(Math.floor((fW - 14) / pitch), 14);
+          if (count < 1) return null;
+          const winH = Math.min(actualH * 0.52, 10);
+          const startX = fL + (fW - (count * pitch - gapW)) / 2;
+          return Array.from({ length: count }, (_, wi) => (
+            <rect
+              key={wi}
+              x={startX + wi * pitch}
+              y={actualY + (actualH - winH) / 2}
+              width={winW}
+              height={winH}
+              rx={0.8}
+              fill="#B7D4EC"
+              stroke="#7FA6C8"
+              strokeWidth={0.4}
+              opacity={0.95}
+            />
+          ));
+        })()}
         {phPx >= 14 && fW > 30 && (
           <text
             x={eBldR - 4}
@@ -203,7 +262,10 @@ export function ScaleVisualizer() {
             style={{
               fontSize: 8,
               fill: MASS_EDGE,
-              opacity: 0.6,
+              opacity: 0.85,
+              paintOrder: "stroke",
+              stroke: "#ffffff",
+              strokeWidth: 2,
             }}
           >
             {i + 1}F
@@ -352,6 +414,18 @@ export function ScaleVisualizer() {
               opacity={0.7}
             />
           </pattern>
+          <linearGradient id="mass-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#F8BB9C" />
+            <stop offset="55%" stopColor="#F0997B" />
+            <stop offset="100%" stopColor="#DD7A54" />
+          </linearGradient>
+          <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#CFE5F7" stopOpacity={0.95} />
+            <stop offset="100%" stopColor="#CFE5F7" stopOpacity={0} />
+          </linearGradient>
+          <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2.5" stdDeviation="3" floodColor="#4A1B0C" floodOpacity="0.28" />
+          </filter>
         </defs>
 
         <text
@@ -464,9 +538,10 @@ export function ScaleVisualizer() {
                     y={by}
                     width={bldPx}
                     height={indoorH}
-                    fill={MASS_FILL}
+                    fill="url(#mass-grad)"
                     stroke={MASS_EDGE}
                     strokeWidth={0.8}
+                    filter="url(#soft-shadow)"
                   />
                 )}
                 {/* 주차 영역 (남쪽=도로쪽 하단) — 사선 패턴 */}
@@ -483,12 +558,56 @@ export function ScaleVisualizer() {
                       strokeDasharray="4 3"
                       opacity={0.95}
                     />
+                    {/* 주차선 + 위에서 본 자동차 */}
+                    {parkH >= 18 && bldPx >= 16 && (() => {
+                      const CW = 9, CH = 13, GX = 4, GY = 4;
+                      const cols = Math.max(1, Math.floor((bldPx - 4) / (CW + GX)));
+                      const rows = Math.max(1, Math.floor((parkH - 4) / (CH + GY)));
+                      const shown = Math.min(day10.groundSpaces, cols * rows);
+                      const slotLines = Array.from({ length: cols - 1 }, (_, c) => (
+                        <line
+                          key={`sl-${c}`}
+                          x1={bx + 2 + (c + 1) * (CW + GX) - GX / 2}
+                          y1={by + indoorH + 2}
+                          x2={bx + 2 + (c + 1) * (CW + GX) - GX / 2}
+                          y2={by + indoorH + Math.min(parkH - 2, rows * (CH + GY) + 2)}
+                          stroke="#ffffff"
+                          strokeWidth={0.8}
+                          opacity={0.85}
+                        />
+                      ));
+                      const cars = Array.from({ length: shown }, (_, i) => {
+                        const col = i % cols;
+                        const row = Math.floor(i / cols);
+                        return (
+                          <SvgCarTop
+                            key={i}
+                            cx={bx + 2 + col * (CW + GX) + CW / 2 + GX / 2}
+                            cy={by + indoorH + 3 + row * (CH + GY) + CH / 2}
+                            color={CAR_PALETTE[i % CAR_PALETTE.length]}
+                          />
+                        );
+                      });
+                      return (
+                        <>
+                          {slotLines}
+                          {cars}
+                        </>
+                      );
+                    })()}
                     {parkH >= 14 && bldPx > 40 && (
                       <text
                         x={planCx}
-                        y={by + indoorH + parkH / 2 + 3}
+                        y={by + indoorH + parkH - 4}
                         textAnchor="middle"
-                        style={{ fontSize: 9, fontWeight: 700, fill: "#993C1D" }}
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          fill: "#993C1D",
+                          paintOrder: "stroke",
+                          stroke: "#ffffff",
+                          strokeWidth: 2.5,
+                        }}
                       >
                         🚗 주차 {day10.groundSpaces}대 · {fmt(day10.groundParkingArea, 0)}㎡
                       </text>
@@ -526,9 +645,10 @@ export function ScaleVisualizer() {
               y={by}
               width={bldPx}
               height={bldPx}
-              fill={MASS_FILL}
+              fill="url(#mass-grad)"
               stroke={MASS_EDGE}
               strokeWidth={0.8}
+              filter="url(#soft-shadow)"
             />
             {bldPx > 50 && (
               <>
@@ -553,6 +673,87 @@ export function ScaleVisualizer() {
           </>
         )}
 
+        {/* 합필 필지 경계선 + 라벨 */}
+        {mergedParcels.length >= 2 && (() => {
+          const total = mergedParcels.reduce((s, p) => s + p.areaSqm, 0);
+          if (total <= 0) return null;
+          const items: React.ReactNode[] = [];
+          let acc = 0;
+          mergedParcels.forEach((p, i) => {
+            const startX = lx + (acc / total) * lotPx;
+            acc += p.areaSqm;
+            const endX = lx + (acc / total) * lotPx;
+            if (i < mergedParcels.length - 1) {
+              items.push(
+                <line
+                  key={`mb-${i}`}
+                  x1={endX}
+                  y1={ly}
+                  x2={endX}
+                  y2={ly + lotPx}
+                  stroke="#2563EB"
+                  strokeWidth={1.3}
+                  strokeDasharray="6 4"
+                  opacity={0.8}
+                />,
+              );
+            }
+            if (endX - startX >= 22) {
+              items.push(
+                <text
+                  key={`ml-${i}`}
+                  x={(startX + endX) / 2}
+                  y={ly + 11}
+                  textAnchor="middle"
+                  style={{
+                    fontSize: 7.5,
+                    fontWeight: 700,
+                    fill: "#2563EB",
+                    paintOrder: "stroke",
+                    stroke: "#ffffff",
+                    strokeWidth: 2.2,
+                  }}
+                >
+                  {String.fromCharCode(65 + i)} {p.label}
+                </text>,
+                <text
+                  key={`ma-${i}`}
+                  x={(startX + endX) / 2}
+                  y={ly + 20}
+                  textAnchor="middle"
+                  style={{
+                    fontSize: 6.5,
+                    fill: "#2563EB",
+                    paintOrder: "stroke",
+                    stroke: "#ffffff",
+                    strokeWidth: 2,
+                  }}
+                >
+                  {fmt(p.areaSqm, 0)}㎡
+                </text>,
+              );
+            }
+          });
+          items.push(
+            <text
+              key="mbadge"
+              x={lx + 3}
+              y={ly + lotPx - 5}
+              style={{
+                fontSize: 8.5,
+                fontWeight: 700,
+                fill: "#2563EB",
+                paintOrder: "stroke",
+                stroke: "#ffffff",
+                strokeWidth: 2.5,
+              }}
+            >
+              🔗 합필 {mergedParcels.length}필지
+            </text>,
+          );
+          return <g>{items}</g>;
+        })()}
+
         <rect
           x={lx}
           y={ry}
@@ -562,17 +763,59 @@ export function ScaleVisualizer() {
           className="text-muted-foreground stroke-muted-foreground"
           strokeWidth={0.5}
         />
+        {/* 도로 중앙선 (황색 점선) */}
+        {rPx >= 16 && (
+          <line
+            x1={lx + 5}
+            y1={ry + rPx / 2}
+            x2={lx + lotPx - 5}
+            y2={ry + rPx / 2}
+            stroke="#F2C744"
+            strokeWidth={1.6}
+            strokeDasharray="9 7"
+            opacity={0.9}
+          />
+        )}
         <text
           x={planCx}
           y={ry + rPx / 2 + 3}
           textAnchor="middle"
-          style={{ fontSize: 10, fontWeight: 500 }}
+          style={{
+            fontSize: 10,
+            fontWeight: 500,
+            paintOrder: "stroke",
+            stroke: "var(--card)",
+            strokeWidth: 3,
+          }}
           className="fill-muted-foreground"
         >
           전면도로 {roadM}m
         </text>
 
-        {/* 입면도 */}
+        {/* 입면도 — 하늘 + 태양 (남측) */}
+        <rect x={372} y={30} width={300} height={baseY - 30} fill="url(#sky-grad)" rx={6} />
+        <g opacity={0.95}>
+          <circle cx={645} cy={55} r={9} fill="#FBBF24" />
+          <circle cx={645} cy={55} r={9} fill="#FDE68A" opacity={0.5} />
+          {Array.from({ length: 8 }, (_, i) => {
+            const a = (i * Math.PI) / 4;
+            return (
+              <line
+                key={i}
+                x1={645 + Math.cos(a) * 12}
+                y1={55 + Math.sin(a) * 12}
+                x2={645 + Math.cos(a) * 16.5}
+                y2={55 + Math.sin(a) * 16.5}
+                stroke="#FBBF24"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+              />
+            );
+          })}
+          <text x={645} y={82} textAnchor="middle" style={{ fontSize: 7.5, fill: "#B45309" }}>
+            남측 채광
+          </text>
+        </g>
         <line
           x1={eL}
           y1={baseY}
@@ -675,12 +918,26 @@ export function ScaleVisualizer() {
               strokeDasharray="3 2"
               opacity={0.95}
             />
+            {/* 옆에서 본 자동차 아이콘 */}
+            {pilotisRect.h >= 14 && pilotisRect.w >= 20 && (() => {
+              const carW = 16, gap = 4;
+              const cols = Math.max(1, Math.floor((pilotisRect.w - 6) / (carW + gap)));
+              const shown = Math.min(spaces, cols);
+              return Array.from({ length: shown }, (_, i) => (
+                <SvgCarSide
+                  key={i}
+                  x={pilotisRect.x + 3 + i * (carW + gap)}
+                  bottomY={pilotisRect.y + pilotisRect.h - 1}
+                  color={CAR_PALETTE[i % CAR_PALETTE.length]}
+                />
+              ));
+            })()}
             {pilotisRect.h >= 12 && pilotisRect.w > 40 && (
               <text
                 x={pilotisRect.x + pilotisRect.w / 2}
-                y={pilotisRect.y + pilotisRect.h / 2 + 3}
+                y={pilotisRect.y + 9}
                 textAnchor="middle"
-                style={{ fontSize: 9, fontWeight: 500, fill: "#1F2937" }}
+                style={{ fontSize: 8, fontWeight: 500, fill: "#1F2937" }}
               >
                 필로티 (지상주차)
               </text>
@@ -702,10 +959,24 @@ export function ScaleVisualizer() {
               strokeDasharray="4 3"
               opacity={0.95}
             />
+            {/* 옆에서 본 자동차 아이콘 */}
+            {day10ParkingRect.h >= 14 && day10ParkingRect.w >= 18 && (() => {
+              const carW = 16, gap = 4;
+              const cols = Math.max(1, Math.floor((day10ParkingRect.w - 4) / (carW + gap)));
+              const shown = Math.min(day10.groundSpaces, cols);
+              return Array.from({ length: shown }, (_, i) => (
+                <SvgCarSide
+                  key={i}
+                  x={day10ParkingRect.x + 2 + i * (carW + gap)}
+                  bottomY={day10ParkingRect.y + day10ParkingRect.h - 1}
+                  color={CAR_PALETTE[i % CAR_PALETTE.length]}
+                />
+              ));
+            })()}
             {day10ParkingRect.h >= 10 && day10ParkingRect.w > 28 && (
               <text
                 x={day10ParkingRect.x + day10ParkingRect.w / 2}
-                y={day10ParkingRect.y + day10ParkingRect.h / 2 + 3}
+                y={day10ParkingRect.y + 8}
                 textAnchor="middle"
                 style={{ fontSize: 8, fontWeight: 700, fill: "#993C1D" }}
               >
@@ -830,6 +1101,15 @@ export function ScaleVisualizer() {
               : parkingMode === "basement"
                 ? "지하"
                 : "혼합"})
+          </span>
+        )}
+        {mergedParcels.length >= 2 && (
+          <span className="inline-flex items-center gap-1">
+            <span
+              className="inline-block w-2.5 h-0.5"
+              style={{ background: "#2563EB" }}
+            />
+            합필 필지 경계 ({mergedParcels.length}필지)
           </span>
         )}
       </div>
