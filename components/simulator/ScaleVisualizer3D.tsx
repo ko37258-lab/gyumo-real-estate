@@ -19,9 +19,8 @@ import {
 } from "@/lib/calc/parking";
 import { calculateGroundParking } from "@/lib/calc/groundParking";
 import { PARKING_STANDARDS, SQM_PER_SPACE } from "@/lib/parking-standards";
+import { getUseStyle } from "@/lib/building-use";
 
-const MASS_COLOR = "#F0997B";
-const MASS_EDGE = "#4A1B0C";
 const DANGER = "#E24B4A";
 const PARKING_COLOR = "#9CA3AF";
 const PARKING_EDGE = "#4B5563";
@@ -164,6 +163,9 @@ function Scene({
 
   // 건물 위치: 대지 내부에서 남쪽으로 60% 오프셋 (정북에 여유 두기)
   const bldOffsetZ = (lotSide - bldSide) * 0.1; // +z = 남쪽
+
+  // 건축물 용도별 3D 색상/라벨
+  const useStyle = getUseStyle(parkingUsage);
 
   // 주차 대수 → 지상/지하 면적
   const parkingStd = PARKING_STANDARDS[parkingUsage];
@@ -367,6 +369,11 @@ function Scene({
         day10ParkingFraction={day10ParkingFraction}
         day10IsPiloti={gp.isReducingFloor1}
         day10GroundSpaces={gp.groundSpaces}
+        massColor={useStyle.gradMid}
+        glassColor={useStyle.glass}
+        edgeColor={useStyle.edge}
+        useIcon={useStyle.icon}
+        useLabel={useStyle.usageLabel}
       />
 
       {/* 일조권 사선면 (참고용 — 정북측 envelope) */}
@@ -543,6 +550,11 @@ function BuildingMass({
   day10ParkingFraction,
   day10IsPiloti,
   day10GroundSpaces,
+  massColor,
+  glassColor,
+  edgeColor,
+  useIcon,
+  useLabel,
 }: {
   bldSide: number;
   floors: number;
@@ -552,6 +564,11 @@ function BuildingMass({
   day10ParkingFraction: number;
   day10IsPiloti: boolean;
   day10GroundSpaces: number;
+  massColor: string;
+  glassColor: string;
+  edgeColor: string;
+  useIcon: string;
+  useLabel: string;
 }) {
   const ceilFloors = Math.ceil(floors);
   const boxes: React.ReactNode[] = [];
@@ -588,18 +605,18 @@ function BuildingMass({
             <group position={[0, y, indoorCz]}>
               <mesh castShadow>
                 <boxGeometry args={[bldSide, floorH, indoorDepth]} />
-                <meshStandardMaterial color={MASS_COLOR} roughness={0.85} />
+                <meshStandardMaterial color={massColor} roughness={0.85} />
               </mesh>
               {/* 유리창 밴드 */}
               {floorH >= 2.5 && (
                 <mesh position={[0, floorH * 0.05, 0]}>
                   <boxGeometry args={[bldSide + 0.08, floorH * 0.4, indoorDepth + 0.08]} />
-                  <meshStandardMaterial color={GLASS_COLOR} roughness={0.12} metalness={0.35} />
+                  <meshStandardMaterial color={glassColor} roughness={0.12} metalness={0.35} />
                 </mesh>
               )}
               <BoxEdges
                 side={[bldSide, floorH, indoorDepth]}
-                color={MASS_EDGE}
+                color={edgeColor}
               />
             </group>
           )}
@@ -677,8 +694,8 @@ function BuildingMass({
     const day10TookFloor1 = i === 0 && day10ParkingFraction > 0;
     const useOldPiloti = !day10TookFloor1;
 
-    const color = useOldPiloti && isPilotis ? PARKING_COLOR : MASS_COLOR;
-    const edge = useOldPiloti && isPilotis ? PARKING_EDGE : MASS_EDGE;
+    const color = useOldPiloti && isPilotis ? PARKING_COLOR : massColor;
+    const edge = useOldPiloti && isPilotis ? PARKING_EDGE : edgeColor;
 
     boxes.push(
       <group key={`f-${i}`} position={[0, y, cz]}>
@@ -695,7 +712,7 @@ function BuildingMass({
         {portion >= 1 && !(useOldPiloti && isPilotis) && floorH >= 2.5 && (
           <mesh position={[0, floorH * 0.05, 0]}>
             <boxGeometry args={[bldSide + 0.08, floorH * 0.4, depth + 0.08]} />
-            <meshStandardMaterial color={GLASS_COLOR} roughness={0.12} metalness={0.35} />
+            <meshStandardMaterial color={glassColor} roughness={0.12} metalness={0.35} />
           </mesh>
         )}
         <BoxEdges side={[bldSide, floorH, depth]} color={edge} />
@@ -708,6 +725,35 @@ function BuildingMass({
           />
         )}
       </group>,
+    );
+  }
+
+  // 용도 배지 (건물 상단)
+  if (floors > 0) {
+    const hM = floors * FLOOR_HEIGHT_M;
+    boxes.push(
+      <Html
+        key="use-label"
+        position={[0, hM + 2.4, bldCenterZ]}
+        center
+        distanceFactor={34}
+        style={{ pointerEvents: "none" }}
+      >
+        <div
+          style={{
+            background: "white",
+            border: `2px solid ${massColor}`,
+            borderRadius: 5,
+            padding: "2px 7px",
+            fontSize: 12,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
+            color: edgeColor,
+          }}
+        >
+          {useIcon} {useLabel}
+        </div>
+      </Html>,
     );
   }
 
@@ -728,7 +774,7 @@ function BuildingMass({
             <boxGeometry args={[pw, 1.3, pd]} />
             <meshStandardMaterial color="#E8E4DA" roughness={0.8} />
           </mesh>
-          <BoxEdges side={[pw, 1.3, pd]} color={MASS_EDGE} />
+          <BoxEdges side={[pw, 1.3, pd]} color={edgeColor} />
         </group>,
       );
     }

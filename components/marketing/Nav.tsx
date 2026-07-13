@@ -57,8 +57,6 @@ export async function Nav() {
           </Link>
           <a
             href="https://mrk-building-law.netlify.app"
-            target="_blank"
-            rel="noopener noreferrer"
             className="text-sm px-3 py-1.5 rounded-md transition-colors"
             style={{ color: "rgba(255,255,255,0.58)" }}
           >

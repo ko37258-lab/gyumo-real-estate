@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ALL_ROLES, getDailyLimit } from "@/lib/membership";
+import { formatDateKST } from "@/lib/utils";
 
 type Profile = {
   id: string;
@@ -261,7 +262,7 @@ export function UserTable({
                           </span>
                           {p.agreed_at && (
                             <div className="text-[10px] mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-                              {new Date(p.agreed_at).toLocaleDateString("ko-KR")}
+                              {formatDateKST(p.agreed_at)}
                             </div>
                           )}
                         </div>
@@ -288,7 +289,7 @@ export function UserTable({
                       </td>
                     )}
                     <td className="px-4 py-3 text-xs" style={{ color: "var(--muted-foreground)" }}>
-                      {new Date(p.created_at).toLocaleDateString("ko-KR")}
+                      {formatDateKST(p.created_at)}
                     </td>
                     <td className="px-4 py-3">
                       <a href={`mailto:${p.email}`} className="text-xs px-2 py-1 rounded"

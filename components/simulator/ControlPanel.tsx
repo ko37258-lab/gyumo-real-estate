@@ -3,9 +3,21 @@
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
 import { useSimulatorStore } from "@/store/simulator";
 import { ZONES, getEffectiveFloorRatioMax } from "@/lib/zones";
+import {
+  PARKING_USAGE_LIST,
+  type ParkingUsageCode,
+} from "@/lib/parking-standards";
+import { getUseStyle } from "@/lib/building-use";
 import { SunlightLearnSheet } from "@/components/simulator/SunlightLearnSheet";
 
 const SQM_PER_PYEONG = 3.305785; // 1평 = 3.305785㎡
@@ -20,6 +32,8 @@ export function ControlPanel() {
   const roadM = useSimulatorStore((s) => s.roadM);
   const sunOn = useSimulatorStore((s) => s.sunOn);
   const isCBD = useSimulatorStore((s) => s.isCBD);
+  const parkingUsage = useSimulatorStore((s) => s.parkingUsage);
+  const setParkingUsage = useSimulatorStore((s) => s.setParkingUsage);
   const setLotPy = useSimulatorStore((s) => s.setLotPy);
   const setCovPct = useSimulatorStore((s) => s.setCovPct);
   const setFarPct = useSimulatorStore((s) => s.setFarPct);
@@ -30,11 +44,54 @@ export function ControlPanel() {
   const z = ZONES[zone];
   const effectiveFarMax = getEffectiveFloorRatioMax(z, isCBD);
   const cbdAvailable = !!z.floorRatioCBD;
+  const useStyle = getUseStyle(parkingUsage);
 
   return (
     <div className="bg-secondary rounded-lg p-3.5 space-y-3">
       <div className="text-xs text-muted-foreground font-medium">
         ③ 규제값 조정
+      </div>
+
+      {/* 건축물 용도 — 선택 시 ④ 매스 시각화가 용도별 색·입면으로 그려지고
+          ⑤ 주차 산정 용도와 자동 연동된다. */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-[12.5px] font-medium text-foreground/90">
+            건축물 용도
+          </Label>
+          <span
+            className="inline-flex items-center gap-1 text-[10.5px] font-medium px-1.5 py-0.5 rounded"
+            style={{ color: useStyle.edge, background: `${useStyle.gradMid}33` }}
+          >
+            {useStyle.icon} {useStyle.label}
+          </span>
+        </div>
+        <Select
+          value={parkingUsage}
+          onValueChange={(v) => setParkingUsage(v as ParkingUsageCode)}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              {(value: ParkingUsageCode) => {
+                const s = getUseStyle(value);
+                return `${s.icon} ${s.usageLabel}`;
+              }}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {PARKING_USAGE_LIST.map((s) => {
+              const st = getUseStyle(s.code);
+              return (
+                <SelectItem key={s.code} value={s.code}>
+                  {st.icon} {s.label}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        <p className="text-[10px] text-muted-foreground/80">
+          선택한 용도에 따라 ④ 매스 시각화의 색·외관이 바뀌고 ⑤ 주차 산정과 연동됩니다.
+        </p>
       </div>
 
       <div className="space-y-1.5">

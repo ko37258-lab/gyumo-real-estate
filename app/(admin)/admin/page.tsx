@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { formatDateKST } from "@/lib/utils";
 
 export const metadata = { title: "관리자 대시보드 | 규모검토" };
 
@@ -80,7 +82,7 @@ export default async function AdminPage() {
         <div className="px-5 py-4 border-b flex items-center justify-between"
           style={{ borderColor: "var(--border)" }}>
           <h2 className="text-sm font-semibold">최근 가입 회원</h2>
-          <a href="/admin/users" className="text-xs" style={{ color: "var(--info, #60a5fa)" }}>전체 보기 →</a>
+          <Link href="/admin/users" className="text-xs" style={{ color: "var(--info, #60a5fa)" }}>전체 보기 →</Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -108,7 +110,7 @@ export default async function AdminPage() {
                     {p.daily_reset === today ? `${p.daily_count}건` : "0건"}
                   </td>
                   <td className="px-4 py-3 text-xs" style={{ color: "var(--muted-foreground)" }}>
-                    {new Date(p.created_at).toLocaleDateString("ko-KR")}
+                    {formatDateKST(p.created_at)}
                   </td>
                 </tr>
               ))}

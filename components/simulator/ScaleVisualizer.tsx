@@ -15,6 +15,7 @@ import {
 } from "@/lib/calc/parking";
 import { calculateGroundParking } from "@/lib/calc/groundParking";
 import { PARKING_STANDARDS, SQM_PER_SPACE } from "@/lib/parking-standards";
+import { getUseStyle, type FacadeStyle } from "@/lib/building-use";
 import {
   Tabs,
   TabsContent,
@@ -76,10 +77,141 @@ function SvgCarSide({ x, bottomY, scale = 1, color = "#374151" }: { x: number; b
   );
 }
 
-const MASS_FILL = "#F0997B";
-const MASS_FILL_PARTIAL = "#F5C4B3";
-const MASS_EDGE = "#4A1B0C";
 const DANGER = "#E24B4A";
+
+// 용도별 입면(창문) 렌더. 정북단면도의 각 층에 용도군 특성에 맞는 창을 그린다.
+function renderFacade(
+  facade: FacadeStyle,
+  floorIndex: number,
+  fL: number,
+  actualY: number,
+  fW: number,
+  actualH: number,
+  glass: string,
+  glassStroke: string,
+): React.ReactNode {
+  if (actualH < 10 || fW < 20) return null;
+
+  const win = (
+    winW: number,
+    gapW: number,
+    maxCount: number,
+    winHRatio: number,
+    maxWinH: number,
+    rows = 1,
+  ): React.ReactNode => {
+    const pitch = winW + gapW;
+    const count = Math.min(Math.floor((fW - gapW) / pitch), maxCount);
+    if (count < 1) return null;
+    const winH = Math.min(actualH * winHRatio, maxWinH);
+    const startX = fL + (fW - (count * pitch - gapW)) / 2;
+    const rowGap = 3;
+    const totalH = rows * winH + (rows - 1) * rowGap;
+    const startY = actualY + (actualH - totalH) / 2;
+    const out: React.ReactNode[] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < count; c++) {
+        out.push(
+          <rect
+            key={`${r}-${c}`}
+            x={startX + c * pitch}
+            y={startY + r * (winH + rowGap)}
+            width={winW}
+            height={winH}
+            rx={0.8}
+            fill={glass}
+            stroke={glassStroke}
+            strokeWidth={0.4}
+            opacity={0.95}
+          />,
+        );
+      }
+    }
+    return out;
+  };
+
+  const ribbon = (): React.ReactNode => {
+    const bW = Math.max(0, fW - 8);
+    const bH = Math.min(actualH * 0.42, 8);
+    const bY = actualY + (actualH - bH) / 2;
+    const seg = Math.max(1, Math.floor(bW / 10));
+    return (
+      <g>
+        <rect
+          x={fL + 4}
+          y={bY}
+          width={bW}
+          height={bH}
+          rx={1}
+          fill={glass}
+          stroke={glassStroke}
+          strokeWidth={0.5}
+          opacity={0.95}
+        />
+        {Array.from({ length: seg - 1 }, (_, k) => (
+          <line
+            key={k}
+            x1={fL + 4 + ((k + 1) * bW) / seg}
+            y1={bY}
+            x2={fL + 4 + ((k + 1) * bW) / seg}
+            y2={bY + bH}
+            stroke={glassStroke}
+            strokeWidth={0.4}
+            opacity={0.6}
+          />
+        ))}
+      </g>
+    );
+  };
+
+  switch (facade) {
+    case "grid": // 업무: 촘촘한 커튼월 격자
+      return win(7.5, 5.5, 14, 0.52, 10, actualH > 26 ? 2 : 1);
+    case "punched": // 주거: 규칙적 작은 창
+      return win(9, 12, 8, 0.42, 9, 1);
+    case "storefront": {
+      // 상가: 1층은 통유리, 상층은 펀치드
+      if (floorIndex === 0) {
+        const gW = Math.max(0, fW - 8);
+        const gH = Math.min(actualH * 0.7, actualH - 4);
+        if (gW < 6 || gH < 4) return null;
+        const cols = Math.max(1, Math.floor(gW / 16));
+        return (
+          <g>
+            <rect
+              x={fL + 4}
+              y={actualY + actualH - gH - 2}
+              width={gW}
+              height={gH}
+              rx={1}
+              fill={glass}
+              stroke={glassStroke}
+              strokeWidth={0.6}
+              opacity={0.95}
+            />
+            {Array.from({ length: cols - 1 }, (_, k) => (
+              <line
+                key={k}
+                x1={fL + 4 + ((k + 1) * gW) / cols}
+                y1={actualY + actualH - gH - 2}
+                x2={fL + 4 + ((k + 1) * gW) / cols}
+                y2={actualY + actualH - 2}
+                stroke={glassStroke}
+                strokeWidth={0.5}
+                opacity={0.7}
+              />
+            ))}
+          </g>
+        );
+      }
+      return win(8, 7, 12, 0.46, 9, 1);
+    }
+    case "band": // 숙박·문화: 가로 리본 창
+      return ribbon();
+    case "sparse": // 공장: 성긴 창
+      return win(6, 20, 4, 0.3, 6, 1);
+  }
+}
 
 export function ScaleVisualizer() {
   const zone = useSimulatorStore((s) => s.zone);
@@ -103,6 +235,10 @@ export function ScaleVisualizer() {
 
   const z = ZONES[zone];
   const sunOn = sunOnRaw && z.residential;
+
+  // 건축물 용도별 시각화 스타일 (색·외곽선·창문·입면·아이콘)
+  const useStyle = getUseStyle(parkingUsage);
+  const massEdge = useStyle.edge;
 
   const lotSqm = lotPyToSqm(lotPy);
   const bldArea = buildingFootprintSqm(lotSqm, covPct);
@@ -227,33 +363,23 @@ export function ScaleVisualizer() {
           y={actualY}
           width={fW}
           height={actualH}
-          fill={isPartial ? MASS_FILL_PARTIAL : "url(#mass-grad)"}
-          stroke={MASS_EDGE}
+          fill={isPartial ? useStyle.gradTop : "url(#mass-grad)"}
+          stroke={massEdge}
           strokeWidth={0.5}
           strokeDasharray={isPartial ? "3 2" : undefined}
         />
-        {/* 유리창 */}
-        {!isPartial && actualH >= 12 && fW >= 34 && (() => {
-          const winW = 7.5, gapW = 5.5, pitch = winW + gapW;
-          const count = Math.min(Math.floor((fW - 14) / pitch), 14);
-          if (count < 1) return null;
-          const winH = Math.min(actualH * 0.52, 10);
-          const startX = fL + (fW - (count * pitch - gapW)) / 2;
-          return Array.from({ length: count }, (_, wi) => (
-            <rect
-              key={wi}
-              x={startX + wi * pitch}
-              y={actualY + (actualH - winH) / 2}
-              width={winW}
-              height={winH}
-              rx={0.8}
-              fill="#B7D4EC"
-              stroke="#7FA6C8"
-              strokeWidth={0.4}
-              opacity={0.95}
-            />
-          ));
-        })()}
+        {/* 용도별 유리창(입면) */}
+        {!isPartial &&
+          renderFacade(
+            useStyle.facade,
+            i,
+            fL,
+            actualY,
+            fW,
+            actualH,
+            useStyle.glass,
+            useStyle.glassStroke,
+          )}
         {phPx >= 14 && fW > 30 && (
           <text
             x={eBldR - 4}
@@ -261,7 +387,7 @@ export function ScaleVisualizer() {
             textAnchor="end"
             style={{
               fontSize: 8,
-              fill: MASS_EDGE,
+              fill: massEdge,
               opacity: 0.85,
               paintOrder: "stroke",
               stroke: "#ffffff",
@@ -415,9 +541,9 @@ export function ScaleVisualizer() {
             />
           </pattern>
           <linearGradient id="mass-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#F8BB9C" />
-            <stop offset="55%" stopColor="#F0997B" />
-            <stop offset="100%" stopColor="#DD7A54" />
+            <stop offset="0%" stopColor={useStyle.gradTop} />
+            <stop offset="55%" stopColor={useStyle.gradMid} />
+            <stop offset="100%" stopColor={useStyle.gradBottom} />
           </linearGradient>
           <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#CFE5F7" stopOpacity={0.95} />
@@ -539,7 +665,7 @@ export function ScaleVisualizer() {
                     width={bldPx}
                     height={indoorH}
                     fill="url(#mass-grad)"
-                    stroke={MASS_EDGE}
+                    stroke={massEdge}
                     strokeWidth={0.8}
                     filter="url(#soft-shadow)"
                   />
@@ -621,7 +747,7 @@ export function ScaleVisualizer() {
                       x={planCx}
                       y={by + indoorH / 2 - 2}
                       textAnchor="middle"
-                      style={{ fontSize: 10, fontWeight: 500, fill: MASS_EDGE }}
+                      style={{ fontSize: 10, fontWeight: 500, fill: massEdge }}
                     >
                       영업 가능
                     </text>
@@ -629,7 +755,7 @@ export function ScaleVisualizer() {
                       x={planCx}
                       y={by + indoorH / 2 + 10}
                       textAnchor="middle"
-                      style={{ fontSize: 8, fill: MASS_EDGE }}
+                      style={{ fontSize: 8, fill: massEdge }}
                     >
                       {fmt((bldArea - day10.groundParkingArea) / PY_TO_SQM, 0)}평
                     </text>
@@ -646,7 +772,7 @@ export function ScaleVisualizer() {
               width={bldPx}
               height={bldPx}
               fill="url(#mass-grad)"
-              stroke={MASS_EDGE}
+              stroke={massEdge}
               strokeWidth={0.8}
               filter="url(#soft-shadow)"
             />
@@ -656,7 +782,7 @@ export function ScaleVisualizer() {
                   x={planCx}
                   y={by + bldPx / 2 - 3}
                   textAnchor="middle"
-                  style={{ fontSize: 11, fontWeight: 500, fill: MASS_EDGE }}
+                  style={{ fontSize: 11, fontWeight: 500, fill: massEdge }}
                 >
                   건축면적
                 </text>
@@ -664,9 +790,24 @@ export function ScaleVisualizer() {
                   x={planCx}
                   y={by + bldPx / 2 + 11}
                   textAnchor="middle"
-                  style={{ fontSize: 9, fill: MASS_EDGE }}
+                  style={{ fontSize: 9, fill: massEdge }}
                 >
                   {fmt(bldArea / PY_TO_SQM, 0)}평
+                </text>
+                <text
+                  x={planCx}
+                  y={by + bldPx / 2 + 24}
+                  textAnchor="middle"
+                  style={{
+                    fontSize: 8.5,
+                    fontWeight: 700,
+                    fill: massEdge,
+                    paintOrder: "stroke",
+                    stroke: "#ffffff",
+                    strokeWidth: 2.5,
+                  }}
+                >
+                  {useStyle.icon} {useStyle.usageLabel}
                 </text>
               </>
             )}
@@ -904,6 +1045,23 @@ export function ScaleVisualizer() {
 
         {elevFloors}
 
+        {/* 용도 배지 — 건물 상단에 아이콘 + 용도명 */}
+        <text
+          x={(eBldL + eBldR) / 2}
+          y={Math.max(topYf - 6, 42)}
+          textAnchor="middle"
+          style={{
+            fontSize: 9.5,
+            fontWeight: 700,
+            fill: massEdge,
+            paintOrder: "stroke",
+            stroke: "#ffffff",
+            strokeWidth: 3,
+          }}
+        >
+          {useStyle.icon} {useStyle.usageLabel}
+        </text>
+
         {/* 지상 주차장 (필로티) 오버레이 */}
         {pilotisRect && (
           <g>
@@ -1070,9 +1228,9 @@ export function ScaleVisualizer() {
         <span className="inline-flex items-center gap-1">
           <span
             className="inline-block w-2.5 h-2.5"
-            style={{ background: MASS_FILL }}
+            style={{ background: useStyle.gradMid }}
           />
-          건축 가능 매스
+          {useStyle.icon} {useStyle.usageLabel} 매스
         </span>
         <span className="inline-flex items-center gap-1">
           <span
