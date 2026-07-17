@@ -7,12 +7,14 @@
 //   GET /api/vworld?kind=zone&x=<경도>&y=<위도>     → 용도지역명
 //   GET /api/vworld?kind=roads&x=<경도>&y=<위도>    → 주변 도로 접면 판정
 //   GET /api/vworld?kind=parcel&pnu=<19자리>       → 연속지적도 필지 폴리곤 (실형상)
+//   GET /api/vworld?kind=parcelat&x=<경도>&y=<위도> → 좌표가 속한 필지 (지도 클릭 정밀 선택)
 import { NextResponse } from "next/server";
 import {
   fetchVworldLandChar,
   fetchVworldZone,
   fetchVworldRoads,
   fetchVworldParcelPolygon,
+  fetchVworldParcelAtPoint,
   hasVworldDataKey,
 } from "@/lib/vworld-data";
 
@@ -74,6 +76,19 @@ export async function GET(request: Request) {
       const data = await fetchVworldParcelPolygon(pnu);
       if (!data) {
         return NextResponse.json({ error: "필지 폴리곤 없음" }, { status: 404 });
+      }
+      return NextResponse.json(data);
+    }
+
+    if (kind === "parcelat") {
+      const x = searchParams.get("x");
+      const y = searchParams.get("y");
+      if (!x || !y) {
+        return NextResponse.json({ error: "x,y 좌표 필요" }, { status: 400 });
+      }
+      const data = await fetchVworldParcelAtPoint(x, y);
+      if (!data) {
+        return NextResponse.json({ error: "해당 좌표의 필지 없음" }, { status: 404 });
       }
       return NextResponse.json(data);
     }

@@ -59,6 +59,22 @@ export async function fetchNearbyRoads(
   return d;
 }
 
+/** 좌표가 속한 필지 (지도 클릭 정밀 선택) — 서버 프록시 경유 */
+export async function fetchParcelAtPoint(
+  x: number | string,
+  y: number | string,
+): Promise<{ pnu: string; jibun: string; ring: Array<[number, number]> | null } | null> {
+  const r = await fetch(`/api/vworld?kind=parcelat&x=${x}&y=${y}`).catch(() => null);
+  if (!r || !r.ok) return null;
+  const d = (await r.json().catch(() => null)) as {
+    pnu?: string;
+    jibun?: string;
+    ring?: Array<[number, number]> | null;
+  } | null;
+  if (!d?.pnu) return null;
+  return { pnu: d.pnu, jibun: d.jibun ?? "", ring: d.ring ?? null };
+}
+
 /** 연속지적도 필지 폴리곤 (경위도 외곽 링) — 서버 프록시 경유. 실형상 2D/3D용 */
 export async function fetchParcelPolygon(
   pnu: string,

@@ -211,6 +211,52 @@ export async function fetchVworldParcelPolygon(
   };
 }
 
+export interface VworldParcelAtPoint {
+  /** VWorld PNU (11번째 자리 1=일반토지, 2=산) */
+  pnu: string;
+  /** 지번 표기 (예: "562대" — 끝에 지목 부호가 붙을 수 있음) */
+  jibun: string;
+  /** 외곽 링 경위도 (미리보기 하이라이트용) */
+  ring: Array<[number, number]> | null;
+}
+
+/**
+ * 좌표가 속한 필지를 연속지적도에서 직접 조회 (지도 클릭 정밀 선택용).
+ * 역지오코딩(카카오)은 인근 대표주소로 스냅될 수 있어 부정확 — 지적 폴리곤
+ * point-in-polygon 질의가 클릭 지점의 필지를 정확히 반환한다.
+ */
+export async function fetchVworldParcelAtPoint(
+  x: number | string,
+  y: number | string,
+): Promise<VworldParcelAtPoint | null> {
+  const key = vworldKey();
+  if (!key) return null;
+  const url =
+    `${VWORLD_DATA_ENDPOINT}?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN` +
+    `&key=${key}&format=json&geomFilter=POINT(${x} ${y})` +
+    `&geometry=true&attribute=true&crs=EPSG:4326&size=1&domain=${vworldDomain()}`;
+  const data = await callVworldData(url);
+  if (data?.response?.status !== "OK") return null;
+  const feature = data.response.result?.featureCollection?.features?.[0];
+  if (!feature) return null;
+  const props = (feature.properties ?? {}) as Record<string, unknown>;
+  const pnu = String(props.pnu ?? "");
+  if (!pnu) return null;
+
+  let ring: Array<[number, number]> | null = null;
+  const geom = feature.geometry;
+  if (geom?.type === "MultiPolygon") {
+    ring = ((geom.coordinates as number[][][][])?.[0]?.[0] ?? null) as
+      | Array<[number, number]>
+      | null;
+  } else if (geom?.type === "Polygon") {
+    ring = ((geom.coordinates as number[][][])?.[0] ?? null) as
+      | Array<[number, number]>
+      | null;
+  }
+  return { pnu, jibun: String(props.jibun ?? ""), ring };
+}
+
 export interface VworldZone {
   zone: string; // 용도지역명 (예: 제2종일반주거지역)
   raw: Record<string, unknown>;

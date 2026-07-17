@@ -2,10 +2,12 @@
 
 // 🗺️ 지도 필지 선택 (Phase C) — VWorld 배경지도 + 지적편집도 오버레이 + 클릭 조회.
 //
-// - 배경: VWorld WMTS (서버 프록시 /api/tile — 키 비노출, CDN 캐시)
-// - 지적: VWorld WMS lp_pa_cbnd_bubun (서버 프록시 /api/wms)
-// - 클릭: 좌표 → /api/revgeocode (카카오) → 지번주소 → 부모 onPick → 자동 조회
-// - 조회 성공 시 store.parcelShape.ringLonLat로 필지 하이라이트 + flyTo
+// 정밀 선택 흐름 (2026-07-17 개선):
+//   ① 십자(+) 커서로 클릭 지점을 정확히 조준
+//   ② 클릭 좌표 → 연속지적도 point-in-polygon 질의(/api/vworld?kind=parcelat)로
+//      그 좌표가 속한 필지를 정확히 확정 (카카오 역지오코딩 스냅 오차 제거)
+//   ③ 후보 필지를 파란 점선으로 미리보기 + 지번 확인 칩 표시
+//   ④ [이 필지 조회] 버튼을 눌러야 실제 조회 실행 — 오클릭으로 사용 한도 낭비 방지
 //
 // ⚠ leaflet은 window 필수 — 반드시 next/dynamic ssr:false로 로드할 것.
 
@@ -20,28 +22,73 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { useSimulatorStore } from "@/store/simulator";
+import { fetchParcelAtPoint } from "@/lib/vworld";
 
 const DEFAULT_CENTER: [number, number] = [37.5665, 126.978]; // 서울시청
 const DEFAULT_ZOOM = 17;
 
+/** 클릭으로 확정된 후보 필지 */
+type Candidate = {
+  address: string; // 조회에 사용할 지번주소
+  jibunLabel: string; // 표시용 지번 (예: 562, 산1-2)
+  ring: Array<[number, number]> | null; // [lat, lng] — 미리보기 폴리곤
+};
+
+/** VWorld jibun("562대", "1-20전") → 순수 지번 문자열. 산지(pnu 11번째=2)는 "산" 접두. */
+function jibunNumber(jibun: string, pnu: string): string {
+  const num = jibun.replace(/[가-힣]+\s*$/, "").trim();
+  if (!num) return "";
+  return (pnu.length === 19 && pnu[10] === "2" ? "산" : "") + num;
+}
+
 function ClickHandler({
-  onPick,
+  onCandidate,
   setPicking,
 }: {
-  onPick: (address: string) => void;
+  onCandidate: (c: Candidate | null) => void;
   setPicking: (v: boolean) => void;
 }) {
   useMapEvents({
     async click(e) {
       setPicking(true);
+      onCandidate(null);
       try {
-        const r = await fetch(
-          `/api/revgeocode?x=${e.latlng.lng}&y=${e.latlng.lat}`,
-        );
-        const d = (await r.json().catch(() => null)) as
-          | { address?: string; error?: string }
-          | null;
-        if (r.ok && d?.address) onPick(d.address);
+        // 지적 직격 질의(정확) + 역지오코딩(행정구역명) 병렬
+        const [parcel, rev] = await Promise.all([
+          fetchParcelAtPoint(e.latlng.lng, e.latlng.lat).catch(() => null),
+          fetch(`/api/revgeocode?x=${e.latlng.lng}&y=${e.latlng.lat}`)
+            .then(async (r) =>
+              r.ok ? ((await r.json()) as { address?: string }) : null,
+            )
+            .catch(() => null),
+        ]);
+
+        const revAddr = rev?.address ?? "";
+        let address = revAddr;
+        let jibunLabel = revAddr.split(" ").pop() ?? "";
+
+        // 지적 필지의 지번을 신뢰 — 역지오코딩 주소의 마지막 토큰(지번)만 교체
+        if (parcel) {
+          const num = jibunNumber(parcel.jibun, parcel.pnu);
+          if (num && revAddr) {
+            const parts = revAddr.split(" ");
+            parts[parts.length - 1] = num;
+            address = parts.join(" ");
+            jibunLabel = num;
+          }
+        }
+
+        if (!address) {
+          onCandidate(null);
+          return;
+        }
+        onCandidate({
+          address,
+          jibunLabel,
+          ring: parcel?.ring
+            ? parcel.ring.map(([lon, lat]) => [lat, lon] as [number, number])
+            : null,
+        });
       } finally {
         setPicking(false);
       }
@@ -71,6 +118,7 @@ export default function MapPicker({
 }) {
   const parcelShape = useSimulatorStore((s) => s.parcelShape);
   const [picking, setPicking] = useState(false);
+  const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [showCadastral, setShowCadastral] = useState(true);
   const [satellite, setSatellite] = useState(false);
 
@@ -79,7 +127,11 @@ export default function MapPicker({
     : null;
 
   return (
-    <div className="relative rounded-md overflow-hidden border border-border">
+    <div className="parcel-map relative rounded-md overflow-hidden border border-border">
+      {/* 십자 커서 — 클릭 지점 정밀 조준 (leaflet 기본 손바닥 커서 대체) */}
+      <style>{`.parcel-map .leaflet-container, .parcel-map .leaflet-grab { cursor: crosshair !important; }
+.parcel-map .leaflet-dragging .leaflet-container, .parcel-map .leaflet-dragging .leaflet-grab { cursor: grabbing !important; }`}</style>
+
       <MapContainer
         center={
           parcelShape
@@ -109,6 +161,7 @@ export default function MapPicker({
             maxZoom={19}
           />
         )}
+        {/* 확정(조회 완료) 필지 — 코랄 */}
         {highlight && highlight.length >= 3 && (
           <Polygon
             positions={highlight}
@@ -120,7 +173,20 @@ export default function MapPicker({
             }}
           />
         )}
-        <ClickHandler onPick={onPick} setPicking={setPicking} />
+        {/* 후보(클릭 미리보기) 필지 — 파란 점선 */}
+        {candidate?.ring && candidate.ring.length >= 3 && (
+          <Polygon
+            positions={candidate.ring}
+            pathOptions={{
+              color: "#2563EB",
+              weight: 2.5,
+              dashArray: "6 4",
+              fillColor: "#60A5FA",
+              fillOpacity: 0.25,
+            }}
+          />
+        )}
+        <ClickHandler onCandidate={setCandidate} setPicking={setPicking} />
         <FlyToParcel />
       </MapContainer>
 
@@ -152,12 +218,46 @@ export default function MapPicker({
         </button>
       </div>
 
-      {/* 클릭 안내 / 로딩 */}
-      <div
-        className="absolute bottom-2 left-2 z-[1000] text-[10.5px] font-medium px-2 py-1 rounded shadow"
-        style={{ background: "var(--card)", color: "var(--muted-foreground)" }}
-      >
-        {picking ? "⏳ 필지 확인 중..." : "🖱️ 지도에서 필지를 클릭하면 자동 조회됩니다"}
+      {/* 하단: 안내 / 후보 확인 칩 */}
+      <div className="absolute bottom-2 left-2 right-2 z-[1000] flex items-center gap-1.5">
+        {candidate ? (
+          <div
+            className="flex-1 flex items-center gap-2 px-2.5 py-1.5 rounded-md shadow border"
+            style={{ background: "var(--card)", borderColor: "#2563EB" }}
+          >
+            <span className="min-w-0 truncate text-[11.5px] font-medium text-foreground">
+              📍 {candidate.address}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                onPick(candidate.address);
+                setCandidate(null);
+              }}
+              className="shrink-0 text-[11px] font-bold px-2.5 py-1 rounded"
+              style={{ background: "#2563EB", color: "#fff" }}
+            >
+              이 필지 조회 →
+            </button>
+            <button
+              type="button"
+              onClick={() => setCandidate(null)}
+              className="shrink-0 text-[11px] px-1.5 py-1 rounded text-muted-foreground"
+              aria-label="선택 취소"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div
+            className="text-[10.5px] font-medium px-2 py-1 rounded shadow"
+            style={{ background: "var(--card)", color: "var(--muted-foreground)" }}
+          >
+            {picking
+              ? "⏳ 필지 확인 중..."
+              : "➕ 십자 커서로 필지를 클릭하면 지번을 확인한 뒤 조회할 수 있습니다"}
+          </div>
+        )}
       </div>
     </div>
   );
