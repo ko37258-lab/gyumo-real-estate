@@ -252,6 +252,13 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (3)** — **신축 시세 자동 제안 + Phase A/B 프로덕션 배포·검증 완료**.
+  - **app/api/newbuild-price/route.ts 신규**: 연립다세대 매매(`RTMSDataSvcRHTrade`)·전월세(`RTMSDataSvcRHRent`, 월세0=전세만)·상업업무용(`RTMSDataSvcNrgTrade`) 최근 6개월 병렬 집계(~3.2s). 주거 매매는 준공 5년 이내 신축급 우선(3건 미만 시 전체 연식), 표본은 같은 법정동 3건 이상→시군구 완화. 상가는 층별(1층/2층/3층+/지하) ㎡당 중앙값 — 플렉시티 `/building/price/` 대응.
+  - **LandLookup**: "🏘️ 신축 시세 참고" 카드(주거 매매/전세 + 상가 층별) + **원클릭 사업성 연동 버튼 2종** — [평당 토지가로 적용](추정가→`landPricePerPyeong` 만원/평), [평당 분양가로 적용](주거 매매 ㎡당×3.3058→`salesPricePerPyeong`). 적용 후 ✓ 표시, 재조회 시 리셋.
+  - 실측(성내동 562): 주거 매매(신축급) 1,243만/㎡×21건→평당 분양가 4,110만 제안, 전세 657만/㎡×270건, 상가 1층 628만/2층 306만/3층+ 277만.
+  - **배포**: `9aeeb06` push → GitHub 자동배포가 **프로덕션 직행**(gyumo.vercel.app alias 자동, Promote 불필요 — 이 프로젝트는 real-estate-infographic과 다름). 프로덕션 검증 3종 그린: ① `kind=parcel` 실키로 성내동 562 실제 지적 링 반환(Phase A 실형상 완전 작동) ② permits 정상(**Vercel DATAGO_KEY = 승인 키와 동일 계정, 교체 불필요**) ③ land-trades 정상.
+  - git push가 credential manager 프롬프트로 hang → `GIT_TERMINAL_PROMPT=0` 필요 (gh 키링 인증 존재).
+
 - **2026-07-17 (2)** — **Phase B: 건축 인허가 이력 + 토지 실거래·추정가** (운영자 data.go.kr 활용신청 승인 완료 — 인허가 15136267·토지 15126466·연립다세대 매매/전월세·상업업무용).
   - **app/api/permits/route.ts 신규**: 건축HUB 건축인허가 기본개요(`ArchPmsHubService/getApBasisOulnInfo`) — PNU 분해(시군구5+법정동5+platGb1+bun4+ji4) → 허가일·실착공일·사용승인일·건축구분·주용도·연면적·세대수, 최신 허가일 desc. 라이브 검증: 성내동 562 → 2건(2013-08-30 허가, 신축 공동주택 연면적 403.15㎡).
   - **app/api/land-trades/route.ts 신규**: 토지 매매 실거래(`RTMSDataSvcLandTrade`, XML) — 최근 12개월 병렬 조회(~4.7s) 후 플렉시티 방법론 재현: 같은 법정동→같은 용도지역(3건 미만 시 동전체→시군구 단계 완화) + 지분거래 제외 + **특수지목(도로·구거·하천·제방·묘지) 무조건 제외**(도로 683만 vs 대 2,816만/㎡ 중앙값 붕괴 실측) + <15㎡ 자투리 제외(2건 이상 남을 때만). ㎡당 중앙값 × 면적 = 추정가, 공시지가 총액 대비 배수(`ratioToJiga`). 표본 0건이면 추정가 미제공(정직 우선). 검증: 성내동 562 → 대 2건 중앙값 2,649만/㎡ → 53.4억(공시 4.54배), basis "같은 법정동 (용도지역 무관) · 건축지목" 투명 표시.

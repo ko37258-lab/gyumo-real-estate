@@ -13,6 +13,7 @@ import {
 import { buildParcelShape } from "@/lib/geo/parcel";
 import { findZoneCodeByName, ZONES, isLikelyCBD } from "@/lib/zones";
 import { useCostStore } from "@/store/cost";
+import { useProfitStore } from "@/store/profit";
 import {
   getJimokInfo,
   isBuiltJimok,
@@ -67,6 +68,26 @@ type LandTrades = {
   ratioToJiga: number;
 };
 
+// /api/newbuild-price 응답 — 신축 시세 (실거래 집계)
+type NewbuildPrice = {
+  periodMonths: number;
+  residential: {
+    tradeUnitWon: number;
+    tradeCount: number;
+    tradeBasis: string;
+    jeonseUnitWon: number;
+    jeonseCount: number;
+    jeonseBasis: string;
+  };
+  commercial: {
+    basis: string;
+    f1: { unitWon: number; count: number };
+    f2: { unitWon: number; count: number };
+    f3plus: { unitWon: number; count: number };
+    b: { unitWon: number; count: number };
+  };
+};
+
 // /api/permits 응답 — 건축HUB 건축인허가 기본개요
 type Permit = {
   pk: string;
@@ -92,6 +113,8 @@ type ApiResult = {
   permits: Permit[] | null;
   /** 토지 실거래 + 추정가 (국토부 실거래가, null = 조회 실패) */
   landTrades: LandTrades | null;
+  /** 신축 시세 (연립다세대·상업 실거래 집계, null = 조회 실패) */
+  newbuild: NewbuildPrice | null;
   /** 합필 조회 결과 (2필지 이상) */
   merged?: {
     parcels: MergedParcelRow[];
@@ -118,6 +141,8 @@ export function LandLookup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ApiResult | null>(null);
+  /** 사업성 탭 적용 여부 표시 (land = 토지가, sales = 분양가) */
+  const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [mergeMode, setMergeMode] = useState(false);
   const [extraAddresses, setExtraAddresses] = useState<string[]>([""]);
   const [usage, setUsage] = useState<{
@@ -150,6 +175,7 @@ export function LandLookup() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setApplied({});
 
     // 사용량 증가 (서버에서 원자적으로 처리)
     if (usage?.isLoggedIn) {
@@ -268,13 +294,18 @@ export function LandLookup() {
         const parts = geo.refined.split(" ").filter(Boolean);
         return parts.length >= 2 ? parts[parts.length - 2] : "";
       })();
-      const landTrades = await fetch(
-        `/api/land-trades?pnu=${geo.pnu}&umd=${encodeURIComponent(umdName)}` +
-          `&zone=${encodeURIComponent(zoneName ?? "")}` +
-          `&areaSqm=${primaryArea || 0}&jiga=${landAreaRes?.price ?? 0}`,
-      )
-        .then(async (r) => (r.ok ? ((await r.json()) as LandTrades) : null))
-        .catch(() => null);
+      const [landTrades, newbuild] = await Promise.all([
+        fetch(
+          `/api/land-trades?pnu=${geo.pnu}&umd=${encodeURIComponent(umdName)}` +
+            `&zone=${encodeURIComponent(zoneName ?? "")}` +
+            `&areaSqm=${primaryArea || 0}&jiga=${landAreaRes?.price ?? 0}`,
+        )
+          .then(async (r) => (r.ok ? ((await r.json()) as LandTrades) : null))
+          .catch(() => null),
+        fetch(`/api/newbuild-price?pnu=${geo.pnu}&umd=${encodeURIComponent(umdName)}`)
+          .then(async (r) => (r.ok ? ((await r.json()) as NewbuildPrice) : null))
+          .catch(() => null),
+      ]);
 
       const out: ApiResult = {
         roads,
@@ -285,6 +316,7 @@ export function LandLookup() {
         errors,
         permits,
         landTrades,
+        newbuild,
         merged,
       };
       setResult(out);
@@ -836,8 +868,129 @@ export function LandLookup() {
               <div className="mt-1 text-[9.5px] text-muted-foreground/80">
                 ※ 국토부 실거래가공개시스템 신고 자료 기반 통계 추정치 — 감정평가가 아니며 개별 필지 조건(도로·형상·개발계획)에 따라 달라질 수 있음.
               </div>
+              {result.landTrades.estimatedPrice > 0 && resolvedArea > 0 && (
+                <button
+                  type="button"
+                  disabled={applied.land}
+                  onClick={() => {
+                    const py = resolvedArea / 3.305785;
+                    const manPerPy = Math.round(
+                      result.landTrades!.estimatedPrice / py / 10000,
+                    );
+                    if (manPerPy > 0) {
+                      useProfitStore.getState().set("landPricePerPyeong", manPerPy);
+                      setApplied((p) => ({ ...p, land: true }));
+                    }
+                  }}
+                  className="mt-1.5 w-full text-[11px] font-semibold px-2.5 py-1.5 rounded-md border transition-colors disabled:opacity-70"
+                  style={
+                    applied.land
+                      ? { background: "var(--info-bg)", borderColor: "var(--info)", color: "var(--info)" }
+                      : { background: "var(--info)", borderColor: "var(--info)", color: "var(--info-foreground, #fff)" }
+                  }
+                >
+                  {applied.land
+                    ? "✓ 사업성 탭 토지가에 적용됨"
+                    : `📊 사업성 탭 평당 토지가로 적용 (${Math.round(result.landTrades.estimatedPrice / (resolvedArea / 3.305785) / 10000).toLocaleString("ko-KR")}만원/평)`}
+                </button>
+              )}
             </div>
           )}
+
+          {/* 신축 시세 참고 (연립다세대·상업 실거래 집계) */}
+          {result.newbuild &&
+            (result.newbuild.residential.tradeCount > 0 ||
+              result.newbuild.commercial.f1.count > 0) && (
+              <div className="rounded-md border border-border bg-card p-2.5">
+                <div className="text-[10px] text-muted-foreground mb-1.5">
+                  🏘️ 신축 시세 참고 (최근 {result.newbuild.periodMonths}개월 실거래 ㎡당 중앙값)
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {result.newbuild.residential.tradeCount > 0 && (
+                    <div className="rounded bg-secondary/60 px-2.5 py-1.5">
+                      <div className="text-[9.5px] text-muted-foreground">
+                        주거 매매 (연립·다세대 {result.newbuild.residential.tradeCount}건)
+                      </div>
+                      <div className="text-[14px] font-bold text-foreground">
+                        {Math.round(result.newbuild.residential.tradeUnitWon / 10000).toLocaleString("ko-KR")}만/㎡
+                        <span className="ml-1 text-[10px] font-medium text-muted-foreground">
+                          (평당 {Math.round((result.newbuild.residential.tradeUnitWon * 3.305785) / 10000).toLocaleString("ko-KR")}만)
+                        </span>
+                      </div>
+                      <div className="text-[9px] text-muted-foreground">
+                        {result.newbuild.residential.tradeBasis}
+                      </div>
+                    </div>
+                  )}
+                  {result.newbuild.residential.jeonseCount > 0 && (
+                    <div className="rounded bg-secondary/60 px-2.5 py-1.5">
+                      <div className="text-[9.5px] text-muted-foreground">
+                        주거 전세 ({result.newbuild.residential.jeonseCount}건)
+                      </div>
+                      <div className="text-[14px] font-bold text-foreground">
+                        {Math.round(result.newbuild.residential.jeonseUnitWon / 10000).toLocaleString("ko-KR")}만/㎡
+                      </div>
+                      <div className="text-[9px] text-muted-foreground">
+                        {result.newbuild.residential.jeonseBasis}
+                      </div>
+                    </div>
+                  )}
+                  {result.newbuild.commercial.f1.count > 0 && (
+                    <div className="rounded bg-secondary/60 px-2.5 py-1.5 col-span-2">
+                      <div className="text-[9.5px] text-muted-foreground mb-0.5">
+                        상가 매매 ({result.newbuild.commercial.basis})
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 text-[11px]">
+                        <span>
+                          1층 <b>{Math.round(result.newbuild.commercial.f1.unitWon / 10000).toLocaleString("ko-KR")}만/㎡</b>
+                          <span className="text-muted-foreground"> ({result.newbuild.commercial.f1.count}건)</span>
+                        </span>
+                        {result.newbuild.commercial.f2.count > 0 && (
+                          <span>
+                            2층 <b>{Math.round(result.newbuild.commercial.f2.unitWon / 10000).toLocaleString("ko-KR")}만/㎡</b>
+                            <span className="text-muted-foreground"> ({result.newbuild.commercial.f2.count}건)</span>
+                          </span>
+                        )}
+                        {result.newbuild.commercial.f3plus.count > 0 && (
+                          <span>
+                            3층+ <b>{Math.round(result.newbuild.commercial.f3plus.unitWon / 10000).toLocaleString("ko-KR")}만/㎡</b>
+                            <span className="text-muted-foreground"> ({result.newbuild.commercial.f3plus.count}건)</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {result.newbuild.residential.tradeCount > 0 && (
+                  <button
+                    type="button"
+                    disabled={applied.sales}
+                    onClick={() => {
+                      const manPerPy = Math.round(
+                        (result.newbuild!.residential.tradeUnitWon * 3.305785) / 10000,
+                      );
+                      if (manPerPy > 0) {
+                        useProfitStore.getState().set("salesPricePerPyeong", manPerPy);
+                        setApplied((p) => ({ ...p, sales: true }));
+                      }
+                    }}
+                    className="mt-1.5 w-full text-[11px] font-semibold px-2.5 py-1.5 rounded-md border transition-colors disabled:opacity-70"
+                    style={
+                      applied.sales
+                        ? { background: "var(--info-bg)", borderColor: "var(--info)", color: "var(--info)" }
+                        : { background: "var(--card)", borderColor: "var(--info)", color: "var(--info)" }
+                    }
+                  >
+                    {applied.sales
+                      ? "✓ 사업성 탭 분양가에 적용됨"
+                      : `📊 사업성 탭 평당 분양가로 적용 (${Math.round((result.newbuild.residential.tradeUnitWon * 3.305785) / 10000).toLocaleString("ko-KR")}만원/평)`}
+                  </button>
+                )}
+                <div className="mt-1 text-[9.5px] text-muted-foreground/80">
+                  ※ 신축 분양가·임대료 산정 참고용 — 상품 기획·마감 수준에 따라 달라질 수 있음.
+                </div>
+              </div>
+            )}
 
           {/* 부분 실패 안내 */}
           {result.errors.length > 0 && (
