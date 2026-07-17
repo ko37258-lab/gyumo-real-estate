@@ -252,6 +252,12 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (15)** — **전체 오류 점검 + 탭 스타일 회귀 수정**.
+  - 점검 범위: `next build`(0 오류·33 라우트) / tsc 0 / eslint(신규 0 — 기존 3건: privacy 따옴표 escape, MarketInsight·NearbyLandPrice set-state-in-effect) / 프로덕션 API 17종 전부 200 / 브라우저 E2E(성내동 562 조회 8요소·4탭 순회·3D 캔버스·용도별 팝업·이력·보고서 체크박스·PDF 생성) / 콘솔 에러 0.
+  - **🐛 발견·수정: 탭 트리거 스타일 회귀** — base-ui Tabs가 `data-state` 대신 **`data-active`(활성 시 존재) + `aria-selected`**를 쓰는데 StepTrigger가 `data-[state=active|inactive]` 변형 사용 → 죽은 선택자(카드·배지·활성 강조 전멸). TabsList 내장 `group-data-horizontal/tabs:h-8`(32px, 변형 셀렉터라 `h-auto`보다 우선)이 4탭 개편 후 탭 줄을 본문 위로 겹치게 함. **수정**: `data-active:`/`aria-[selected=false]:`/`group-data-active:`/`group-aria-[selected=false]:`로 교체 + `h-auto!`(important). 프로덕션 검증 — list 높이 자동(2줄 134px), 활성 코랄 보더·그라디언트, 비활성 0.6 투명+회색 배지, 겹침 없음.
+  - ⚠ 참고: 커스텀 Tabs 트리거 스타일링 시 `data-[state=...]` 금지 — 이 프로젝트 base-ui 버전은 `data-active`(presence)·`aria-selected`만 노출.
+  - ⚠ PDF 생성(토지정보+용도별시세 포함 7~8페이지)이 헤드리스 테스트에서 메인스레드 1분+ 블로킹 후 정상 완료 — 실기기 체감 확인 필요, 느리면 신규 페이지 경량화/워커 검토.
+
 - **2026-07-17 (14)** — **용도별 분양가·임대료 팝업 + 보고서 수록 항목 체크 + 프로젝트 이력** (운영자 피드백 3종).
   - **`/api/use-prices` 신규**: RTMS 9종 12개월 집계 — 매매(단독·다가구 SHTrade/다세대연립 RHTrade/아파트 AptTrade/오피스텔 OffiTrade) + 월세(각 Rent, 평당 월세 중앙값) + 상업 층별(NrgTrade). **SHTrade·SHRent·OffiTrade도 계정에 승인돼 있음 확인**(역삼동 단독 4,039만/평 4건 등 전 카테고리 실데이터). 서비스×월 108호출 → 동시성 20 제한 + lawdCd 6h 캐시.
   - **UsePricesDialog**: 플렉시티식 표 3개(분양가/임대료/상가 층별) 팝업 — 면적기준·표본수·법정동/시군구 근거 표기, 공급면적 전환(⑥ 가설계 전용률 연동, 기본 78%). 결과는 useUsePricesStore 캐시 → 보고서 주입.
