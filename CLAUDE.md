@@ -252,6 +252,12 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (16)** — **㎡↔평 표시 단위 토글 + 원 단위 가독성** (운영자 피드백).
+  - `store/unit.ts`(persist `gyumo_area_unit`) + ① 지번 조회 헤더에 [⇄ ㎡ 기준/평 기준] 토글 칩 — 플렉시티 [⇄ 평] 대응.
+  - 단위 연동 표시: 기본정보 면적(순서 스왑)·합필 합계/행·공시지가(원/㎡↔원/평 환산)·추정가 보드 서브·토지 실거래 행(면적·단가·헤더)·신축 시세(중앙값·괄호에 반대 단위 병기)·실거래 사례 행·프로젝트 이력.
+  - 원 단위 가독성: 공시지가 `6,061,000원/㎡ (약 606만원/㎡ · 2026년)` 콤마+괄호 병기. `lib/utils/area.ts`에 `AreaUnit`·`formatAreaBy`·`formatAreaShortBy`·`formatManPerBy`·`formatManPerShortBy`·`formatWonSmart` 추가.
+  - 프로덕션 검증(성내동 562): 토글 후 61평 (201.6㎡) / 20,036,363원/평 (약 2,004만원/평) / 거래행 3평·9,311만 / 신축 4,110만/평(㎡당 1,243만) — 환산 수치 전부 수기 일치.
+
 - **2026-07-17 (15)** — **전체 오류 점검 + 탭 스타일 회귀 수정**.
   - 점검 범위: `next build`(0 오류·33 라우트) / tsc 0 / eslint(신규 0 — 기존 3건: privacy 따옴표 escape, MarketInsight·NearbyLandPrice set-state-in-effect) / 프로덕션 API 17종 전부 200 / 브라우저 E2E(성내동 562 조회 8요소·4탭 순회·3D 캔버스·용도별 팝업·이력·보고서 체크박스·PDF 생성) / 콘솔 에러 0.
   - **🐛 발견·수정: 탭 트리거 스타일 회귀** — base-ui Tabs가 `data-state` 대신 **`data-active`(활성 시 존재) + `aria-selected`**를 쓰는데 StepTrigger가 `data-[state=active|inactive]` 변형 사용 → 죽은 선택자(카드·배지·활성 강조 전멸). TabsList 내장 `group-data-horizontal/tabs:h-8`(32px, 변형 셀렉터라 `h-auto`보다 우선)이 4탭 개편 후 탭 줄을 본문 위로 겹치게 함. **수정**: `data-active:`/`aria-[selected=false]:`/`group-data-active:`/`group-aria-[selected=false]:`로 교체 + `h-auto!`(important). 프로덕션 검증 — list 높이 자동(2줄 134px), 활성 코랄 보더·그라디언트, 비활성 0.6 투명+회색 배지, 겹침 없음.
