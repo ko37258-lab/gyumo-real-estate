@@ -6,6 +6,8 @@
 // 정밀 측량이 아닌 규모검토용 근사(equirectangular, 위도 보정)를 쓴다.
 // 서울 위도(37.5°)에서 필지 스케일(수십 m) 오차는 cm 단위 — 검토 목적에 충분.
 
+import polygonClipping from "polygon-clipping";
+
 export type Pt = [number, number]; // [x(m, 동+), y(m, 북+)]
 
 export interface ParcelShape {
@@ -15,11 +17,15 @@ export interface ParcelShape {
   areaSqm: number;
   /** 로컬 좌표 bbox */
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
-  /** 원본 경위도 중심 (지도 연동용) */
+  /** 원본 경위도 중심 = 폴리곤 무게중심 (지도 연동·좌표 변환 기준점) */
   centerLon: number;
   centerLat: number;
   /** 원본 경위도 외곽 링 [[lon,lat],...] — 지도 하이라이트용 */
   ringLonLat: Array<[number, number]>;
+  /** 합필 구성 필지 (union일 때만) — 내부 경계선·라벨 표시용 */
+  members?: Array<{ ring: Array<[number, number]>; label: string }>;
+  /** 합필 union 형상 여부 */
+  isMerged?: boolean;
 }
 
 const EARTH_R = 6378137; // m
@@ -144,12 +150,60 @@ export function buildParcelShape(ring: Array<[number, number]>): ParcelShape {
   // 무게중심을 원점으로 재정렬 (3D 배치 안정화)
   const [cx, cy] = polygonCentroid(pts);
   const centered: Pt[] = pts.map(([x, y]) => [x - cx, y - cy]);
+  // centerLon/Lat을 "무게중심의 경위도"로 보정 — lonLatToLocal 역변환의 기준점.
+  const cosLat = Math.cos(centerLat * DEG);
+  const centroidLon = centerLon + cx / (DEG * EARTH_R * cosLat);
+  const centroidLat = centerLat + cy / (DEG * EARTH_R);
   return {
     pts: centered,
     areaSqm: Math.round(polygonArea(centered) * 100) / 100,
     bounds: polygonBounds(centered),
-    centerLon,
-    centerLat,
+    centerLon: centroidLon,
+    centerLat: centroidLat,
     ringLonLat: cleaned,
   };
+}
+
+/** shape의 로컬 미터 좌표계(원점=무게중심)로 임의 경위도 점 변환 */
+export function lonLatToLocal(
+  shape: ParcelShape,
+  [lon, lat]: [number, number],
+): Pt {
+  const cosLat = Math.cos(shape.centerLat * DEG);
+  return [
+    (lon - shape.centerLon) * DEG * EARTH_R * cosLat,
+    (lat - shape.centerLat) * DEG * EARTH_R,
+  ];
+}
+
+/**
+ * 합필 union 형상 — 구성 필지 폴리곤들을 하나로 합쳐 ParcelShape 생성.
+ *
+ * - 연접 필지 union이 단일 폴리곤이 될 때만 성공 (합필은 지적법상 연접 필지만 가능).
+ *   비연접(union 결과 2개 이상 폴리곤)이거나 실패하면 null → 호출부는 정사각형 근사 유지.
+ * - members에 구성 필지 원본 링·라벨 보존 → 2D/3D에 내부 경계선 표시.
+ */
+export function buildMergedParcelShape(
+  parcels: Array<{ ring: Array<[number, number]>; label: string }>,
+): ParcelShape | null {
+  try {
+    const valid = parcels.filter((p) => p.ring && p.ring.length >= 3);
+    if (valid.length < 2) return null;
+    const polys = valid.map(
+      (p) => [p.ring] as [Array<[number, number]>],
+    );
+    const result = polygonClipping.union(polys[0], ...polys.slice(1));
+    // 연접이 아니면 폴리곤이 2개 이상으로 남음 → 합필 불가 형상
+    if (!result || result.length !== 1) return null;
+    const outer = result[0][0] as Array<[number, number]>;
+    if (!outer || outer.length < 3) return null;
+    const shape = buildParcelShape(outer);
+    return {
+      ...shape,
+      isMerged: true,
+      members: valid.map((p) => ({ ring: p.ring, label: p.label })),
+    };
+  } catch {
+    return null;
+  }
 }

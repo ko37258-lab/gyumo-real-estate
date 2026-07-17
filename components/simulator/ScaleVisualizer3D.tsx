@@ -24,6 +24,7 @@ import {
   scalePolygon,
   clipPolygonBelowY,
   polygonBounds,
+  lonLatToLocal,
   type ParcelShape,
   type Pt,
 } from "@/lib/geo/parcel";
@@ -1143,6 +1144,21 @@ function ParcelLot({ shape }: { shape: ParcelShape }) {
         dashSize={1.2}
         gapSize={0.8}
       />
+      {/* 합필 구성 필지 경계선 (union 형상일 때만, 파란 점선) */}
+      {shape.members?.map((m, i) => (
+        <Line
+          key={`member-${i}`}
+          points={[...m.ring, m.ring[0]].map((p) => {
+            const [x, y] = lonLatToLocal(shape, p);
+            return [x, 0.08, -y] as [number, number, number];
+          })}
+          color="#2563EB"
+          lineWidth={1.4}
+          dashed
+          dashSize={0.9}
+          gapSize={0.6}
+        />
+      ))}
     </group>
   );
 }

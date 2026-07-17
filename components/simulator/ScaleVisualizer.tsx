@@ -19,6 +19,8 @@ import { getUseStyle, type FacadeStyle } from "@/lib/building-use";
 import {
   scalePolygon,
   polygonBounds,
+  polygonCentroid,
+  lonLatToLocal,
   type Pt,
 } from "@/lib/geo/parcel";
 import {
@@ -349,6 +351,16 @@ export function ScaleVisualizer() {
     const fpBotY = planCy - (parcelFpBounds.minY - cy0) * s;
     const fpLeftX = planCx + (parcelFpBounds.minX - cx0) * s;
     const fpRightX = planCx + (parcelFpBounds.maxX - cx0) * s;
+    // 합필 구성 필지 경계선 + 라벨 (union 형상일 때만)
+    const memberOverlays = parcelShape.members
+      ? parcelShape.members.map((m) => {
+          const localPts = m.ring.map((p) =>
+            lonLatToLocal(parcelShape, p),
+          ) as Pt[];
+          const c = polygonCentroid(localPts);
+          return { path: pathOf(localPts), labelXY: toSvg(c), label: m.label };
+        })
+      : null;
     return {
       parcelPath: pathOf(parcelShape.pts),
       fpPath: pathOf(parcelFp),
@@ -359,6 +371,7 @@ export function ScaleVisualizer() {
       fpLeftX,
       fpRightX,
       centroid: toSvg([0, 0]),
+      memberOverlays,
     };
   })();
 
@@ -515,7 +528,9 @@ export function ScaleVisualizer() {
                 className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded"
                 style={{ background: "#2563EB18", color: "#2563EB" }}
               >
-                📐 실제 지적 형상 반영 ({parcelShape.areaSqm.toLocaleString("ko-KR")}㎡)
+                📐 {parcelShape.isMerged
+                  ? `합필 ${parcelShape.members?.length ?? 0}필지 실형상`
+                  : "실제 지적 형상 반영"} ({parcelShape.areaSqm.toLocaleString("ko-KR")}㎡)
               </span>
             )}
           </div>
@@ -681,6 +696,34 @@ export function ScaleVisualizer() {
               strokeWidth={1}
               strokeDasharray="4 3"
             />
+            {/* 합필 구성 필지 경계선 + 지번 라벨 */}
+            {parcelPlan.memberOverlays?.map((m, i) => (
+              <g key={`member-${i}`}>
+                <path
+                  d={m.path}
+                  fill="none"
+                  stroke="#2563EB"
+                  strokeWidth={1}
+                  strokeDasharray="5 3"
+                  opacity={0.75}
+                />
+                <text
+                  x={m.labelXY[0]}
+                  y={m.labelXY[1]}
+                  textAnchor="middle"
+                  style={{
+                    fontSize: 7.5,
+                    fontWeight: 700,
+                    fill: "#2563EB",
+                    paintOrder: "stroke",
+                    stroke: "#ffffff",
+                    strokeWidth: 2.2,
+                  }}
+                >
+                  {String.fromCharCode(65 + i)} {m.label}
+                </text>
+              </g>
+            ))}
             <text
               x={planCx}
               y={ly - 6}
@@ -688,7 +731,9 @@ export function ScaleVisualizer() {
               style={{ fontSize: 9 }}
               className="fill-muted-foreground"
             >
-              대지경계선 (실제 지적 형상)
+              {parcelShape?.isMerged
+                ? `대지경계선 (합필 ${parcelShape.members?.length ?? 0}필지 실형상)`
+                : "대지경계선 (실제 지적 형상)"}
             </text>
           </>
         ) : (
@@ -1022,8 +1067,8 @@ export function ScaleVisualizer() {
           </>
         )}
 
-        {/* 합필 필지 경계선 + 라벨 */}
-        {mergedParcels.length >= 2 && (() => {
+        {/* 합필 필지 경계선 + 라벨 (정사각형 근사 모드 전용 — 실형상은 memberOverlays로 표시) */}
+        {!parcelPlan && mergedParcels.length >= 2 && (() => {
           const total = mergedParcels.reduce((s, p) => s + p.areaSqm, 0);
           if (total <= 0) return null;
           const items: React.ReactNode[] = [];

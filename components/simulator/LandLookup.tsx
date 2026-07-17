@@ -21,7 +21,7 @@ import {
   fetchParcelPolygon,
   type RoadCheck,
 } from "@/lib/vworld";
-import { buildParcelShape } from "@/lib/geo/parcel";
+import { buildParcelShape, buildMergedParcelShape } from "@/lib/geo/parcel";
 import { findZoneCodeByName, ZONES, isLikelyCBD } from "@/lib/zones";
 import { useCostStore } from "@/store/cost";
 import { useProfitStore } from "@/store/profit";
@@ -55,6 +55,8 @@ type MergedParcelRow = {
   areaSqm: number;
   zone: string | null;
   price: number | null;
+  /** 연속지적도 링 (union 실형상용, null = 폴리곤 없음) */
+  ring?: Array<[number, number]> | null;
 };
 
 // /api/land-trades 응답 — 토지 실거래 + 추정가
@@ -272,14 +274,19 @@ export function LandLookup() {
               const gRes = await fetch(`/api/geocode?address=${encodeURIComponent(addr)}`);
               if (!gRes.ok) throw new Error();
               const g = (await gRes.json()) as { pnu: string; refined: string };
-              const la = await fetch(`/api/landarea?pnu=${g.pnu}`)
-                .then(async (r) => (r.ok ? ((await r.json()) as LandArea) : null))
-                .catch(() => null);
+              const [la, poly] = await Promise.all([
+                fetch(`/api/landarea?pnu=${g.pnu}`)
+                  .then(async (r) => (r.ok ? ((await r.json()) as LandArea) : null))
+                  .catch(() => null),
+                // union 실형상용 폴리곤 (실패해도 합필 자체는 진행)
+                fetchParcelPolygon(g.pnu).catch(() => null),
+              ]);
               return {
                 label: jibunOf(g.refined),
                 areaSqm: la?.area && la.area > 0 ? la.area : 0,
                 zone: la?.zone ?? null,
                 price: la?.price ?? null,
+                ring: poly?.ring ?? null,
               };
             } catch {
               errors.push(`합필 지번 "${addr}" 조회 실패`);
@@ -356,13 +363,26 @@ export function LandLookup() {
           : [],
       );
 
-      // 실형상 폴리곤 → store (합필은 v1에서 실형상 미지원 — 정사각형 유지)
+      // 실형상 폴리곤 → store.
+      // 단독: 해당 필지 링 그대로 / 합필: 전 필지 링 union (연접 단일 폴리곤일 때만).
       if (parcelPoly && !merged) {
         try {
           setParcelShape(buildParcelShape(parcelPoly.ring));
         } catch {
           setParcelShape(null);
         }
+      } else if (parcelPoly && merged) {
+        const memberParcels = [
+          { ring: parcelPoly.ring, label: jibunOf(geo.refined) },
+          ...merged.parcels
+            .slice(1)
+            .map((p) => ({ ring: p.ring ?? [], label: p.label })),
+        ];
+        const allRings = memberParcels.every(
+          (m) => m.ring && m.ring.length >= 3,
+        );
+        // 링이 하나라도 없거나 비연접이면 null → 정사각형 근사 유지
+        setParcelShape(allRings ? buildMergedParcelShape(memberParcels) : null);
       } else {
         setParcelShape(null);
       }

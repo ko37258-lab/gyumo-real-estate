@@ -7,7 +7,7 @@
 
 import { useEffect } from "react";
 import { useSimulatorStore } from "@/store/simulator";
-import { buildParcelShape } from "@/lib/geo/parcel";
+import { buildParcelShape, buildMergedParcelShape } from "@/lib/geo/parcel";
 
 const BASE_LON = 126.99;
 const BASE_LAT = 37.55;
@@ -30,14 +30,34 @@ const MOCK_RING_M: Array<[number, number]> = [
   [1.5, 8],
 ];
 
+// 합필 union 검증용: MOCK_RING_M 동쪽에 변을 공유하는 이웃 필지
+const MOCK_RING_B_M: Array<[number, number]> = [
+  [22, 0],
+  [38, -2],
+  [40, 15],
+  [20.5, 9],
+];
+
 export function DevParcelMock() {
   const setParcelShape = useSimulatorStore((s) => s.setParcelShape);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
-    if (!window.location.search.includes("mockParcel")) return;
-    setParcelShape(buildParcelShape(MOCK_RING_M.map(toLonLat)));
-    console.log("[DevParcelMock] 실형상 mock 폴리곤 주입됨");
+    const sp = new URLSearchParams(window.location.search);
+    const mode = sp.get("mockParcel");
+    if (!mode) return;
+    if (mode === "2") {
+      // 합필 union 형상 (연접 2필지)
+      const shape = buildMergedParcelShape([
+        { ring: MOCK_RING_M.map(toLonLat), label: "562" },
+        { ring: MOCK_RING_B_M.map(toLonLat), label: "562-1" },
+      ]);
+      setParcelShape(shape);
+      console.log("[DevParcelMock] 합필 union mock 주입:", shape?.areaSqm, "㎡");
+    } else {
+      setParcelShape(buildParcelShape(MOCK_RING_M.map(toLonLat)));
+      console.log("[DevParcelMock] 실형상 mock 폴리곤 주입됨");
+    }
   }, [setParcelShape]);
 
   return null;
