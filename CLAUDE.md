@@ -252,6 +252,13 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (10)** — **Phase D 심화(가설계→사업성 원클릭 + 3D 세대·코어) + real-estate-infographic 연동 버튼**.
+  - store: `schematicUnitSqm`/`schematicEfficiencyPct`(⑥↔3D 공유) + `newbuildResUnitWon`(지번 조회 시 신축 주거 ㎡당 시세 자동 저장). SchematicPlanner 로컬 state → store 승격.
+  - **⑥ 세대 수익 자동 산출 + 사업성 원클릭**: 세대당 분양가 = 시세(전용㎡당)×전용면적, 총 분양수입 = ×세대수, 평당(공급) = 시세×전용률×3.3058. [📊 사업성 탭에 세대 수익 반영] → `revenueModel=sales`+`salesPricePerPyeong`. 미조회 시 안내문.
+  - **3D**: 매스 라벨 세대수 병기(`massLabel`) + `CoreTower`(기준층 코어면적 정사각 근사, 옥탑 +1.2m, "코어 N㎡" 라벨) — 주거계 자동. `RESIDENTIAL/TIERED_USAGES` schematic.ts로 승격.
+  - 프로덕션 E2E(성내동 562·다세대·전용59): 세대당 7.34억(=1,243만×59㎡ ✓)·총 22.0억(3세대 ✓)·평당 3,206만(=1,243×0.78×3.3058 ✓) → 반영 클릭 → 사업성 탭 input 3206 확인 ✓. (3D Html 라벨은 헤드리스 DOM 프로브에 안 잡히나 기존 검증된 동일 패턴 — 실화면 확인.)
+  - **real-estate-infographic**: `LandInfo` 카드에 [🏗️ 규모검토 3D] 딥링크 버튼(`gyumo.vercel.app/simulator?address=…`, 코랄 그라디언트) + CSS. vite build ✓. **`mobile-polish` 브랜치에 커밋·푸시(bfe0652)** — 그 레포는 프로덕션 반영에 Vercel Promote 필요. 참고: 로컬 main은 origin/main보다 behind 4 — main 반영하려면 별도 체리픽 필요.
+
 - **2026-07-17 (9)** — **플렉시티 벤치마킹 2종: 토지가격 보드 완성형 + ⑥ 가설계(기획설계 개요)**.
   - **[A] 💹 토지가격 3분할 보드** (플렉시티 실거래 탭 대응): 추정 토지가(공시 대비 배수) / 공시지가(총액+㎡당) / **기존 건물 추정가**. 거래 테이블에 헤더 + **배수 컬럼**(거래 ㎡당가 ÷ 대상 공시지가 — 각주로 정의 명시).
   - **기존 건물 추정가 2단**: ① 건축물대장 시가표준액(`/api/building` priceHistory 최신연도 합) ② 없으면(집합건물 등 흔함) **연식 감가 추정** = 연면적 × 구조별 재조달원가(RC 110/조적 80/목 60/기타 90만원·㎡) × 잔가율 max(0.1, 1−경과/40) — 국세청 건물 기준시가 방식 근사. `buildingPrice: {value, method}` 로 방식 라벨 표시. 검증: 성내동 562(2013 RC 403㎡) → 3.0억 "연식 감가 추정"(수기 2.99억 일치).
