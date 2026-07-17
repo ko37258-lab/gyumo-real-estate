@@ -252,6 +252,11 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (12)** — **실거래 사례 더보기 + 중복 신고 제거(배수 정확도)** (운영자 피드백: "비교 대상을 더 보고 싶으면 클릭해서 더 볼 수 있게, 배수를 더 정확하게").
+  - LandLookup 거래 리스트: 기본 4건 → [N건의 거래 사례 더보기 ∨]/[접기 ∧] 토글(API 최대 20건). 표본 > 표시 건수면 "추정가·배수는 전체 표본 중앙값 기준" 안내.
+  - `/api/land-trades`: **같은 계약연월·일·지번·면적·금액 중복 신고 dedup** — 동일 거래 2~3중 신고가 중앙값·배수를 왜곡(역삼동 825-3 실측: 207억 거래 중복 포함 시 표본 10건·0.7배 → 제거 후 8건·**1.02배**, 추정 250.7억 → 364.2억).
+  - 프로덕션 E2E(역삼동 825-3): 카드 8건 표본 표기 + 더보기 클릭 → 8건 전체 + 접기 버튼 확인.
+
 - **2026-07-17 (11)** — **① 토지가치분석 탭 신설(플렉시티 흐름) + AI 보고서에 토지 데이터 주입 + 서버 내장 분석 키 폴백**.
   - **[A] 시뮬레이터 4단계 재구성**: ① 토지가치분석(지도 기본 펼침 + 지번 조회 + 추정가·실거래·건축물대장·신축시세) → ② 규모 검토 → ③ 비용 → ④ 사업성. Tabs controlled(`useState`)로 전환, ① 하단에 [🏗️ 규모검토 하기 →] CTA(플렉시티 [기획설계 하기] 대응, landinfo store 조회 완료 시 자동 반영 안내). MapPicker `autoLookup` — 단일 모드에서 **필지 클릭 = 즉시 조회**(확인 버튼 생략, "조회 1회 차감" 안내). LandLookup `defaultShowMap`.
   - **[B] NED 토지특성 확장**: `fetchVworldLandChar`에 도로접면(roadSideCodeNm)·형상(tpgrphFrmCodeNm)·지세(tpgrphHgCodeNm)·이용상황(ladUseSittnNm) + `fetchVworldLandUseAttr`(getLandUseAttr, 토지이용계획 지역·지구 목록, 저촉 표기) 신규. `/api/landarea` pass-through(`roadSide/landShape/landHeight/landUse/useAttrs`). LandLookup에 "🧭 토지특성·토지이용계획" 카드(칩 + 지역·지구 배지 12개 제한). ⚠ getLandUseAttr 응답 필드는 로컬 placeholder 키라 미검증 — 프로덕션 실키로 확인 필요.
