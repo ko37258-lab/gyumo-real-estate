@@ -408,28 +408,32 @@ export function LandLookup() {
     }
   };
 
-  /**
-   * 지도 필지 선택 처리.
-   * - 일반 모드: 대표 지번 교체 + 새 조회
-   * - 합필 모드 + 대표 지번 존재: 클릭한 필지를 추가 지번으로 합류시켜 합필 재조회
-   *   (기존 선택이 교체되던 문제 fix — 운영자 피드백 2026-07-17)
-   */
+  /** 지도 단일 선택: 대표 지번 교체 + 새 조회 */
   const onMapPick = (addr: string) => {
     const picked = addr.trim();
     if (!picked || loading) return;
-
-    if (mergeMode && address.trim()) {
-      if (picked === address.trim()) return; // 대표 지번 재클릭 — 합필 유지 (리셋 방지)
-      const current = extraAddresses.map((a) => a.trim()).filter(Boolean);
-      if (current.includes(picked)) return; // 이미 합필 목록에 있음
-      const next = [...current, picked];
-      setExtraAddresses(next);
-      void onLookup(undefined, next); // 대표 지번 유지 + 합필 재조회
-      return;
-    }
-
     setAddress(picked);
     void onLookup(picked);
+  };
+
+  /**
+   * 지도 다중 선택 일괄 합필 (운영자 피드백 2026-07-17: "선택, 선택, 전체 합치기").
+   * 이미 조회된 대표가 있으면 자동 포함, 없으면 첫 선택이 대표.
+   * 필지당 재조회 없이 조회 1회만 소모.
+   */
+  const onMergeAllFromMap = (addresses: string[]) => {
+    if (loading) return;
+    const base = result?.refinedAddress?.trim() ?? "";
+    const uniq: string[] = [];
+    for (const a of [base, ...addresses]) {
+      const t = a.trim();
+      if (t && !uniq.includes(t)) uniq.push(t);
+    }
+    if (uniq.length === 0) return;
+    const [main, ...rest] = uniq;
+    setAddress(main);
+    setExtraAddresses(rest.length ? rest : [""]);
+    void onLookup(main, rest);
   };
 
   // 딥링크: /simulator?address=... → 주소 채움 + (로그인 상태면) 자동 조회.
@@ -581,18 +585,19 @@ export function LandLookup() {
         </button>
       </div>
 
-      {/* 🗺️ 지도 필지 선택 패널 */}
+      {/* 🗺️ 지도 필지 선택 패널 — key로 합필 모드 전환 시 선택 상태 리셋 */}
       {showMap && (
         <div className="mt-2">
           <MapPicker
+            key={mergeMode ? "multi" : "single"}
             onPick={onMapPick}
-            confirmLabel={
-              mergeMode && address.trim() ? "➕ 합필에 추가" : "이 필지 조회 →"
-            }
+            multiSelect={mergeMode}
+            baseAddress={mergeMode ? (result?.refinedAddress ?? null) : null}
+            onMergeAll={onMergeAllFromMap}
           />
-          {mergeMode && address.trim() && (
+          {mergeMode && (
             <p className="mt-1 text-[10px]" style={{ color: "var(--info)" }}>
-              🔗 합필 모드 — 지도에서 옆 필지를 클릭하면 대표 지번({jibunOf(address)})에 합쳐집니다.
+              🔗 합필 모드 — 옆 필지들을 연달아 클릭해 선택(재클릭=해제)한 뒤 [전체 합치기 조회]를 누르세요. 조회 횟수는 1회만 차감됩니다.
             </p>
           )}
         </div>
