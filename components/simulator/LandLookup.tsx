@@ -17,6 +17,14 @@ const MapPicker = dynamic(() => import("@/components/simulator/MapPicker"), {
 import { useSimulatorStore } from "@/store/simulator";
 import { useLandInfoStore } from "@/store/landinfo";
 import { useHistoryStore } from "@/store/history";
+import { useUnitStore } from "@/store/unit";
+import {
+  SQM_PER_PYEONG,
+  formatAreaBy,
+  formatAreaShortBy,
+  formatManPerBy,
+  formatManPerShortBy,
+} from "@/lib/utils/area";
 import { UsePricesDialog } from "@/components/simulator/UsePricesDialog";
 import {
   fetchZoneByCoord,
@@ -207,6 +215,15 @@ export function LandLookup({
   const [showAllTrades, setShowAllTrades] = useState(false);
   /** 신축 시세 실거래 사례 펼침 (기본 매매3·전세2·상가2 → 더보기 시 각 10건) */
   const [showAllNewbuild, setShowAllNewbuild] = useState(false);
+  /** ㎡ ↔ 평 표시 단위 (플렉시티 [⇄ 평] 대응, LocalStorage 영속) */
+  const unit = useUnitStore((s) => s.unit);
+  const toggleUnit = useUnitStore((s) => s.toggle);
+  const unitLabel = unit === "py" ? "평" : "㎡";
+  /** ㎡당 단가(원) → 현재 단위 기준 만원 숫자 문자열 (콤마 포함) */
+  const manBy = (wonPerSqm: number) =>
+    Math.round(
+      (unit === "py" ? wonPerSqm * SQM_PER_PYEONG : wonPerSqm) / 10000,
+    ).toLocaleString("ko-KR");
   const [mergeMode, setMergeMode] = useState(false);
   const [extraAddresses, setExtraAddresses] = useState<string[]>([""]);
   /** 🗺️ 지도 필지 선택 패널 표시 여부 */
@@ -725,9 +742,25 @@ export function LandLookup({
     <div>
       <div className="flex items-center justify-between mb-1.5">
         <div className="text-xs text-muted-foreground font-medium">① 지번 조회</div>
-        {usageBadge && (
-          <span className={`text-[10px] ${usageBadge.color}`}>{usageBadge.text}</span>
-        )}
+        <span className="flex items-center gap-2">
+          {/* ㎡ ↔ 평 표시 단위 토글 (플렉시티 [⇄ 평] 대응) */}
+          <button
+            type="button"
+            onClick={toggleUnit}
+            title="면적·단가 표시 단위 전환"
+            className="text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors"
+            style={{
+              borderColor: "var(--info)",
+              color: "var(--info-foreground, #fff)",
+              background: "var(--info)",
+            }}
+          >
+            ⇄ {unit === "py" ? "평 기준" : "㎡ 기준"}
+          </button>
+          {usageBadge && (
+            <span className={`text-[10px] ${usageBadge.color}`}>{usageBadge.text}</span>
+          )}
+        </span>
       </div>
       <div className="flex gap-2">
         <Input
@@ -880,7 +913,7 @@ export function LandLookup({
             <div className="font-semibold">📍 {result.refinedAddress}</div>
             <div className="mt-0.5 text-[11px] opacity-90">
               {resolvedArea > 0
-                ? `${resolvedArea.toLocaleString("ko-KR")}㎡ (${Math.round(resolvedArea / 3.305785)}평)${areaSourceLabel ? ` · ${areaSourceLabel}` : ""}`
+                ? `${formatAreaBy(resolvedArea, unit)}${areaSourceLabel ? ` · ${areaSourceLabel}` : ""}`
                 : bld?.transient
                   ? "⏳ 면적 조회 일시 불안정 — 잠시 후 다시 시도"
                   : "면적 정보 없음 (수동 입력 필요)"}
@@ -905,8 +938,7 @@ export function LandLookup({
                   🔗 합필 {result.merged.parcels.length}필지 검토
                 </span>
                 <span className="text-[12px] font-bold">
-                  합계 {result.merged.totalSqm.toLocaleString("ko-KR")}㎡ (
-                  {Math.round(result.merged.totalSqm / 3.305785)}평)
+                  합계 {formatAreaBy(result.merged.totalSqm, unit)}
                 </span>
               </div>
               <div className="space-y-0.5">
@@ -928,7 +960,7 @@ export function LandLookup({
                       )}
                     </span>
                     <span className="text-muted-foreground">
-                      {p.areaSqm.toLocaleString("ko-KR")}㎡
+                      {formatAreaShortBy(p.areaSqm, unit)}
                       {p.zone ? ` · ${p.zone}` : ""}
                     </span>
                   </div>
@@ -1150,18 +1182,23 @@ export function LandLookup({
             </div>
           )}
 
-          {/* 공시지가 (VWorld 토지특성정보) */}
+          {/* 공시지가 (VWorld 토지특성정보) — 단위 토글 + 읽기 쉬운 괄호 병기 */}
           {bld?.price && bld.price > 0 && (
             <div className="px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-[11px]">
               💰 개별공시지가{" "}
               <b className="text-foreground">
-                {bld.price.toLocaleString("ko-KR")}원/㎡
+                {Math.round(
+                  unit === "py" ? bld.price * SQM_PER_PYEONG : bld.price,
+                ).toLocaleString("ko-KR")}
+                원/{unitLabel}
               </b>
-              {bld.priceYear ? (
-                <span className="text-muted-foreground"> ({bld.priceYear}년)</span>
-              ) : null}
+              <span className="text-muted-foreground">
+                {" "}
+                (약 {manBy(bld.price)}만원/{unitLabel}
+                {bld.priceYear ? ` · ${bld.priceYear}년` : ""})
+              </span>
               {resolvedArea > 0
-                ? ` · 토지가 추정 ${Math.round((bld.price * resolvedArea) / 1e8 * 100) / 100}억원`
+                ? ` · 토지가 추정 ${((bld.price * resolvedArea) / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}억원`
                 : ""}
             </div>
           )}
@@ -1189,7 +1226,7 @@ export function LandLookup({
                   <div className="text-[9.5px] text-muted-foreground">
                     {result.landTrades.ratioToJiga > 0
                       ? `공시지가 대비 ${result.landTrades.ratioToJiga}배`
-                      : `㎡당 중앙 ${Math.round(result.landTrades.medianUnitWon / 10000).toLocaleString("ko-KR")}만`}
+                      : `중앙 ${formatManPerShortBy(result.landTrades.medianUnitWon, unit)}`}
                   </div>
                 </div>
                 <div className="rounded bg-emerald-50 border border-emerald-200 px-2.5 py-1.5">
@@ -1200,9 +1237,7 @@ export function LandLookup({
                       : "—"}
                   </div>
                   <div className="text-[9.5px] text-muted-foreground">
-                    {bld?.price
-                      ? `${Math.round(bld.price / 10000).toLocaleString("ko-KR")}만원/㎡`
-                      : ""}
+                    {bld?.price ? formatManPerBy(bld.price, unit) : ""}
                   </div>
                 </div>
                 <div className="rounded bg-secondary/60 px-2.5 py-1.5">
@@ -1229,7 +1264,7 @@ export function LandLookup({
                   <div className="space-y-0.5">
                     <div className="flex items-center justify-between text-[9px] text-muted-foreground px-2">
                       <span>계약 · 소재지 (지목·용도지역)</span>
-                      <span>면적 · 거래가 (㎡당 · 배수*)</span>
+                      <span>면적 · 거래가 ({unitLabel}당 · 배수*)</span>
                     </div>
                     {shown.map((t, i) => (
                       <div key={i} className="flex items-center justify-between text-[10.5px] px-2 py-0.5 rounded bg-secondary/40">
@@ -1238,9 +1273,10 @@ export function LandLookup({
                           {t.landUse ? ` · ${t.landUse.replace("지역", "")}` : ""})
                         </span>
                         <span className="shrink-0 font-medium text-foreground">
-                          {t.areaSqm}㎡ · {(t.amountWon / 1e8).toFixed(2)}억
+                          {formatAreaShortBy(t.areaSqm, unit)} ·{" "}
+                          {(t.amountWon / 1e8).toFixed(2)}억
                           <span className="text-muted-foreground">
-                            {" "}({Math.round(t.unitWon / 10000).toLocaleString("ko-KR")}만
+                            {" "}({manBy(t.unitWon)}만
                             {myJiga > 0 ? ` · ${(t.unitWon / myJiga).toFixed(1)}배` : ""})
                           </span>
                         </span>
@@ -1306,7 +1342,7 @@ export function LandLookup({
               result.newbuild.commercial.f1.count > 0) && (
               <div className="rounded-md border border-border bg-card p-2.5">
                 <div className="text-[10px] text-muted-foreground mb-1.5">
-                  🏘️ 신축 시세 참고 (최근 {result.newbuild.periodMonths}개월 실거래 ㎡당 중앙값)
+                  🏘️ 신축 시세 참고 (최근 {result.newbuild.periodMonths}개월 실거래 {unitLabel}당 중앙값)
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {result.newbuild.residential.tradeCount > 0 && (
@@ -1315,9 +1351,15 @@ export function LandLookup({
                         주거 매매 (연립·다세대 {result.newbuild.residential.tradeCount}건)
                       </div>
                       <div className="text-[14px] font-bold text-foreground">
-                        {Math.round(result.newbuild.residential.tradeUnitWon / 10000).toLocaleString("ko-KR")}만/㎡
+                        {formatManPerShortBy(result.newbuild.residential.tradeUnitWon, unit)}
                         <span className="ml-1 text-[10px] font-medium text-muted-foreground">
-                          (평당 {Math.round((result.newbuild.residential.tradeUnitWon * 3.305785) / 10000).toLocaleString("ko-KR")}만)
+                          ({unit === "py" ? "㎡당" : "평당"}{" "}
+                          {Math.round(
+                            (unit === "py"
+                              ? result.newbuild.residential.tradeUnitWon
+                              : result.newbuild.residential.tradeUnitWon * SQM_PER_PYEONG) / 10000,
+                          ).toLocaleString("ko-KR")}
+                          만)
                         </span>
                       </div>
                       <div className="text-[9px] text-muted-foreground">
@@ -1331,7 +1373,7 @@ export function LandLookup({
                         주거 전세 ({result.newbuild.residential.jeonseCount}건)
                       </div>
                       <div className="text-[14px] font-bold text-foreground">
-                        {Math.round(result.newbuild.residential.jeonseUnitWon / 10000).toLocaleString("ko-KR")}만/㎡
+                        {formatManPerShortBy(result.newbuild.residential.jeonseUnitWon, unit)}
                       </div>
                       <div className="text-[9px] text-muted-foreground">
                         {result.newbuild.residential.jeonseBasis}
@@ -1345,18 +1387,18 @@ export function LandLookup({
                       </div>
                       <div className="flex flex-wrap gap-x-3 text-[11px]">
                         <span>
-                          1층 <b>{Math.round(result.newbuild.commercial.f1.unitWon / 10000).toLocaleString("ko-KR")}만/㎡</b>
+                          1층 <b>{formatManPerShortBy(result.newbuild.commercial.f1.unitWon, unit)}</b>
                           <span className="text-muted-foreground"> ({result.newbuild.commercial.f1.count}건)</span>
                         </span>
                         {result.newbuild.commercial.f2.count > 0 && (
                           <span>
-                            2층 <b>{Math.round(result.newbuild.commercial.f2.unitWon / 10000).toLocaleString("ko-KR")}만/㎡</b>
+                            2층 <b>{formatManPerShortBy(result.newbuild.commercial.f2.unitWon, unit)}</b>
                             <span className="text-muted-foreground"> ({result.newbuild.commercial.f2.count}건)</span>
                           </span>
                         )}
                         {result.newbuild.commercial.f3plus.count > 0 && (
                           <span>
-                            3층+ <b>{Math.round(result.newbuild.commercial.f3plus.unitWon / 10000).toLocaleString("ko-KR")}만/㎡</b>
+                            3층+ <b>{formatManPerShortBy(result.newbuild.commercial.f3plus.unitWon, unit)}</b>
                             <span className="text-muted-foreground"> ({result.newbuild.commercial.f3plus.count}건)</span>
                           </span>
                         )}
@@ -1382,23 +1424,22 @@ export function LandLookup({
                       {label}
                     </span>
                   );
-                  const man = (v: number) => Math.round(v / 10000).toLocaleString("ko-KR");
                   return (
                     <div className="mt-1.5 space-y-0.5">
                       <div className="text-[9px] text-muted-foreground px-2">
-                        실제 거래 사례 (최신순) · 계약 · 단지/소재 · 전용면적 — 거래가 (㎡당)
+                        실제 거래 사례 (최신순) · 계약 · 단지/소재 · 전용면적 — 거래가 ({unitLabel}당)
                       </div>
                       {trShown.map((s, i) => (
                         <div key={`tr-${i}`} className="flex items-center justify-between text-[10.5px] px-2 py-0.5 rounded bg-secondary/40">
                           <span className="min-w-0 truncate text-muted-foreground">
                             {tag("매매", "bg-emerald-100 text-emerald-700")}
                             {s.ym} · {s.name || s.umdNm}
-                            {s.floor > 0 ? ` ${s.floor}층` : ""} · {s.areaSqm}㎡
+                            {s.floor > 0 ? ` ${s.floor}층` : ""} · {formatAreaShortBy(s.areaSqm, unit)}
                             {s.buildYear > 0 ? ` (${s.buildYear}년식)` : ""}
                           </span>
                           <span className="shrink-0 font-medium text-foreground">
                             {(s.amountWon / 1e8).toFixed(2)}억
-                            <span className="text-muted-foreground"> ({man(s.unitWon)}만)</span>
+                            <span className="text-muted-foreground"> ({manBy(s.unitWon)}만)</span>
                           </span>
                         </div>
                       ))}
@@ -1407,11 +1448,11 @@ export function LandLookup({
                           <span className="min-w-0 truncate text-muted-foreground">
                             {tag("전세", "bg-blue-100 text-blue-700")}
                             {s.ym} · {s.name || s.umdNm}
-                            {s.floor > 0 ? ` ${s.floor}층` : ""} · {s.areaSqm}㎡
+                            {s.floor > 0 ? ` ${s.floor}층` : ""} · {formatAreaShortBy(s.areaSqm, unit)}
                           </span>
                           <span className="shrink-0 font-medium text-foreground">
                             {(s.depositWon / 1e8).toFixed(2)}억
-                            <span className="text-muted-foreground"> ({man(s.unitWon)}만)</span>
+                            <span className="text-muted-foreground"> ({manBy(s.unitWon)}만)</span>
                           </span>
                         </div>
                       ))}
@@ -1420,11 +1461,11 @@ export function LandLookup({
                           <span className="min-w-0 truncate text-muted-foreground">
                             {tag("상가", "bg-amber-100 text-amber-700")}
                             {s.ym} · {s.umdNm} {s.floor >= 1 ? `${s.floor}층` : s.floor < 1 ? "지하" : ""}
-                            {s.use ? ` (${s.use})` : ""} · {s.areaSqm}㎡
+                            {s.use ? ` (${s.use})` : ""} · {formatAreaShortBy(s.areaSqm, unit)}
                           </span>
                           <span className="shrink-0 font-medium text-foreground">
                             {(s.amountWon / 1e8).toFixed(2)}억
-                            <span className="text-muted-foreground"> ({man(s.unitWon)}만)</span>
+                            <span className="text-muted-foreground"> ({manBy(s.unitWon)}만)</span>
                           </span>
                         </div>
                       ))}

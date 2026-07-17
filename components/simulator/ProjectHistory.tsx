@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useHistoryStore } from "@/store/history";
+import { useUnitStore } from "@/store/unit";
+import { formatAreaShortBy } from "@/lib/utils/area";
 
 /**
  * 📁 내 프로젝트 이력 — 지번 조회 성공 시 자동 기록된 물건 목록.
@@ -13,6 +15,7 @@ export function ProjectHistory() {
   const clearAll = useHistoryStore((s) => s.clearAll);
   const [sortByJibun, setSortByJibun] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const unit = useUnitStore((s) => s.unit);
 
   if (records.length === 0) return null;
 
@@ -73,7 +76,7 @@ export function ProjectHistory() {
                 {r.address}
               </span>
               <span className="block text-[10px] text-muted-foreground">
-                {r.areaSqm > 0 ? `${r.areaSqm.toLocaleString("ko-KR")}㎡` : ""}
+                {r.areaSqm > 0 ? formatAreaShortBy(r.areaSqm, unit) : ""}
                 {r.zone ? ` · ${r.zone}` : ""}
                 {eok(r.estimatedPrice) ? ` · 추정 ${eok(r.estimatedPrice)}` : ""}
                 {" · "}
