@@ -87,7 +87,35 @@ type LandTrades = {
   ratioToJiga: number;
 };
 
-// /api/newbuild-price 응답 — 신축 시세 (실거래 집계)
+// /api/newbuild-price 응답 — 신축 시세 (실거래 집계 + 실제 거래 사례)
+type NewbuildTradeSample = {
+  ym: string;
+  name: string;
+  umdNm: string;
+  floor: number;
+  buildYear: number;
+  areaSqm: number;
+  amountWon: number;
+  unitWon: number;
+};
+type NewbuildJeonseSample = {
+  ym: string;
+  name: string;
+  umdNm: string;
+  floor: number;
+  areaSqm: number;
+  depositWon: number;
+  unitWon: number;
+};
+type NewbuildShopSample = {
+  ym: string;
+  umdNm: string;
+  floor: number;
+  use: string;
+  areaSqm: number;
+  amountWon: number;
+  unitWon: number;
+};
 type NewbuildPrice = {
   periodMonths: number;
   residential: {
@@ -97,6 +125,8 @@ type NewbuildPrice = {
     jeonseUnitWon: number;
     jeonseCount: number;
     jeonseBasis: string;
+    tradeSamples?: NewbuildTradeSample[];
+    jeonseSamples?: NewbuildJeonseSample[];
   };
   commercial: {
     basis: string;
@@ -104,6 +134,7 @@ type NewbuildPrice = {
     f2: { unitWon: number; count: number };
     f3plus: { unitWon: number; count: number };
     b: { unitWon: number; count: number };
+    samples?: NewbuildShopSample[];
   };
 };
 
@@ -172,6 +203,8 @@ export function LandLookup({
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   /** 실거래 사례 전체 펼침 (기본 4건 → 더보기 시 API 최대 20건) */
   const [showAllTrades, setShowAllTrades] = useState(false);
+  /** 신축 시세 실거래 사례 펼침 (기본 매매3·전세2·상가2 → 더보기 시 각 10건) */
+  const [showAllNewbuild, setShowAllNewbuild] = useState(false);
   const [mergeMode, setMergeMode] = useState(false);
   const [extraAddresses, setExtraAddresses] = useState<string[]>([""]);
   /** 🗺️ 지도 필지 선택 패널 표시 여부 */
@@ -211,6 +244,7 @@ export function LandLookup({
     setResult(null);
     setApplied({});
     setShowAllTrades(false);
+    setShowAllNewbuild(false);
 
     // 사용량 증가 (서버에서 원자적으로 처리)
     if (usage?.isLoggedIn) {
@@ -1311,6 +1345,85 @@ export function LandLookup({
                     </div>
                   )}
                 </div>
+                {/* 실제 거래 사례 (플렉시티식 — 단지명·계약월·면적·금액) */}
+                {(() => {
+                  const nb = result.newbuild!;
+                  const tr = nb.residential.tradeSamples ?? [];
+                  const je = nb.residential.jeonseSamples ?? [];
+                  const sh = nb.commercial.samples ?? [];
+                  if (tr.length + je.length + sh.length === 0) return null;
+                  const trShown = showAllNewbuild ? tr : tr.slice(0, 3);
+                  const jeShown = showAllNewbuild ? je : je.slice(0, 2);
+                  const shShown = showAllNewbuild ? sh : sh.slice(0, 2);
+                  const hiddenCount =
+                    tr.length + je.length + sh.length -
+                    (trShown.length + jeShown.length + shShown.length);
+                  const tag = (label: string, cls: string) => (
+                    <span className={`inline-block shrink-0 w-9 text-center text-[9px] font-bold px-1 py-0.5 rounded-full mr-1.5 ${cls}`}>
+                      {label}
+                    </span>
+                  );
+                  const man = (v: number) => Math.round(v / 10000).toLocaleString("ko-KR");
+                  return (
+                    <div className="mt-1.5 space-y-0.5">
+                      <div className="text-[9px] text-muted-foreground px-2">
+                        실제 거래 사례 (최신순) · 계약 · 단지/소재 · 전용면적 — 거래가 (㎡당)
+                      </div>
+                      {trShown.map((s, i) => (
+                        <div key={`tr-${i}`} className="flex items-center justify-between text-[10.5px] px-2 py-0.5 rounded bg-secondary/40">
+                          <span className="min-w-0 truncate text-muted-foreground">
+                            {tag("매매", "bg-emerald-100 text-emerald-700")}
+                            {s.ym} · {s.name || s.umdNm}
+                            {s.floor > 0 ? ` ${s.floor}층` : ""} · {s.areaSqm}㎡
+                            {s.buildYear > 0 ? ` (${s.buildYear}년식)` : ""}
+                          </span>
+                          <span className="shrink-0 font-medium text-foreground">
+                            {(s.amountWon / 1e8).toFixed(2)}억
+                            <span className="text-muted-foreground"> ({man(s.unitWon)}만)</span>
+                          </span>
+                        </div>
+                      ))}
+                      {jeShown.map((s, i) => (
+                        <div key={`je-${i}`} className="flex items-center justify-between text-[10.5px] px-2 py-0.5 rounded bg-secondary/40">
+                          <span className="min-w-0 truncate text-muted-foreground">
+                            {tag("전세", "bg-blue-100 text-blue-700")}
+                            {s.ym} · {s.name || s.umdNm}
+                            {s.floor > 0 ? ` ${s.floor}층` : ""} · {s.areaSqm}㎡
+                          </span>
+                          <span className="shrink-0 font-medium text-foreground">
+                            {(s.depositWon / 1e8).toFixed(2)}억
+                            <span className="text-muted-foreground"> ({man(s.unitWon)}만)</span>
+                          </span>
+                        </div>
+                      ))}
+                      {shShown.map((s, i) => (
+                        <div key={`sh-${i}`} className="flex items-center justify-between text-[10.5px] px-2 py-0.5 rounded bg-secondary/40">
+                          <span className="min-w-0 truncate text-muted-foreground">
+                            {tag("상가", "bg-amber-100 text-amber-700")}
+                            {s.ym} · {s.umdNm} {s.floor >= 1 ? `${s.floor}층` : s.floor < 1 ? "지하" : ""}
+                            {s.use ? ` (${s.use})` : ""} · {s.areaSqm}㎡
+                          </span>
+                          <span className="shrink-0 font-medium text-foreground">
+                            {(s.amountWon / 1e8).toFixed(2)}억
+                            <span className="text-muted-foreground"> ({man(s.unitWon)}만)</span>
+                          </span>
+                        </div>
+                      ))}
+                      {(hiddenCount > 0 || showAllNewbuild) && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllNewbuild((v) => !v)}
+                          className="w-full text-center text-[10.5px] font-semibold py-1.5 rounded transition-colors hover:bg-secondary/60"
+                          style={{ color: "var(--info)" }}
+                        >
+                          {showAllNewbuild
+                            ? "거래 사례 접기 ∧"
+                            : `${hiddenCount}건의 거래 사례 더보기 ∨`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
                 {result.newbuild.residential.tradeCount > 0 && (
                   <button
                     type="button"

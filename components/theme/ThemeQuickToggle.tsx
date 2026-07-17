@@ -55,7 +55,8 @@ export function ThemeQuickToggle() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-2 z-50 w-72 rounded-lg border border-border bg-card shadow-xl overflow-hidden"
+          // z-[1200]: leaflet 지도 pane(400)·컨트롤(1000)보다 위 — ① 탭 지도에 가려 잘리는 현상 방지
+          className="absolute right-0 top-full mt-2 z-[1200] w-72 rounded-lg border border-border bg-card shadow-xl overflow-hidden"
         >
           <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground bg-secondary/60 border-b border-border">
             🎨 화면 색상 테마 선택

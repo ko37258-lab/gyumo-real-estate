@@ -117,10 +117,23 @@ export async function GET(request: Request) {
       fetchMonths("RTMSDataSvcNrgTrade", "getRTMSDataSvcNrgTrade", pkey, lawdCd, yms),
     ]);
 
+    const ymOf = (it: Record<string, string>) =>
+      `${it.dealYear}.${String(it.dealMonth ?? "").padStart(2, "0")}`;
+    const sortRecent = <T extends { ym: string; day: string }>(rows: T[]): T[] =>
+      [...rows].sort((a, b) =>
+        `${b.ym}${b.day.padStart(2, "0")}`.localeCompare(
+          `${a.ym}${a.day.padStart(2, "0")}`,
+        ),
+      );
+
     // ── 주거: 연립다세대 매매 (전용 ㎡당) ──
     const sales = rhTrade
       .map((it) => ({
         umdNm: it.umdNm ?? "",
+        name: (it.mhouseNm ?? "").trim(),
+        ym: ymOf(it),
+        day: it.dealDay ?? "",
+        floor: Number(it.floor) || 0,
         buildYear: Number(it.buildYear) || 0,
         excluAr: Number(it.excluUseAr) || 0,
         won: manToWon(it.dealAmount ?? ""),
@@ -138,6 +151,10 @@ export async function GET(request: Request) {
     const jeonse = rhRent
       .map((it) => ({
         umdNm: it.umdNm ?? "",
+        name: (it.mhouseNm ?? "").trim(),
+        ym: ymOf(it),
+        day: it.dealDay ?? "",
+        floor: Number(it.floor) || 0,
         excluAr: Number(it.excluUseAr) || 0,
         deposit: manToWon(it.deposit ?? ""),
         monthly: manToWon(it.monthlyRent ?? ""),
@@ -150,6 +167,8 @@ export async function GET(request: Request) {
     const shops = nrgTrade
       .map((it) => ({
         umdNm: it.umdNm ?? "",
+        ym: ymOf(it),
+        day: it.dealDay ?? "",
         floor: Number(it.floor) || 0,
         ar: Number(it.buildingAr) || 0,
         won: manToWon(it.dealAmount ?? ""),
@@ -175,6 +194,30 @@ export async function GET(request: Request) {
         jeonseUnitWon: Math.round(median(jeonsePicked.rows.map((r) => r.unit))),
         jeonseCount: jeonsePicked.rows.length,
         jeonseBasis: jeonsePicked.basis,
+        // 실제 거래 사례 (플렉시티식 — 최신순 10건)
+        tradeSamples: sortRecent(salesRows)
+          .slice(0, 10)
+          .map((r) => ({
+            ym: r.ym,
+            name: r.name,
+            umdNm: r.umdNm,
+            floor: r.floor,
+            buildYear: r.buildYear,
+            areaSqm: r.excluAr,
+            amountWon: r.won,
+            unitWon: Math.round(r.unit),
+          })),
+        jeonseSamples: sortRecent(jeonsePicked.rows)
+          .slice(0, 10)
+          .map((r) => ({
+            ym: r.ym,
+            name: r.name,
+            umdNm: r.umdNm,
+            floor: r.floor,
+            areaSqm: r.excluAr,
+            depositWon: r.deposit,
+            unitWon: Math.round(r.unit),
+          })),
       },
       commercial: {
         basis: shopsPicked.basis,
@@ -182,6 +225,17 @@ export async function GET(request: Request) {
         f2: byFloor((f) => f === 2),
         f3plus: byFloor((f) => f >= 3),
         b: byFloor((f) => f < 1),
+        samples: sortRecent(shopsPicked.rows)
+          .slice(0, 10)
+          .map((r) => ({
+            ym: r.ym,
+            umdNm: r.umdNm,
+            floor: r.floor,
+            use: r.use,
+            areaSqm: r.ar,
+            amountWon: r.won,
+            unitWon: Math.round(r.unit),
+          })),
       },
     });
   } catch (e) {
