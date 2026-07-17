@@ -25,6 +25,7 @@ import { useCostStore } from "@/store/cost";
 import { useProfitStore } from "@/store/profit";
 import { useMarketStore } from "@/store/market";
 import { useLandInfoStore } from "@/store/landinfo";
+import { useUsePricesStore } from "@/store/useprices";
 import type { ReportInputs } from "@/lib/ai/types";
 import { PY_TO_SQM } from "@/lib/constants";
 
@@ -186,10 +187,16 @@ export function buildReportInputs(): ReportInputs {
       ? landData
       : undefined;
 
+  // 용도별 분양가·임대료 — 팝업에서 조회했고 같은 필지일 때만 포함
+  const upState = useUsePricesStore.getState();
+  const usePrices =
+    upState.data && land && upState.pnu === land.pnu ? upState.data : undefined;
+
   return {
     address: sim.address || undefined,
     reviewDate: new Date().toISOString().slice(0, 10),
     land,
+    usePrices,
     market,
     scale: {
       landAreaSqm: lotSqm,

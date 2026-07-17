@@ -107,8 +107,9 @@ export function ReportDocument({ input, analysis, brand }: Props) {
       <CoverPage input={input} analysis={analysis} brand={b} />
       <SummaryPage input={input} analysis={analysis} brand={b} />
       <ScalePage input={input} brand={b} />
-      <CostPage input={input} brand={b} />
+      {input.includeCostPage !== false && <CostPage input={input} brand={b} />}
       {input.profit && <ProfitPage input={input} brand={b} />}
+      {input.usePrices && <UsePricesPage input={input} brand={b} />}
       {analysis && <AIPage input={input} analysis={analysis} brand={b} />}
       <AppendixPage input={input} brand={b} />
     </Document>
@@ -1288,6 +1289,69 @@ function NumberedRow({
         {text}
       </PdfText>
     </View>
+  );
+}
+
+/* ──────────────── 용도별 분양가·임대료 (선택 수록) ──────────────── */
+function UsePricesPage({
+  input,
+  brand,
+}: {
+  input: ReportInputs;
+  brand: BrandConfig;
+}) {
+  const up = input.usePrices;
+  if (!up) return null;
+
+  const priceRow = (r: {
+    label: string;
+    manPerPy: number;
+    count: number;
+    areaBasis: string;
+    basis: string;
+  }): [string, string] => [
+    r.label,
+    r.count > 0
+      ? `${r.manPerPy.toLocaleString("ko-KR")}만원/평 (${r.areaBasis} · ${r.count}건 · ${r.basis})`
+      : "주변 실거래 사례 없음",
+  ];
+
+  return (
+    <Page size="A4" style={styles.innerPage}>
+      <FixedHeader input={input} brand={brand} />
+      <FixedFooter input={input} />
+
+      <PdfText style={styles.h2}>용도별 분양가·임대료 참고표</PdfText>
+      <View style={styles.h2Underline} />
+      <PdfText style={[styles.muted, { marginBottom: 10 }]}>
+        국토교통부 실거래가 공개시스템 · 최근 {up.periodMonths}개월 ㎡당 중앙값의
+        평당 환산 — 분양가·임대료 설정 참고용 (감정평가 아님)
+      </PdfText>
+
+      <PdfText style={styles.h3}>(a) 용도별 분양가 (매매 실거래)</PdfText>
+      <TwoColTable rows={up.sale.map(priceRow)} />
+
+      <PdfText style={[styles.h3, { marginTop: 14 }]}>
+        (b) 용도별 임대료 (월세 실거래 · 평당 월세)
+      </PdfText>
+      <TwoColTable rows={up.rentMonthly.map(priceRow)} />
+
+      <PdfText style={[styles.h3, { marginTop: 14 }]}>(c) 상업 층별 매매</PdfText>
+      <TwoColTable
+        rows={up.commercial.map((r) => [
+          r.label,
+          r.count > 0
+            ? `${r.manPerPy.toLocaleString("ko-KR")}만원/평 (건물면적 기준 · ${r.count}건 · ${r.basis})`
+            : "주변 실거래 사례 없음",
+        ])}
+      />
+
+      <PdfText style={[styles.muted, { marginTop: 10 }]}>
+        ※ 전용면적 기준 단가는 공급면적 환산 시 전용률(통상 70~80%)만큼 낮아집니다.
+        상업·업무 임대료는 실거래 수집 한계가 있어 한국부동산원 지역별 임대료
+        통계를 함께 확인하세요.
+      </PdfText>
+    </Page>
   );
 }
 

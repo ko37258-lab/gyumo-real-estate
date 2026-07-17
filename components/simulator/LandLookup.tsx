@@ -16,6 +16,8 @@ const MapPicker = dynamic(() => import("@/components/simulator/MapPicker"), {
 });
 import { useSimulatorStore } from "@/store/simulator";
 import { useLandInfoStore } from "@/store/landinfo";
+import { useHistoryStore } from "@/store/history";
+import { UsePricesDialog } from "@/components/simulator/UsePricesDialog";
 import {
   fetchZoneByCoord,
   fetchNearbyRoads,
@@ -567,6 +569,23 @@ export function LandLookup({
                 totArea: p.totArea,
               }))
             : undefined,
+      });
+
+      // 📁 프로젝트 이력 자동 기록 (LocalStorage — 같은 PNU는 최신으로 갱신)
+      useHistoryStore.getState().add({
+        pnu: geo.pnu,
+        address: geo.refined,
+        fetchedAt: new Date().toISOString(),
+        areaSqm,
+        zone: zoneName ?? undefined,
+        jimok: landAreaRes?.jimok,
+        estimatedPrice:
+          landTrades && landTrades.sampleCount > 0
+            ? landTrades.estimatedPrice
+            : undefined,
+        jigaTotal:
+          landTrades?.jigaTotal ||
+          (effectivePrice && areaSqm > 0 ? effectivePrice * areaSqm : undefined),
       });
 
       if (zoneCode && areaSqm > 0) {
@@ -1454,6 +1473,18 @@ export function LandLookup({
                 </div>
               </div>
             )}
+
+          {/* 용도별 분양가·임대료 팝업 (플렉시티식 표) */}
+          {result.pnu && result.refinedAddress && (
+            <UsePricesDialog
+              pnu={result.pnu}
+              umd={(() => {
+                const parts = result.refinedAddress.split(" ").filter(Boolean);
+                return parts.length >= 2 ? parts[parts.length - 2] : "";
+              })()}
+              address={result.refinedAddress}
+            />
+          )}
 
           {/* 부분 실패 안내 */}
           {result.errors.length > 0 && (

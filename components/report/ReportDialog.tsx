@@ -37,8 +37,22 @@ import {
 } from "@/lib/ai/keys";
 import { buildReportInputs } from "@/lib/report/buildInput";
 import { useSimulatorStore } from "@/store/simulator";
+import { useLandInfoStore } from "@/store/landinfo";
+import { useUsePricesStore } from "@/store/useprices";
+import { useProfitStore } from "@/store/profit";
+import { useMarketStore } from "@/store/market";
 import type { AIAnalysis, ReportInputs } from "@/lib/ai/types";
 import { ReportDocument } from "./ReportDocument";
+
+/** 보고서 수록 항목 선택 (운영자 피드백 2026-07-17: "필요한 것만 체크해서 넣게") */
+type ReportSections = {
+  land: boolean; // 토지 정보·시세
+  usePrices: boolean; // 용도별 분양가·임대료 표
+  cost: boolean; // 비용·부담금 페이지
+  profit: boolean; // 사업성 분석
+  market: boolean; // 주변 시세·임대료
+  viz3d: boolean; // 3D 매스 캡쳐
+};
 
 type ReportStatus = "idle" | "analyzing" | "ready" | "error";
 type PdfStatus = "idle" | "generating" | "error";
@@ -94,6 +108,29 @@ export function ReportDialog() {
   // 서버 내장 분석 키 (GEMINI_API_KEY/ANTHROPIC_API_KEY 환경변수) 가용 여부 — 열 때 1회 확인.
   const [serverKeys, setServerKeys] = useState<ServerKeyStatus | null>(null);
   const serverReady = Boolean(serverKeys?.serverGemini || serverKeys?.serverClaude);
+  // 수록 항목 선택 + 데이터 가용 여부 (미조회 항목은 체크해도 자동 생략됨)
+  const [sections, setSections] = useState<ReportSections>({
+    land: true,
+    usePrices: true,
+    cost: true,
+    profit: true,
+    market: true,
+    viz3d: true,
+  });
+  const landAvailable = useLandInfoStore((s) => Boolean(s.data));
+  const usePricesAvailable = useUsePricesStore((s) => Boolean(s.data));
+  const profitAvailable = useProfitStore((s) => s.touched);
+  const marketAvailable = useMarketStore((s) => Boolean(s.data));
+
+  /** 체크 해제된 섹션을 입력에서 제거 — ReportDocument·AI 프롬프트가 자동 생략 */
+  const applySections = (built: ReportInputs): ReportInputs => ({
+    ...built,
+    includeCostPage: sections.cost,
+    land: sections.land ? built.land : undefined,
+    usePrices: sections.usePrices ? built.usePrices : undefined,
+    profit: sections.profit ? built.profit : undefined,
+    market: sections.market ? built.market : undefined,
+  });
 
   // Dialog open 토글 — 에러 상태에서 다시 열면 idle로 초기화 (ready는 보존).
   const handleOpenChange = (next: boolean) => {
@@ -129,8 +166,8 @@ export function ReportDialog() {
     setErrorMsg("");
 
     try {
-      // ★ 1/4: 3D 캡쳐 (탭 자동 활성 + 렌더 대기 + toDataURL)
-      const visualization3D = await tryCapture3D();
+      // ★ 1/4: 3D 캡쳐 (체크 시에만 — 탭 자동 활성 + 렌더 대기 + toDataURL)
+      const visualization3D = sections.viz3d ? await tryCapture3D() : null;
       console.log(
         "[3D Capture]",
         visualization3D ? `성공 (${Math.round(visualization3D.length / 1024)}KB)` : "건너뜀",
@@ -138,7 +175,7 @@ export function ReportDialog() {
 
       setStep("2/4 데이터 수집 중...");
       await new Promise((r) => setTimeout(r, 200));
-      const built = buildReportInputs();
+      const built = applySections(buildReportInputs());
       console.log("[ReportDialog] input:", built);
 
       setStep("3/4 전문 종합 분석 중... (약 10~30초)");
@@ -165,8 +202,8 @@ export function ReportDialog() {
   }
 
   async function handleSkip() {
-    const visualization3D = await tryCapture3D();
-    const built = buildReportInputs();
+    const visualization3D = sections.viz3d ? await tryCapture3D() : null;
+    const built = applySections(buildReportInputs());
     const finalInput: ReportInputs = visualization3D
       ? { ...built, visualization3D }
       : built;
@@ -275,6 +312,16 @@ export function ReportDialog() {
               provider={provider}
               serverReady={serverReady}
               serverChecking={serverKeys === null}
+              sections={sections}
+              onToggleSection={(key) =>
+                setSections((prev) => ({ ...prev, [key]: !prev[key] }))
+              }
+              availability={{
+                land: landAvailable,
+                usePrices: usePricesAvailable,
+                profit: profitAvailable,
+                market: marketAvailable,
+              }}
               onStart={handleStart}
               onSkip={handleSkip}
             />
@@ -345,24 +392,81 @@ function IdleView({
   provider,
   serverReady,
   serverChecking,
+  sections,
+  onToggleSection,
+  availability,
   onStart,
   onSkip,
 }: {
   provider: AIProvider;
   serverReady: boolean;
   serverChecking: boolean;
+  sections: ReportSections;
+  onToggleSection: (key: keyof ReportSections) => void;
+  availability: { land: boolean; usePrices: boolean; profit: boolean; market: boolean };
   onStart: () => void;
   onSkip: () => void;
 }) {
   const canAnalyze = Boolean(provider) || serverReady;
+  const items: Array<{
+    key: keyof ReportSections;
+    label: string;
+    available: boolean;
+    note?: string;
+  }> = [
+    { key: "land", label: "토지 정보·시세 (지번 조회)", available: availability.land, note: "① 토지가치분석에서 지번 조회 필요" },
+    { key: "usePrices", label: "용도별 분양가·임대료 표", available: availability.usePrices, note: "① 탭 [용도별 분양가·임대료] 팝업에서 조회 필요" },
+    { key: "cost", label: "비용·부담금 상세 페이지", available: true },
+    { key: "profit", label: "사업성 분석 (IRR·수익률)", available: availability.profit, note: "④ 사업성 탭 조작 시 포함 가능" },
+    { key: "market", label: "주변 시세·임대료 (아파트·오피스텔)", available: availability.market, note: "④ 사업성 탭에서 시세 조회 필요" },
+    { key: "viz3d", label: "3D 매스 캡쳐 이미지", available: true },
+  ];
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground leading-relaxed">
         규모·비용·부담금 입력값 전체를 받아 사업성 종합 평가, 핵심 리스크 3, 추천 검토 3, 평당 사업비 적정성, 다음 단계 권고 3을 생성합니다. 그 결과를 PDF에 함께 수록합니다.
       </p>
-      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900 leading-relaxed">
-        💡 보고서에는 현재 화면의 <b>3D 매스 모습</b>이 함께 캡쳐됩니다. 분석 전에 원하는 각도로 회전해 두세요. (시뮬레이터 → 규모 검토 → 3D 360° 탭)
+
+      {/* 수록 항목 선택 */}
+      <div className="rounded-md border border-border p-3">
+        <div className="text-[11px] font-bold mb-2">📑 보고서에 넣을 항목 선택</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+          {items.map((it) => (
+            <label
+              key={it.key}
+              className={`flex items-start gap-2 text-[12px] cursor-pointer ${
+                it.available ? "" : "opacity-50"
+              }`}
+              title={it.available ? undefined : it.note}
+            >
+              <input
+                type="checkbox"
+                checked={sections[it.key] && it.available}
+                disabled={!it.available}
+                onChange={() => onToggleSection(it.key)}
+                className="mt-0.5 accent-[#993C1D]"
+              />
+              <span className="leading-tight">
+                {it.label}
+                {!it.available && (
+                  <span className="block text-[10px] text-muted-foreground">
+                    미조회 — {it.note}
+                  </span>
+                )}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="mt-1.5 text-[10px] text-muted-foreground">
+          ※ 규모 검토·검토 요약은 항상 수록됩니다. 체크 해제 항목은 PDF와 분석에서 제외됩니다.
+        </div>
       </div>
+
+      {sections.viz3d && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900 leading-relaxed">
+          💡 보고서에는 현재 화면의 <b>3D 매스 모습</b>이 함께 캡쳐됩니다. 분석 전에 원하는 각도로 회전해 두세요. (시뮬레이터 → 규모 검토 → 3D 360° 탭)
+        </div>
+      )}
 
       <Card
         className={`p-4 ${

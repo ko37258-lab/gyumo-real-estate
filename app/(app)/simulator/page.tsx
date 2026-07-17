@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { LandLookup } from "@/components/simulator/LandLookup";
+import { ProjectHistory } from "@/components/simulator/ProjectHistory";
 import { DevParcelMock } from "@/components/simulator/DevParcelMock";
 import { ZoneSelector } from "@/components/simulator/ZoneSelector";
 import { ControlPanel } from "@/components/simulator/ControlPanel";
@@ -97,6 +98,7 @@ export default function SimulatorPage() {
               <LandLookup defaultShowMap />
               <DevParcelMock />
               <ProceedToScale onProceed={() => handleTabChange("scale")} />
+              <ProjectHistory />
             </div>
           </TabsContent>
 

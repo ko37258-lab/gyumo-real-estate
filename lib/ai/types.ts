@@ -43,11 +43,41 @@ export interface ReportLandInfo {
   }>;
 }
 
+/** 용도별 분양가·임대료 표 (플렉시티식 — /api/use-prices 스냅샷). */
+export interface ReportUsePrices {
+  periodMonths: number;
+  baseAddress?: string;
+  /** 만원/평 매매 (분양가 참고) */
+  sale: Array<{
+    label: string;
+    manPerPy: number;
+    count: number;
+    areaBasis: string;
+    basis: string;
+    exclusive: boolean;
+  }>;
+  /** 만원/평 월세 (임대료 참고) */
+  rentMonthly: Array<{
+    label: string;
+    manPerPy: number;
+    count: number;
+    areaBasis: string;
+    basis: string;
+    exclusive: boolean;
+  }>;
+  /** 상업 층별 매매 (만원/평) */
+  commercial: Array<{ label: string; manPerPy: number; count: number; basis: string }>;
+}
+
 export interface ReportInputs {
   address?: string;
   reviewDate: string;
+  /** 비용·부담금 페이지 포함 여부 (기본 true — 보고서 생성 시 체크 해제 가능) */
+  includeCostPage?: boolean;
   /** 지번 조회 결과 (토지특성·추정가·신축시세·인허가) — 조회된 주소와 일치할 때만 포함. */
   land?: ReportLandInfo;
+  /** 용도별 분양가·임대료 표 — 팝업에서 조회한 경우 선택 포함. */
+  usePrices?: ReportUsePrices;
   /** 3D 매스 캡쳐 (base64 PNG dataURL) — PDF에 임베드. AI 프롬프트에는 보내지 않음. */
   visualization3D?: string;
   scale: {
