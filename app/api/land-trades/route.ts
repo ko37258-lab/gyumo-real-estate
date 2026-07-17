@@ -129,9 +129,19 @@ export async function GET(request: Request) {
       }
     }
 
+    // 동일 거래 중복 신고 제거(같은 계약연월·일·지번·면적·금액) — 같은 건이 2~3중으로
+    // 올라오면 중앙값·배수가 그 거래 쪽으로 쏠린다 (역삼동 실측: 207억 3중 신고).
+    const seenKeys = new Set<string>();
+    const deduped = all.filter((t) => {
+      const k = `${t.yearMonth}.${t.day}|${t.umdNm}|${t.jibun}|${t.areaSqm}|${t.amountWon}`;
+      if (seenKeys.has(k)) return false;
+      seenKeys.add(k);
+      return true;
+    });
+
     // 유사 사례 필터: 같은 법정동 → 같은 용도지역 → 지분거래 제외.
     // 표본 부족 시 단계적으로 완화 (동 전체 → 시군구 동일 용도지역).
-    const sameUmd = umd ? all.filter((t) => t.umdNm === umd) : all;
+    const sameUmd = umd ? deduped.filter((t) => t.umdNm === umd) : deduped;
     const noShare = sameUmd.filter((t) => !t.isShare);
     let sample = zone ? noShare.filter((t) => t.landUse === zone) : noShare;
     let basis = "같은 법정동 · 같은 용도지역";
@@ -140,7 +150,7 @@ export async function GET(request: Request) {
       basis = "같은 법정동 (용도지역 무관)";
     }
     if (sample.length < 3 && zone) {
-      sample = all.filter((t) => !t.isShare && t.landUse === zone);
+      sample = deduped.filter((t) => !t.isShare && t.landUse === zone);
       basis = "같은 시군구 · 같은 용도지역";
     }
 

@@ -170,6 +170,8 @@ export function LandLookup({
   const [result, setResult] = useState<ApiResult | null>(null);
   /** 사업성 탭 적용 여부 표시 (land = 토지가, sales = 분양가) */
   const [applied, setApplied] = useState<Record<string, boolean>>({});
+  /** 실거래 사례 전체 펼침 (기본 4건 → 더보기 시 API 최대 20건) */
+  const [showAllTrades, setShowAllTrades] = useState(false);
   const [mergeMode, setMergeMode] = useState(false);
   const [extraAddresses, setExtraAddresses] = useState<string[]>([""]);
   /** 🗺️ 지도 필지 선택 패널 표시 여부 */
@@ -208,6 +210,7 @@ export function LandLookup({
     setError(null);
     setResult(null);
     setApplied({});
+    setShowAllTrades(false);
 
     // 사용량 증가 (서버에서 원자적으로 처리)
     if (usage?.isLoggedIn) {
@@ -1167,13 +1170,15 @@ export function LandLookup({
               </div>
               {result.landTrades.trades.length > 0 && (() => {
                 const myJiga = bld?.price ?? 0; // 대상 필지 공시지가 원/㎡
+                const trades = result.landTrades.trades;
+                const shown = showAllTrades ? trades : trades.slice(0, 4);
                 return (
                   <div className="space-y-0.5">
                     <div className="flex items-center justify-between text-[9px] text-muted-foreground px-2">
                       <span>계약 · 소재지 (지목·용도지역)</span>
                       <span>면적 · 거래가 (㎡당 · 배수*)</span>
                     </div>
-                    {result.landTrades.trades.slice(0, 4).map((t, i) => (
+                    {shown.map((t, i) => (
                       <div key={i} className="flex items-center justify-between text-[10.5px] px-2 py-0.5 rounded bg-secondary/40">
                         <span className="min-w-0 truncate text-muted-foreground">
                           {t.yearMonth} · {t.umdNm} {t.jibun || "—"} ({t.jimok}
@@ -1188,11 +1193,25 @@ export function LandLookup({
                         </span>
                       </div>
                     ))}
-                    {myJiga > 0 && (
-                      <div className="text-[9px] text-muted-foreground/80 px-2">
-                        * 배수 = 거래 ㎡당가 ÷ 대상 필지 공시지가(㎡당) — 시세 수준 참고용
-                      </div>
+                    {trades.length > 4 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllTrades((v) => !v)}
+                        className="w-full text-center text-[10.5px] font-semibold py-1.5 rounded transition-colors hover:bg-secondary/60"
+                        style={{ color: "var(--info)" }}
+                      >
+                        {showAllTrades
+                          ? "거래 사례 접기 ∧"
+                          : `${trades.length - 4}건의 거래 사례 더보기 ∨`}
+                      </button>
                     )}
+                    <div className="text-[9px] text-muted-foreground/80 px-2">
+                      {myJiga > 0 && (
+                        <>* 배수 = 거래 ㎡당가 ÷ 대상 필지 공시지가(㎡당) — 시세 수준 참고용<br /></>
+                      )}
+                      {result.landTrades.sampleCount > trades.length &&
+                        `※ 통계 표본 ${result.landTrades.sampleCount}건 중 최근 ${trades.length}건 표시 — 추정가·배수는 전체 표본 중앙값 기준`}
+                    </div>
                   </div>
                 );
               })()}
