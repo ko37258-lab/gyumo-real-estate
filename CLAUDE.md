@@ -252,6 +252,14 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (8)** — **합필 실형상 union 2D/3D** (운영자 피드백: "합쳤을 때 2D/3D 모양이 안 나옴").
+  - `polygon-clipping` 설치. `lib/geo/parcel.ts`: `buildMergedParcelShape(parcels)` — 구성 필지 링 union, **연접 단일 폴리곤일 때만 성공**(비연접=2개 이상 폴리곤이면 null → 정사각형 근사 유지 — 합필은 지적법상 연접만 가능하므로 의도된 동작). `ParcelShape.members`(구성 링+라벨)·`isMerged` 추가. `buildParcelShape` centerLon/Lat을 무게중심 경위도로 보정 + `lonLatToLocal` 헬퍼(공통 좌표계 변환).
+  - LandLookup: 합필 extras 조회 시 필지 폴리곤도 병렬 수집(`MergedParcelRow.ring`) → 전 필지 링 확보 시 union을 `parcelShape`로 세팅.
+  - 2D: union 대지경계선 + 구성 필지 파란 점선 경계 + "A 지번" 라벨(멤버 무게중심), 배지 "📐 합필 N필지 실형상 (union면적)", 기존 정사각형 합필 스트립은 실형상 모드에서 숨김. 3D: ParcelLot에 구성 필지 경계선(파란 점선) — 매스는 union 자동.
+  - DevParcelMock `?mockParcel=2` = 연접 2필지 union 모드.
+  - **검증**: 로컬 mock union 542.57㎡ 2D 렌더 ✓ / **프로덕션 E2E: 역삼동 825-3 + 825-4(진짜 연접, 공유정점 0.00m) 합필 → 배지 "합필 2필지 실형상 (796.78㎡)" vs 등록면적 합 795.4㎡(0.2% 오차) + A/B 라벨** ✓.
+  - **디버깅 노트**: 첫 E2E(825-3+825-30)는 union 실패 — 코드 버그가 아니라 **실제 4m 떨어진 비연접**(사이 도로). 연접 검증 스크립트로 825-2·825-4가 진짜 이웃(0.00m) 확인. 도로 필지(825-32 도)는 대지를 둘러싸 union=1 되는 점 유의(도로 합필은 비현실 — 추후 지목 필터 고려).
+
 - **2026-07-17 (7)** — **합필 지도 다중 선택 UX** (운영자 피드백: "선택하고 또 선택하고 전체 합치기 방식으로").
   - MapPicker `multiSelect` 모드: 합필 모드에서 지도 클릭 = **즉시 선택 토글**(파란 하이라이트, 재클릭·배지 ✕=해제, pnu 기준 중복 방지). 하단 바에 대표(코랄)+선택(파랑) 지번 배지 목록 + **[🔗 전체 합치기 조회 (대표+N필지)]** + [전체 해제]. 필지당 재조회 제거 — **몇 필지든 조회 1회만 소모**.
   - LandLookup `onMergeAllFromMap`: 기존 조회된 대표 자동 포함(중복 제거), 없으면 첫 선택이 대표. `key={mergeMode ? "multi" : "single"}`로 모드 전환 시 MapPicker 선택 상태 리셋(remount — set-state-in-effect 회피 패턴).
