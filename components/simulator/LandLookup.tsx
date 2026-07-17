@@ -171,8 +171,8 @@ export function LandLookup() {
       .catch(() => null);
   }, []);
 
-  const onLookup = async (overrideAddr?: string) => {
-    // 지도 클릭/딥링크에서 넘어온 주소는 store 반영 전이라 인자로 직접 받는다 (stale closure 방지)
+  const onLookup = async (overrideAddr?: string, overrideExtras?: string[]) => {
+    // 지도 클릭/딥링크에서 넘어온 주소·합필목록은 state 반영 전이라 인자로 직접 받는다 (stale closure 방지)
     const q = (overrideAddr ?? address).trim();
     if (!q) return;
 
@@ -260,9 +260,9 @@ export function LandLookup() {
       const primaryArea =
         landAreaRes?.area && landAreaRes.area > 0 ? landAreaRes.area : 0;
 
-      // 합필: 추가 지번들 조회 + 면적 합산
+      // 합필: 추가 지번들 조회 + 면적 합산 (지도 클릭 합류 시 overrideExtras 우선)
       const extras = mergeMode
-        ? extraAddresses.map((a) => a.trim()).filter(Boolean)
+        ? (overrideExtras ?? extraAddresses).map((a) => a.trim()).filter(Boolean)
         : [];
       let merged: ApiResult["merged"] = undefined;
       if (extras.length > 0) {
@@ -406,6 +406,30 @@ export function LandLookup() {
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * 지도 필지 선택 처리.
+   * - 일반 모드: 대표 지번 교체 + 새 조회
+   * - 합필 모드 + 대표 지번 존재: 클릭한 필지를 추가 지번으로 합류시켜 합필 재조회
+   *   (기존 선택이 교체되던 문제 fix — 운영자 피드백 2026-07-17)
+   */
+  const onMapPick = (addr: string) => {
+    const picked = addr.trim();
+    if (!picked || loading) return;
+
+    if (mergeMode && address.trim()) {
+      if (picked === address.trim()) return; // 대표 지번 재클릭 — 합필 유지 (리셋 방지)
+      const current = extraAddresses.map((a) => a.trim()).filter(Boolean);
+      if (current.includes(picked)) return; // 이미 합필 목록에 있음
+      const next = [...current, picked];
+      setExtraAddresses(next);
+      void onLookup(undefined, next); // 대표 지번 유지 + 합필 재조회
+      return;
+    }
+
+    setAddress(picked);
+    void onLookup(picked);
   };
 
   // 딥링크: /simulator?address=... → 주소 채움 + (로그인 상태면) 자동 조회.
@@ -561,11 +585,16 @@ export function LandLookup() {
       {showMap && (
         <div className="mt-2">
           <MapPicker
-            onPick={(addr) => {
-              setAddress(addr);
-              if (!loading) void onLookup(addr);
-            }}
+            onPick={onMapPick}
+            confirmLabel={
+              mergeMode && address.trim() ? "➕ 합필에 추가" : "이 필지 조회 →"
+            }
           />
+          {mergeMode && address.trim() && (
+            <p className="mt-1 text-[10px]" style={{ color: "var(--info)" }}>
+              🔗 합필 모드 — 지도에서 옆 필지를 클릭하면 대표 지번({jibunOf(address)})에 합쳐집니다.
+            </p>
+          )}
         </div>
       )}
 

@@ -113,8 +113,11 @@ function FlyToParcel() {
 
 export default function MapPicker({
   onPick,
+  confirmLabel = "이 필지 조회 →",
 }: {
   onPick: (address: string) => void;
+  /** 확인 버튼 라벨 — 합필 모드에선 "➕ 합필에 추가"로 표시 */
+  confirmLabel?: string;
 }) {
   const parcelShape = useSimulatorStore((s) => s.parcelShape);
   const [picking, setPicking] = useState(false);
@@ -237,7 +240,7 @@ export default function MapPicker({
               className="shrink-0 text-[11px] font-bold px-2.5 py-1 rounded"
               style={{ background: "#2563EB", color: "#fff" }}
             >
-              이 필지 조회 →
+              {confirmLabel}
             </button>
             <button
               type="button"

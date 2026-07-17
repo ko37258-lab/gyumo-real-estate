@@ -252,6 +252,12 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (6)** — **합필 모드 × 지도 클릭 연동 fix** (운영자 피드백: "옆 필지 클릭하면 합쳐지지 않고 교체됨").
+  - 원인: 지도 [이 필지 조회]가 합필 모드를 무시하고 항상 `setAddress + 단독 onLookup` — 기존 선택 교체.
+  - **LandLookup `onMapPick`** 신규: 합필 모드 + 대표 지번 존재 시 클릭 필지를 `extraAddresses`에 합류 → `onLookup(undefined, next)`로 **대표 지번 유지 + 합필 재조회**. 가드 2종 — 대표 지번 재클릭 무시(리셋 방지), 중복 지번 무시. `onLookup(overrideAddr?, overrideExtras?)`로 확장(setState 직후 stale closure 방지).
+  - MapPicker `confirmLabel` prop — 합필 모드에선 칩 버튼이 "➕ 합필에 추가"로 표시. 지도 아래 "🔗 합필 모드 — 옆 필지 클릭하면 대표 지번(N)에 합쳐집니다" 안내 추가.
+  - 검증: tsc 0 / eslint 0 / 로컬 UI — 합필 ON + 지도 열기 → 안내 문구·라벨 정상. 실제 합류 재조회는 로그인 필요 — 운영자 확인 요.
+
 - **2026-07-17 (5)** — **지도 필지 선택 정밀도 개선** (운영자 피드백: "손바닥 커서라 정확히 선택 안 됨").
   - 커서: crosshair(십자)로 교체 — `.parcel-map .leaflet-grab { cursor: crosshair !important }`, 드래그 중엔 grabbing.
   - 정확도: 카카오 역지오코딩 단독(인근 대표주소 스냅 오차) → **VWorld 연속지적도 point-in-polygon 질의**(`fetchVworldParcelAtPoint`, `/api/vworld?kind=parcelat&x&y`)로 클릭 좌표가 속한 필지를 정확히 확정. 지번은 지적 데이터 우선 — 역지오코딩 주소의 행정구역 + 지적 `jibun`(지목 접미 제거, 산지는 pnu 11번째=2 → "산" 접두) 결합.
