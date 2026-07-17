@@ -252,6 +252,12 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (7)** — **합필 지도 다중 선택 UX** (운영자 피드백: "선택하고 또 선택하고 전체 합치기 방식으로").
+  - MapPicker `multiSelect` 모드: 합필 모드에서 지도 클릭 = **즉시 선택 토글**(파란 하이라이트, 재클릭·배지 ✕=해제, pnu 기준 중복 방지). 하단 바에 대표(코랄)+선택(파랑) 지번 배지 목록 + **[🔗 전체 합치기 조회 (대표+N필지)]** + [전체 해제]. 필지당 재조회 제거 — **몇 필지든 조회 1회만 소모**.
+  - LandLookup `onMergeAllFromMap`: 기존 조회된 대표 자동 포함(중복 제거), 없으면 첫 선택이 대표. `key={mergeMode ? "multi" : "single"}`로 모드 전환 시 MapPicker 선택 상태 리셋(remount — set-state-in-effect 회피 패턴).
+  - 프로덕션 E2E(usage 스텁): 역삼동 825-3 조회 → 합필 ON → 지도에서 825-22·1374 연속 클릭(배지 2개) → [전체 합치기 (대표+2필지)] 1클릭 → **"합필 3필지 검토, 합계 27,185㎡"** + 용도지역 다름 경고 정상.
+  - **git push hang 근본 해결**: 원인은 Windows credential manager(간헐 GUI 대기) — `git config credential.helper '!gh auth git-credential'` 레포 고정(즉시 push 성공). http.lowSpeedLimit/Time도 설정.
+
 - **2026-07-17 (6)** — **합필 모드 × 지도 클릭 연동 fix** (운영자 피드백: "옆 필지 클릭하면 합쳐지지 않고 교체됨").
   - 원인: 지도 [이 필지 조회]가 합필 모드를 무시하고 항상 `setAddress + 단독 onLookup` — 기존 선택 교체.
   - **LandLookup `onMapPick`** 신규: 합필 모드 + 대표 지번 존재 시 클릭 필지를 `extraAddresses`에 합류 → `onLookup(undefined, next)`로 **대표 지번 유지 + 합필 재조회**. 가드 2종 — 대표 지번 재클릭 무시(리셋 방지), 중복 지번 무시. `onLookup(overrideAddr?, overrideExtras?)`로 확장(setState 직후 stale closure 방지).
