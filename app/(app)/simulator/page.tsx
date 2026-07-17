@@ -85,7 +85,8 @@ export default function SimulatorPage() {
         </header>
 
         <Tabs value={tab} onValueChange={handleTabChange}>
-          <TabsList className="mb-4 w-full grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 h-auto p-0 bg-transparent">
+          {/* h-auto! — base-ui TabsList의 내장 h-8(group-data-horizontal 변형)보다 우선해야 2줄 배치가 안 겹침 */}
+          <TabsList className="mb-4 w-full grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 h-auto! p-0 bg-transparent">
             <StepTrigger value="land" step={1} label="토지가치분석" sub="지도·추정가·실거래" />
             <StepTrigger value="scale" step={2} label="규모 검토" sub="건폐율·용적률·일조" />
             <StepTrigger value="cost" step={3} label="비용·부담금" sub="건축비·농지·산지·개발" />
@@ -174,21 +175,22 @@ function StepTrigger({
   return (
     <TabsTrigger
       value={value}
+      /* base-ui Tabs는 data-state 대신 data-active(활성)·aria-selected를 씀 — 변형 선택자 주의 */
       className="
         group relative flex items-center justify-start gap-3 px-3 md:px-4 py-3 rounded-xl
         bg-card border-2 transition-all duration-200 min-h-[3.5rem]
-        data-[state=inactive]:opacity-60 data-[state=inactive]:border-border
-        data-[state=inactive]:hover:opacity-100 data-[state=inactive]:hover:border-foreground/30
-        data-[state=active]:border-[var(--info)] data-[state=active]:shadow-lg
-        data-[state=active]:bg-gradient-to-br data-[state=active]:from-card data-[state=active]:to-[var(--info-bg)]
+        aria-[selected=false]:opacity-60 aria-[selected=false]:border-border
+        aria-[selected=false]:hover:opacity-100 aria-[selected=false]:hover:border-foreground/30
+        data-active:border-[var(--info)] data-active:shadow-lg
+        data-active:bg-gradient-to-br data-active:from-card data-active:to-[var(--info-bg)]
       "
     >
       <span
         className="
           flex-shrink-0 w-9 h-9 rounded-full text-white text-base font-bold
           flex items-center justify-center transition-colors
-          group-data-[state=active]:bg-[var(--info)]
-          group-data-[state=inactive]:bg-muted-foreground/60
+          group-data-active:bg-[var(--info)]
+          group-aria-[selected=false]:bg-muted-foreground/60
         "
       >
         {step}
