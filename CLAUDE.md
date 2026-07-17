@@ -252,6 +252,12 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (5)** — **지도 필지 선택 정밀도 개선** (운영자 피드백: "손바닥 커서라 정확히 선택 안 됨").
+  - 커서: crosshair(십자)로 교체 — `.parcel-map .leaflet-grab { cursor: crosshair !important }`, 드래그 중엔 grabbing.
+  - 정확도: 카카오 역지오코딩 단독(인근 대표주소 스냅 오차) → **VWorld 연속지적도 point-in-polygon 질의**(`fetchVworldParcelAtPoint`, `/api/vworld?kind=parcelat&x&y`)로 클릭 좌표가 속한 필지를 정확히 확정. 지번은 지적 데이터 우선 — 역지오코딩 주소의 행정구역 + 지적 `jibun`(지목 접미 제거, 산지는 pnu 11번째=2 → "산" 접두) 결합.
+  - UX: 클릭 즉시 조회(오클릭=한도 소모) → **후보 필지 파란 점선 미리보기 + 지번 확인 칩 + [이 필지 조회] 버튼** 2단계로 변경.
+  - 프로덕션 검증: parcelat API — 성내동 좌표 → 580-1(도) 링 포함 정확 반환 / UI — 서울시청 클릭 → 칩 "서울 중구 태평로1가 31" + 미리보기 폴리곤 1개 + crosshair 확인.
+
 - **2026-07-17 (4)** — **Phase C: 지도 필지 선택 + real-estate-infographic 연동 준비**.
   - **leaflet + react-leaflet@5 설치** (React 19 호환).
   - **타일 프록시 3종 신규** (VWorld·카카오 키 비노출 원칙 유지):
