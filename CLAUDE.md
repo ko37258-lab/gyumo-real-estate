@@ -252,6 +252,18 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (4)** — **Phase C: 지도 필지 선택 + real-estate-infographic 연동 준비**.
+  - **leaflet + react-leaflet@5 설치** (React 19 호환).
+  - **타일 프록시 3종 신규** (VWorld·카카오 키 비노출 원칙 유지):
+    - `app/api/tile/[layer]/[z]/[y]/[x]/route.ts` — VWorld WMTS(Base/Satellite/Hybrid/gray/midnight) 프록시, `s-maxage=604800` CDN 캐시로 함수 호출 최소화.
+    - `app/api/wms/route.ts` — VWorld WMS `lp_pa_cbnd_bubun`(지적편집도) 파라미터 화이트리스트 패스스루.
+    - `app/api/revgeocode/route.ts` — 카카오 coord2address (좌표→지번주소).
+  - **components/simulator/MapPicker.tsx 신규**: react-leaflet 지도(320px) — 배경(일반/위성 토글) + 지적도 오버레이(opacity 0.65, 토글) + 지도 클릭→revgeocode→`onPick(주소)`→자동 조회 + 조회 성공 시 `parcelShape.ringLonLat` 폴리곤 하이라이트(코랄) + flyTo(zoom 18). leaflet은 window 필수라 next/dynamic ssr:false 필수.
+  - **lib/geo/parcel.ts**: `ParcelShape.ringLonLat` 필드 추가 (지도 하이라이트용 원본 경위도 링).
+  - **LandLookup**: [🗺️ 지도에서 필지 선택] 토글(합필 토글과 한 줄), `onLookup(overrideAddr?)`로 리팩터(지도 클릭·딥링크의 stale closure 방지, `onClick={() => onLookup()}` 수정 주의), **딥링크 `/simulator?address=...`** — 주소 자동 채움 + 로그인 상태면 자동 조회(usage 로드 후 1회, setTimeout으로 effect 내 동기 setState 회피).
+  - **CORS (next.config.ts)**: `/api/:path*`에 `Access-Control-Allow-Origin: https://real-estate-infographic.vercel.app` — 공법규제분석 앱에서 gyumo 데이터 API(landarea·permits·land-trades·newbuild-price 등) 직접 fetch 가능. 연동 진입점 2개: ① CORS fetch ② 딥링크 `?address=`.
+  - 검증: tsc 0 / eslint 0 (딥링크 effect는 onLookup 선언 뒤로 이동 + setTimeout 필요했음 — react-hooks 신규 컴파일러 룰) / 로컬 leaflet 마운트·토글·타일/WMS 프록시 요청 확인(이미지는 로컬 키 placeholder라 프로덕션에서 확인).
+
 - **2026-07-17 (3)** — **신축 시세 자동 제안 + Phase A/B 프로덕션 배포·검증 완료**.
   - **app/api/newbuild-price/route.ts 신규**: 연립다세대 매매(`RTMSDataSvcRHTrade`)·전월세(`RTMSDataSvcRHRent`, 월세0=전세만)·상업업무용(`RTMSDataSvcNrgTrade`) 최근 6개월 병렬 집계(~3.2s). 주거 매매는 준공 5년 이내 신축급 우선(3건 미만 시 전체 연식), 표본은 같은 법정동 3건 이상→시군구 완화. 상가는 층별(1층/2층/3층+/지하) ㎡당 중앙값 — 플렉시티 `/building/price/` 대응.
   - **LandLookup**: "🏘️ 신축 시세 참고" 카드(주거 매매/전세 + 상가 층별) + **원클릭 사업성 연동 버튼 2종** — [평당 토지가로 적용](추정가→`landPricePerPyeong` 만원/평), [평당 분양가로 적용](주거 매매 ㎡당×3.3058→`salesPricePerPyeong`). 적용 후 ✓ 표시, 재조회 시 리셋.

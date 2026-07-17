@@ -1,8 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+// leaflet은 window 필수 — SSR 제외 lazy 로드
+const MapPicker = dynamic(() => import("@/components/simulator/MapPicker"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[320px] flex items-center justify-center text-[12px] text-muted-foreground bg-card border border-border rounded-md">
+      지도 로드 중...
+    </div>
+  ),
+});
 import { useSimulatorStore } from "@/store/simulator";
 import {
   fetchZoneByCoord,
@@ -145,6 +156,10 @@ export function LandLookup() {
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [mergeMode, setMergeMode] = useState(false);
   const [extraAddresses, setExtraAddresses] = useState<string[]>([""]);
+  /** 🗺️ 지도 필지 선택 패널 표시 여부 */
+  const [showMap, setShowMap] = useState(false);
+  /** 딥링크(?address=) 1회 실행 가드 */
+  const deepLinkRan = useRef(false);
   const [usage, setUsage] = useState<{
     isLoggedIn: boolean; used: number; limit: number; remaining: number; allowed: boolean; role: string;
   } | null>(null);
@@ -156,8 +171,9 @@ export function LandLookup() {
       .catch(() => null);
   }, []);
 
-  const onLookup = async () => {
-    const q = address.trim();
+  const onLookup = async (overrideAddr?: string) => {
+    // 지도 클릭/딥링크에서 넘어온 주소는 store 반영 전이라 인자로 직접 받는다 (stale closure 방지)
+    const q = (overrideAddr ?? address).trim();
     if (!q) return;
 
     // 로그인 체크
@@ -392,6 +408,21 @@ export function LandLookup() {
     }
   };
 
+  // 딥링크: /simulator?address=... → 주소 채움 + (로그인 상태면) 자동 조회.
+  // real-estate-infographic 등 외부 앱에서 지번을 들고 넘어오는 연동 진입점.
+  useEffect(() => {
+    if (deepLinkRan.current || usage === null) return;
+    deepLinkRan.current = true;
+    const addr = new URLSearchParams(window.location.search).get("address");
+    if (!addr) return;
+    setAddress(addr);
+    if (usage.isLoggedIn && usage.allowed) {
+      // 렌더 사이클 밖에서 조회 시작 (effect 내 동기 setState 회피)
+      setTimeout(() => void onLookup(addr), 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usage]);
+
   const bld = result?.landArea;
   const jimokName = bld?.jimok ?? null;
   const resolvedArea = bld?.area && bld.area > 0 ? bld.area : 0;
@@ -477,7 +508,7 @@ export function LandLookup() {
           disabled={loading}
         />
         <Button
-          onClick={onLookup}
+          onClick={() => onLookup()}
           disabled={loading || !address.trim() || (usage !== null && usage.isLoggedIn && !usage.allowed)}
           variant="outline"
         >
@@ -491,8 +522,19 @@ export function LandLookup() {
         </Button>
       </div>
 
-      {/* 합필 토글 */}
-      <div className="mt-1.5">
+      {/* 지도 선택 + 합필 토글 */}
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={() => setShowMap((v) => !v)}
+          className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
+            showMap
+              ? "bg-[var(--info)] text-[var(--info-foreground,#fff)] border-[var(--info)]"
+              : "bg-transparent text-[var(--info)] border-[var(--info)] hover:bg-[var(--info-bg)]"
+          }`}
+        >
+          {showMap ? "🗺️ 지도 닫기" : "🗺️ 지도에서 필지 선택"}
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -514,6 +556,18 @@ export function LandLookup() {
           {mergeMode ? "🔗 합필 모드 ON — 취소하기" : "➕ 합필하실 경우 (옆 필지 합쳐서 검토)"}
         </button>
       </div>
+
+      {/* 🗺️ 지도 필지 선택 패널 */}
+      {showMap && (
+        <div className="mt-2">
+          <MapPicker
+            onPick={(addr) => {
+              setAddress(addr);
+              if (!loading) void onLookup(addr);
+            }}
+          />
+        </div>
+      )}
 
       {/* 합필 추가 지번 입력 */}
       {mergeMode && (

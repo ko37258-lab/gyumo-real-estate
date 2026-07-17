@@ -18,6 +18,8 @@ export interface ParcelShape {
   /** 원본 경위도 중심 (지도 연동용) */
   centerLon: number;
   centerLat: number;
+  /** 원본 경위도 외곽 링 [[lon,lat],...] — 지도 하이라이트용 */
+  ringLonLat: Array<[number, number]>;
 }
 
 const EARTH_R = 6378137; // m
@@ -148,5 +150,6 @@ export function buildParcelShape(ring: Array<[number, number]>): ParcelShape {
     bounds: polygonBounds(centered),
     centerLon,
     centerLat,
+    ringLonLat: cleaned,
   };
 }
