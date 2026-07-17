@@ -252,6 +252,13 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (11)** — **① 토지가치분석 탭 신설(플렉시티 흐름) + AI 보고서에 토지 데이터 주입 + 서버 내장 분석 키 폴백**.
+  - **[A] 시뮬레이터 4단계 재구성**: ① 토지가치분석(지도 기본 펼침 + 지번 조회 + 추정가·실거래·건축물대장·신축시세) → ② 규모 검토 → ③ 비용 → ④ 사업성. Tabs controlled(`useState`)로 전환, ① 하단에 [🏗️ 규모검토 하기 →] CTA(플렉시티 [기획설계 하기] 대응, landinfo store 조회 완료 시 자동 반영 안내). MapPicker `autoLookup` — 단일 모드에서 **필지 클릭 = 즉시 조회**(확인 버튼 생략, "조회 1회 차감" 안내). LandLookup `defaultShowMap`.
+  - **[B] NED 토지특성 확장**: `fetchVworldLandChar`에 도로접면(roadSideCodeNm)·형상(tpgrphFrmCodeNm)·지세(tpgrphHgCodeNm)·이용상황(ladUseSittnNm) + `fetchVworldLandUseAttr`(getLandUseAttr, 토지이용계획 지역·지구 목록, 저촉 표기) 신규. `/api/landarea` pass-through(`roadSide/landShape/landHeight/landUse/useAttrs`). LandLookup에 "🧭 토지특성·토지이용계획" 카드(칩 + 지역·지구 배지 12개 제한). ⚠ getLandUseAttr 응답 필드는 로컬 placeholder 키라 미검증 — 프로덕션 실키로 확인 필요.
+  - **[C] 보고서 주입**: `store/landinfo.ts` 신규(조회 스냅샷 — 토지특성·추정가·신축시세·건물추정가·인허가 3건). `ReportInputs.land`(`ReportLandInfo`) + buildInput(주소 일치 시만 포함) + prompts.ts `buildLandSection`([토지 정보·시세 분석] 섹션 + 토지 매입가 적정성·지역지구 저촉 리스크 지시) + ReportDocument SummaryPage `LandInfoBox`(TwoColTable + 감정평가 아님 면책).
+  - **[D] AI 분석 서버 키 폴백** ("분석 도구가 설정되지 않았습니다" = BYOK 키 미등록이 원인): `/api/ai/analyze`에 GET(serverGemini/serverClaude 가용 여부) + POST 폴백(apiKey 없으면 `GEMINI_API_KEY`→`ANTHROPIC_API_KEY` 순 서버 환경변수 자동 선택, BYOK는 그대로 우선). analyze.ts `fetchServerKeys` + provider 없으면 `{input}`만 POST. ReportDialog — 열 때 GET 1회, 서버 키 있으면 "✓ 분석 준비 완료 — 별도 설정 없이 바로 분석됩니다" + 버튼 활성, 디버그 패널에 서버 키 상태. **Claude 모델 `claude-3-5-sonnet-20241022`(2025-10 은퇴, 404) → `claude-sonnet-5` 교체**(thinking disabled — JSON 추출 작업, content에서 text 블록 탐색으로 견고화). ⚠ **운영자 조치: Vercel gyumo 프로젝트에 `GEMINI_API_KEY`(권장, 무료 티어) 또는 `ANTHROPIC_API_KEY` 환경변수 등록해야 서버 분석 작동**.
+  - 검증: tsc 0 / eslint(신규 에러 0 — privacy·MarketInsight·NearbyLandPrice는 기존 건) / 로컬 — 4탭 렌더·지도 기본 펼침·클릭 즉시 조회 안내·CTA→② 전환·ReportDialog GET 200 + 게이팅 확인. 실키 필요한 항목(NED 신규 필드·getLandUseAttr·서버 분석)은 배포 후 프로덕션 확인.
+
 - **2026-07-17 (10)** — **Phase D 심화(가설계→사업성 원클릭 + 3D 세대·코어) + real-estate-infographic 연동 버튼**.
   - store: `schematicUnitSqm`/`schematicEfficiencyPct`(⑥↔3D 공유) + `newbuildResUnitWon`(지번 조회 시 신축 주거 ㎡당 시세 자동 저장). SchematicPlanner 로컬 state → store 승격.
   - **⑥ 세대 수익 자동 산출 + 사업성 원클릭**: 세대당 분양가 = 시세(전용㎡당)×전용면적, 총 분양수입 = ×세대수, 평당(공급) = 시세×전용률×3.3058. [📊 사업성 탭에 세대 수익 반영] → `revenueModel=sales`+`salesPricePerPyeong`. 미조회 시 안내문.

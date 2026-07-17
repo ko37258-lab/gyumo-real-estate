@@ -24,6 +24,7 @@ import { useSimulatorStore } from "@/store/simulator";
 import { useCostStore } from "@/store/cost";
 import { useProfitStore } from "@/store/profit";
 import { useMarketStore } from "@/store/market";
+import { useLandInfoStore } from "@/store/landinfo";
 import type { ReportInputs } from "@/lib/ai/types";
 import { PY_TO_SQM } from "@/lib/constants";
 
@@ -178,9 +179,17 @@ export function buildReportInputs(): ReportInputs {
       }
     : undefined;
 
+  // 지번 조회 결과 — 현재 시뮬레이터 주소와 일치할 때만 포함 (다른 필지 데이터 오염 방지)
+  const landData = useLandInfoStore.getState().data;
+  const land =
+    landData && sim.address && landData.address === sim.address
+      ? landData
+      : undefined;
+
   return {
     address: sim.address || undefined,
     reviewDate: new Date().toISOString().slice(0, 10),
+    land,
     market,
     scale: {
       landAreaSqm: lotSqm,

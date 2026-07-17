@@ -15,6 +15,7 @@ const MapPicker = dynamic(() => import("@/components/simulator/MapPicker"), {
   ),
 });
 import { useSimulatorStore } from "@/store/simulator";
+import { useLandInfoStore } from "@/store/landinfo";
 import {
   fetchZoneByCoord,
   fetchNearbyRoads,
@@ -46,6 +47,11 @@ type LandArea = {
   priceYear?: number;
   jimok?: string; // 지목 (VWorld)
   zone?: string; // 용도지역 (NED — 비도시지역 포함)
+  roadSide?: string; // 도로접면 (NED)
+  landShape?: string; // 토지형상 (NED)
+  landHeight?: string; // 지세 (NED)
+  landUse?: string; // 토지이용상황 (NED)
+  useAttrs?: string[]; // 토지이용계획 지역·지구 목록 (NED getLandUseAttr)
   transient?: boolean; // 일시 장애 (재시도 안내)
   message?: string;
 };
@@ -141,7 +147,12 @@ type ApiResult = {
 /** 전체 주소에서 지번만 추출 (예: "서울 강남구 역삼동 825-3" → "825-3") */
 const jibunOf = (full: string) => full.split(" ").pop() ?? full;
 
-export function LandLookup() {
+export function LandLookup({
+  defaultShowMap = false,
+}: {
+  /** 토지가치분석 탭에서 지도를 기본으로 펼침 (플렉시티식 지도 우선 UX) */
+  defaultShowMap?: boolean;
+} = {}) {
   const address = useSimulatorStore((s) => s.address);
   const lotInfo = useSimulatorStore((s) => s.lotInfo);
   const setAddress = useSimulatorStore((s) => s.setAddress);
@@ -162,7 +173,7 @@ export function LandLookup() {
   const [mergeMode, setMergeMode] = useState(false);
   const [extraAddresses, setExtraAddresses] = useState<string[]>([""]);
   /** 🗺️ 지도 필지 선택 패널 표시 여부 */
-  const [showMap, setShowMap] = useState(false);
+  const [showMap, setShowMap] = useState(defaultShowMap);
   /** 딥링크(?address=) 1회 실행 가드 */
   const deepLinkRan = useRef(false);
   const [usage, setUsage] = useState<{
@@ -460,6 +471,67 @@ export function LandLookup() {
           )
         : landAreaRes?.price ?? undefined;
 
+      // 보고서(AI 분석·PDF) 주입용 스냅샷 — 조회 성공 시 항상 갱신
+      const jimokKnown = jimokName && jimokName !== "미상";
+      const roadVerdictLabel = directRoad
+        ? "도로 접면"
+        : presumed
+          ? "도로 접면(추정)"
+          : jimokKnown && (roads?.totalParcels ?? 0) >= 8
+            ? "맹지 가능성"
+            : "확인 필요";
+      useLandInfoStore.getState().setLandInfo({
+        address: geo.refined,
+        pnu: geo.pnu,
+        fetchedAt: new Date().toISOString(),
+        areaSqm,
+        mergedCount: merged ? merged.parcels.length : undefined,
+        jimok: landAreaRes?.jimok,
+        zone: zoneName ?? undefined,
+        publicPricePerSqm: effectivePrice,
+        publicPriceYear: landAreaRes?.priceYear,
+        roadSide: landAreaRes?.roadSide,
+        landShape: landAreaRes?.landShape,
+        landHeight: landAreaRes?.landHeight,
+        landUseSituation: landAreaRes?.landUse,
+        useAttrs: landAreaRes?.useAttrs,
+        roadVerdict: roads ? roadVerdictLabel : undefined,
+        landTrades:
+          landTrades && landTrades.sampleCount > 0
+            ? {
+                sampleCount: landTrades.sampleCount,
+                periodMonths: landTrades.periodMonths,
+                basis: landTrades.basis,
+                medianUnitWon: landTrades.medianUnitWon,
+                estimatedPrice: landTrades.estimatedPrice,
+                jigaTotal: landTrades.jigaTotal,
+                ratioToJiga: landTrades.ratioToJiga,
+              }
+            : undefined,
+        newbuild: newbuild
+          ? {
+              periodMonths: newbuild.periodMonths,
+              resTradeUnitWon: newbuild.residential.tradeUnitWon,
+              resTradeCount: newbuild.residential.tradeCount,
+              resJeonseUnitWon: newbuild.residential.jeonseUnitWon,
+              resJeonseCount: newbuild.residential.jeonseCount,
+              comF1UnitWon: newbuild.commercial.f1.unitWon,
+              comF1Count: newbuild.commercial.f1.count,
+            }
+          : undefined,
+        buildingPrice: buildingPrice ?? undefined,
+        permits:
+          permits && permits.length > 0
+            ? permits.slice(0, 3).map((p) => ({
+                status: p.useAprDay ? "사용승인" : p.realStcnsDay ? "착공" : "허가",
+                permitDay: p.permitDay,
+                archGb: p.archGb,
+                mainUse: p.mainUse,
+                totArea: p.totArea,
+              }))
+            : undefined,
+      });
+
       if (zoneCode && areaSqm > 0) {
         applyLotInfo({
           address: geo.refined,
@@ -669,6 +741,7 @@ export function LandLookup() {
             multiSelect={mergeMode}
             baseAddress={mergeMode ? (result?.refinedAddress ?? null) : null}
             onMergeAll={onMergeAllFromMap}
+            autoLookup={!mergeMode}
           />
           {mergeMode && (
             <p className="mt-1 text-[10px]" style={{ color: "var(--info)" }}>
@@ -863,6 +936,68 @@ export function LandLookup() {
                         {roadVerdict.sub}
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 토지특성 상세 + 토지이용계획 (VWorld NED — 플렉시티식) */}
+          {(bld?.landUse ||
+            bld?.landShape ||
+            bld?.landHeight ||
+            bld?.roadSide ||
+            (bld?.useAttrs?.length ?? 0) > 0) && (
+            <div className="px-3 py-2 rounded-md bg-card border border-border text-[11px]">
+              <div className="text-[10px] text-muted-foreground mb-1">
+                🧭 토지특성 · 토지이용계획 (VWorld 토지특성정보)
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                {bld?.landUse && (
+                  <span>
+                    이용상황 <b className="text-foreground">{bld.landUse}</b>
+                  </span>
+                )}
+                {bld?.landShape && (
+                  <span>
+                    형상 <b className="text-foreground">{bld.landShape}</b>
+                  </span>
+                )}
+                {bld?.landHeight && (
+                  <span>
+                    지세 <b className="text-foreground">{bld.landHeight}</b>
+                  </span>
+                )}
+                {bld?.roadSide && (
+                  <span>
+                    도로접면 <b className="text-foreground">{bld.roadSide}</b>
+                  </span>
+                )}
+              </div>
+              {(bld?.useAttrs?.length ?? 0) > 0 && (
+                <div className="mt-1.5">
+                  <div className="text-[9.5px] text-muted-foreground mb-0.5">
+                    국토계획법 지역·지구 ({bld!.useAttrs!.length}건)
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {bld!.useAttrs!.slice(0, 12).map((u) => (
+                      <span
+                        key={u}
+                        className="inline-block px-1.5 py-0.5 rounded-full text-[9.5px] border"
+                        style={{
+                          borderColor: "var(--info)",
+                          color: "var(--info)",
+                          background: "var(--info-bg)",
+                        }}
+                      >
+                        {u}
+                      </span>
+                    ))}
+                    {bld!.useAttrs!.length > 12 && (
+                      <span className="text-[9.5px] text-muted-foreground">
+                        외 {bld!.useAttrs!.length - 12}건
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

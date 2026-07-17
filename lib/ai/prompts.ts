@@ -84,8 +84,66 @@ export function buildUserPrompt(input: ReportInputs): string {
 - 총 연면적: ${formatPyeongAsArea(c.totalArea)} · 총 사업비 ${eok(c.total)}억원
 - 연면적 ㎡당 사업비: ${won(c.total / Math.max(1, pyeongToSqm(c.totalArea)))}원
 - 연면적 평당 사업비: ${won(perPy)}원
-${input.profit ? buildProfitSection(input.profit) : ""}${input.market ? buildMarketSection(input.market) : ""}
-위 데이터에 대해 사업성 종합 평가·핵심 리스크 3가지·추천 검토 사항 3가지·평당 사업비 적정성·다음 단계 권고 3가지·한 줄 요약(30자)을 JSON으로 응답. 주변 시세 데이터가 있으면 설정 분양가·임대료가 시장 시세 대비 적정한지 반드시 평가할 것.`;
+${input.land ? buildLandSection(input.land) : ""}${input.profit ? buildProfitSection(input.profit) : ""}${input.market ? buildMarketSection(input.market) : ""}
+위 데이터에 대해 사업성 종합 평가·핵심 리스크 3가지·추천 검토 사항 3가지·평당 사업비 적정성·다음 단계 권고 3가지·한 줄 요약(30자)을 JSON으로 응답. 주변 시세 데이터가 있으면 설정 분양가·임대료가 시장 시세 대비 적정한지 반드시 평가할 것. 토지 정보(지목·형상·도로접면·토지이용계획·추정 토지가)가 있으면 토지 매입가 적정성과 공법 규제(지역·지구 저촉 포함) 리스크를 반드시 반영할 것.`;
+}
+
+function buildLandSection(l: NonNullable<ReportInputs["land"]>): string {
+  const eok = (v: number) => (v / 1e8).toFixed(2);
+  const man = (v: number) => Math.round(v / 10000).toLocaleString("ko-KR");
+  const lines: string[] = [];
+  lines.push(
+    `- 대상 필지: ${l.address} (PNU ${l.pnu})${l.mergedCount && l.mergedCount > 1 ? ` · 합필 ${l.mergedCount}필지 합산` : ""} · ${l.areaSqm.toLocaleString("ko-KR")}㎡`,
+  );
+  if (l.jimok || l.landUseSituation) {
+    lines.push(
+      `- 지목: ${l.jimok ?? "미상"}${l.landUseSituation ? ` · 이용상황: ${l.landUseSituation}` : ""}${l.zone ? ` · 용도지역: ${l.zone}` : ""}`,
+    );
+  }
+  const phys: string[] = [];
+  if (l.landShape) phys.push(`형상 ${l.landShape}`);
+  if (l.landHeight) phys.push(`지세 ${l.landHeight}`);
+  if (l.roadSide) phys.push(`도로접면 ${l.roadSide}`);
+  if (l.roadVerdict) phys.push(`접도 판정 "${l.roadVerdict}"`);
+  if (phys.length > 0) lines.push(`- 토지 물리 특성: ${phys.join(" · ")}`);
+  if (l.useAttrs && l.useAttrs.length > 0) {
+    lines.push(`- 토지이용계획 지역·지구: ${l.useAttrs.slice(0, 12).join(", ")}${l.useAttrs.length > 12 ? ` 외 ${l.useAttrs.length - 12}건` : ""}`);
+  }
+  if (l.publicPricePerSqm && l.publicPricePerSqm > 0) {
+    lines.push(
+      `- 개별공시지가: ${l.publicPricePerSqm.toLocaleString("ko-KR")}원/㎡${l.publicPriceYear ? ` (${l.publicPriceYear}년)` : ""} · 총 ${eok(l.publicPricePerSqm * l.areaSqm)}억원`,
+    );
+  }
+  if (l.landTrades) {
+    lines.push(
+      `- 실거래 기반 추정 토지가: ${eok(l.landTrades.estimatedPrice)}억원 (${l.landTrades.basis} · 최근 ${l.landTrades.periodMonths}개월 ${l.landTrades.sampleCount}건 · ㎡당 중앙 ${man(l.landTrades.medianUnitWon)}만원${l.landTrades.ratioToJiga > 0 ? ` · 공시지가 대비 ${l.landTrades.ratioToJiga}배` : ""})`,
+    );
+  }
+  if (l.buildingPrice) {
+    lines.push(`- 기존 건물 추정가: ${eok(l.buildingPrice.value)}억원 (${l.buildingPrice.method})`);
+  }
+  if (l.newbuild) {
+    const nb: string[] = [];
+    if (l.newbuild.resTradeCount > 0)
+      nb.push(`주거 매매 ㎡당 ${man(l.newbuild.resTradeUnitWon)}만원(${l.newbuild.resTradeCount}건)`);
+    if (l.newbuild.resJeonseCount > 0)
+      nb.push(`주거 전세 ㎡당 ${man(l.newbuild.resJeonseUnitWon)}만원(${l.newbuild.resJeonseCount}건)`);
+    if (l.newbuild.comF1Count > 0)
+      nb.push(`상가 1층 ㎡당 ${man(l.newbuild.comF1UnitWon)}만원(${l.newbuild.comF1Count}건)`);
+    if (nb.length > 0)
+      lines.push(`- 인근 신축 시세 (최근 ${l.newbuild.periodMonths}개월 실거래 중앙값): ${nb.join(" · ")}`);
+  }
+  if (l.permits && l.permits.length > 0) {
+    lines.push(
+      `- 건축 인허가 이력: ${l.permits
+        .map((p) => `${p.permitDay || "일자미상"} ${p.archGb || p.mainUse || "건축물"}(${p.status}${p.totArea > 0 ? `, ${p.totArea.toLocaleString("ko-KR")}㎡` : ""})`)
+        .join(" / ")}`,
+    );
+  }
+  return `
+[토지 정보·시세 분석 — 지번 조회 (VWorld 토지특성·국토부 실거래가)]
+${lines.join("\n")}
+`;
 }
 
 function buildMarketSection(m: NonNullable<ReportInputs["market"]>): string {

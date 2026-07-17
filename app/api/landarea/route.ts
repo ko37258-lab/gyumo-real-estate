@@ -14,7 +14,7 @@
 //     사용자에게 "잠시 후 다시" 안내(200평 기본값으로 조용히 떨어지지 않게).
 //   - PNU별 결과 24시간 캐싱 → 동일 주소 재조회 시 API 호출 없음(트래픽·장애 보호).
 import { NextResponse } from "next/server";
-import { fetchVworldLandChar } from "@/lib/vworld-data";
+import { fetchVworldLandChar, fetchVworldLandUseAttr } from "@/lib/vworld-data";
 
 type AreaSource = "building" | "vworld";
 
@@ -35,6 +35,11 @@ interface AreaResult {
   priceYear?: number; // 공시 기준연도
   jimok?: string; // 지목
   zone?: string; // 용도지역 (비도시지역 포함 — NED getLandCharacteristics)
+  roadSide?: string; // 도로접면 (예: 세로(가))
+  landShape?: string; // 토지형상 (예: 세로장방)
+  landHeight?: string; // 지세 (예: 평지)
+  landUse?: string; // 토지이용상황 (예: 단독주택)
+  useAttrs?: string[]; // 토지이용계획 지역·지구 목록 (NED getLandUseAttr, 저촉 표기 포함)
 }
 
 // 소스 호출 결과 — 정상 / 데이터없음(나대지) / 일시오류 3분기.
@@ -161,6 +166,10 @@ async function fromVworldLandChar(pnu: string): Promise<SourceOutcome> {
     priceYear: lc.priceYear || undefined,
     jimok: lc.jimok || undefined,
     zone: lc.zone || undefined,
+    roadSide: lc.roadSide || undefined,
+    landShape: lc.landShape || undefined,
+    landHeight: lc.landHeight || undefined,
+    landUse: lc.landUse || undefined,
   };
   const hasExtra = lc.price > 0 || !!lc.jimok || !!lc.zone;
 
@@ -219,9 +228,11 @@ export async function GET(request: Request) {
     //   - 건축물대장(getBrTitleInfo): 건물 있는 땅의 대지면적 + 건폐율·용적률·주용도.
     //   - VWorld NED(getLandCharacteristics): 면적 + 공시지가 + 지목 + 용도지역(비도시 포함).
     // 면적은 건축물대장 우선(인허가 기준), 나머지(용도지역·공시지가·지목)는 NED에서.
-    const [building, vworld] = await Promise.all([
+    const [building, vworld, useAttrs] = await Promise.all([
       trySourceWithRetry(() => fromBuildingLedger(pnu, pkey)),
       trySourceWithRetry(() => fromVworldLandChar(pnu)),
+      // 토지이용계획 지역·지구 — best-effort (실패해도 나머지 응답에 영향 없음)
+      fetchVworldLandUseAttr(pnu).catch(() => null),
     ]);
 
     const b = building.status === "ok" ? building.data : null;
@@ -252,11 +263,17 @@ export async function GET(request: Request) {
         bldName: b?.bldName,
         archArea: b?.archArea,
         totArea: b?.totArea,
-        // NED 토지특성 (용도지역·공시지가·지목)
+        // NED 토지특성 (용도지역·공시지가·지목 + 도로접면·형상·지세·이용상황)
         price: v?.price,
         priceYear: v?.priceYear,
         jimok: v?.jimok,
         zone: v?.zone,
+        roadSide: v?.roadSide,
+        landShape: v?.landShape,
+        landHeight: v?.landHeight,
+        landUse: v?.landUse,
+        // 토지이용계획 지역·지구 (NED getLandUseAttr)
+        useAttrs: useAttrs ?? undefined,
       };
       cache.set(pnu, { at: Date.now(), data: merged });
       if (area) return NextResponse.json(merged);

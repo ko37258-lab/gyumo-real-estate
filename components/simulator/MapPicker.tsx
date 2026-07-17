@@ -119,6 +119,7 @@ export default function MapPicker({
   multiSelect = false,
   baseAddress = null,
   onMergeAll,
+  autoLookup = false,
 }: {
   onPick: (address: string) => void;
   /** 단일 모드 확인 버튼 라벨 */
@@ -129,6 +130,8 @@ export default function MapPicker({
   baseAddress?: string | null;
   /** 다중 선택 일괄 조회 콜백 (선택된 지번주소 배열) */
   onMergeAll?: (addresses: string[]) => void;
+  /** 단일 모드에서 클릭 즉시 조회 (플렉시티식 — 확인 버튼 생략, 조회 1회 차감) */
+  autoLookup?: boolean;
 }) {
   const parcelShape = useSimulatorStore((s) => s.parcelShape);
   const [picking, setPicking] = useState(false);
@@ -143,10 +146,12 @@ export default function MapPicker({
 
   const baseJibun = baseAddress ? baseAddress.split(" ").pop() : null;
 
-  /** 클릭 확정 처리 — 단일: 후보 칩 / 다중: 선택 토글 */
+  /** 클릭 확정 처리 — 단일: 후보 칩(즉시조회 모드면 바로 조회) / 다중: 선택 토글 */
   const handleResolved = (p: PickedParcel | null) => {
     if (!multiSelect) {
       setCandidate(p);
+      // 플렉시티식 즉시 조회 — 클릭 = 조회 (오클릭도 한도 차감되므로 안내문 병기)
+      if (autoLookup && p) onPick(p.address);
       return;
     }
     if (!p) return;
@@ -344,18 +349,25 @@ export default function MapPicker({
           >
             <span className="min-w-0 truncate text-[11.5px] font-medium text-foreground">
               📍 {candidate.address}
+              {autoLookup && (
+                <span className="ml-1 text-[10px]" style={{ color: "#2563EB" }}>
+                  — 조회 중...
+                </span>
+              )}
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                onPick(candidate.address);
-                setCandidate(null);
-              }}
-              className="shrink-0 text-[11px] font-bold px-2.5 py-1 rounded"
-              style={{ background: "#2563EB", color: "#fff" }}
-            >
-              {confirmLabel}
-            </button>
+            {!autoLookup && (
+              <button
+                type="button"
+                onClick={() => {
+                  onPick(candidate.address);
+                  setCandidate(null);
+                }}
+                className="shrink-0 text-[11px] font-bold px-2.5 py-1 rounded"
+                style={{ background: "#2563EB", color: "#fff" }}
+              >
+                {confirmLabel}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setCandidate(null)}
@@ -372,7 +384,9 @@ export default function MapPicker({
           >
             {picking
               ? "⏳ 필지 확인 중..."
-              : "➕ 십자 커서로 필지를 클릭하면 지번을 확인한 뒤 조회할 수 있습니다"}
+              : autoLookup
+                ? "➕ 필지를 클릭하면 즉시 조회됩니다 (조회 1회 차감)"
+                : "➕ 십자 커서로 필지를 클릭하면 지번을 확인한 뒤 조회할 수 있습니다"}
           </div>
         )}
       </div>

@@ -8,9 +8,17 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface Body {
-  provider: "gemini" | "claude";
-  apiKey: string;
+  provider?: "gemini" | "claude";
+  apiKey?: string;
   input: ReportInputs;
+}
+
+/** 서버 내장 분석 키 가용 여부 — ReportDialog가 열릴 때 확인 */
+export async function GET() {
+  return NextResponse.json({
+    serverGemini: Boolean(process.env.GEMINI_API_KEY),
+    serverClaude: Boolean(process.env.ANTHROPIC_API_KEY),
+  });
 }
 
 function stripCodeFence(text: string): string {
@@ -57,13 +65,15 @@ async function callGemini(apiKey: string, userPrompt: string): Promise<string> {
 async function callClaude(apiKey: string, userPrompt: string): Promise<string> {
   const client = new Anthropic({ apiKey });
   const res = await client.messages.create({
-    model: "claude-3-5-sonnet-20241022",
-    max_tokens: 1500,
+    model: "claude-sonnet-5",
+    max_tokens: 2000,
+    // JSON 추출 작업이라 사고 과정 불필요 — Sonnet 5는 생략 시 adaptive가 기본이므로 명시적으로 끔
+    thinking: { type: "disabled" },
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userPrompt }],
   });
-  const block = res.content[0];
-  if (block.type !== "text") throw new Error("Claude 응답이 텍스트가 아닙니다.");
+  const block = res.content.find((b) => b.type === "text");
+  if (!block) throw new Error("Claude 응답이 텍스트가 아닙니다.");
   return block.text;
 }
 
@@ -75,10 +85,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "잘못된 요청 본문" }, { status: 400 });
   }
 
-  const { provider, apiKey, input } = body;
+  let { provider, apiKey } = body;
+  const { input } = body;
+
+  // 서버 내장 키 폴백 — 사용자가 키를 등록하지 않아도 분석 가능 (BYOK는 그대로 우선)
+  if (!apiKey) {
+    if (provider === "gemini" && process.env.GEMINI_API_KEY) {
+      apiKey = process.env.GEMINI_API_KEY;
+    } else if (provider === "claude" && process.env.ANTHROPIC_API_KEY) {
+      apiKey = process.env.ANTHROPIC_API_KEY;
+    } else if (!provider) {
+      if (process.env.GEMINI_API_KEY) {
+        provider = "gemini";
+        apiKey = process.env.GEMINI_API_KEY;
+      } else if (process.env.ANTHROPIC_API_KEY) {
+        provider = "claude";
+        apiKey = process.env.ANTHROPIC_API_KEY;
+      }
+    }
+  }
+
   if (!provider || !apiKey) {
     return NextResponse.json(
-      { error: "provider 또는 apiKey가 누락되었습니다." },
+      {
+        error:
+          "분석 키가 없습니다 — 설정에서 개인 키를 등록하거나, 운영자가 서버 환경변수(GEMINI_API_KEY 또는 ANTHROPIC_API_KEY)를 등록해야 합니다.",
+      },
       { status: 400 },
     );
   }

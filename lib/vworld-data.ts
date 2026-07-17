@@ -92,6 +92,11 @@ export interface VworldLandChar {
   zone: string; // 용도지역 (prposArea1Nm — 비도시지역 포함)
   jibun: string; // 지번 표기 (현재 NED 미제공 → 빈 문자열, backward-compat)
   address: string; // 주소 (현재 NED 미제공 → 빈 문자열)
+  // 플렉시티식 토지특성 상세 (있을 때만)
+  roadSide: string; // 도로접면 (roadSideCodeNm — 예: 세로(가), 광대한면)
+  landShape: string; // 토지형상 (tpgrphFrmCodeNm — 예: 세로장방, 부정형)
+  landHeight: string; // 지세/고저 (tpgrphHgCodeNm — 예: 평지, 완경사)
+  landUse: string; // 토지이용상황 (ladUseSittnNm — 예: 단독주택, 상업용)
 }
 
 const VWORLD_NED_ENDPOINT = "https://api.vworld.kr/ned/data";
@@ -154,6 +159,10 @@ export async function fetchVworldLandChar(
   if (!field) return null; // 해당 필지 없음(나대지 외 미등록) 또는 totalCount 0
 
   const zoneRaw = String(field.prposArea1Nm ?? "").trim();
+  const cleanNm = (v: unknown) => {
+    const s = String(v ?? "").trim();
+    return s && s !== "지정되지않음" ? s : "";
+  };
   return {
     pnu: vpnu,
     area: Math.round((Number(field.lndpclAr) || 0) * 10) / 10,
@@ -163,7 +172,63 @@ export async function fetchVworldLandChar(
     zone: zoneRaw && zoneRaw !== "지정되지않음" ? zoneRaw : "",
     jibun: "",
     address: "",
+    roadSide: cleanNm(field.roadSideCodeNm),
+    landShape: cleanNm(field.tpgrphFrmCodeNm),
+    landHeight: cleanNm(field.tpgrphHgCodeNm),
+    landUse: cleanNm(field.ladUseSittnNm),
   };
+}
+
+type NedLandUseResponse = {
+  landUses?: {
+    field?: Record<string, unknown> | Array<Record<string, unknown>>;
+  };
+};
+
+/**
+ * VWorld NED 토지이용계획속성(getLandUseAttr) — 국토계획법 지역·지구 전체 목록.
+ * 플렉시티의 "토지이용계획" 배지에 대응. 저촉 필지는 "(저촉)" 표기.
+ * best-effort — 실패/미제공 시 null (핵심 조회 흐름을 막지 않음).
+ */
+export async function fetchVworldLandUseAttr(
+  pnu: string,
+): Promise<string[] | null> {
+  const key = vworldKey();
+  if (!key) return null;
+  const vpnu = toVworldPnu(pnu);
+  const url =
+    `${VWORLD_NED_ENDPOINT}/getLandUseAttr` +
+    `?key=${key}&domain=${vworldDomain()}&pnu=${vpnu}&format=json&numOfRows=100&pageNo=1`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; gyumo/1.0)",
+        Accept: "application/json",
+        ...(vworldDomain() ? { Referer: `https://${vworldDomain()}` } : {}),
+      },
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text.trim()) return null;
+    const data = JSON.parse(text) as NedLandUseResponse;
+    const raw = data.landUses?.field;
+    const rows = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter(
+      (x): x is Record<string, unknown> => !!x && typeof x === "object",
+    );
+    const names: string[] = [];
+    for (const r of rows) {
+      const nm = String(
+        r.prposAreaDstrcCodeNm ?? r.prposAreaDstrcNm ?? "",
+      ).trim();
+      if (!nm) continue;
+      const cnflc = String(r.cnflcAtNm ?? r.cnflcAt ?? "").trim();
+      const label = /저촉/.test(cnflc) ? `${nm}(저촉)` : nm;
+      if (!names.includes(label)) names.push(label);
+    }
+    return names.length > 0 ? names : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface VworldParcelPolygon {

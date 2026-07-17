@@ -1,6 +1,53 @@
+/** ① 지번 조회(LandLookup) 결과 스냅샷 — 토지특성·실거래 추정가·신축시세·인허가. */
+export interface ReportLandInfo {
+  address: string;
+  pnu: string;
+  fetchedAt: string;
+  areaSqm: number;
+  mergedCount?: number;
+  jimok?: string;
+  zone?: string;
+  publicPricePerSqm?: number; // 원/㎡
+  publicPriceYear?: number;
+  roadSide?: string; // 도로접면 (예: 세로(가))
+  landShape?: string; // 토지형상 (예: 세로장방)
+  landHeight?: string; // 지세 (예: 평지)
+  landUseSituation?: string; // 토지이용상황 (예: 단독주택)
+  useAttrs?: string[]; // 토지이용계획 지역·지구 목록
+  roadVerdict?: string; // 접도 판정 라벨
+  landTrades?: {
+    sampleCount: number;
+    periodMonths: number;
+    basis: string;
+    medianUnitWon: number; // ㎡당 중앙값 원
+    estimatedPrice: number; // 추정 토지가 원
+    jigaTotal: number; // 공시지가 총액 원
+    ratioToJiga: number; // 추정가/공시지가 배수
+  };
+  newbuild?: {
+    periodMonths: number;
+    resTradeUnitWon: number; // 주거 매매 ㎡당 원
+    resTradeCount: number;
+    resJeonseUnitWon: number;
+    resJeonseCount: number;
+    comF1UnitWon: number; // 상가 1층 ㎡당 원
+    comF1Count: number;
+  };
+  buildingPrice?: { value: number; method: string };
+  permits?: Array<{
+    status: string; // 사용승인/착공/허가
+    permitDay: string;
+    archGb: string;
+    mainUse: string;
+    totArea: number;
+  }>;
+}
+
 export interface ReportInputs {
   address?: string;
   reviewDate: string;
+  /** 지번 조회 결과 (토지특성·추정가·신축시세·인허가) — 조회된 주소와 일치할 때만 포함. */
+  land?: ReportLandInfo;
   /** 3D 매스 캡쳐 (base64 PNG dataURL) — PDF에 임베드. AI 프롬프트에는 보내지 않음. */
   visualization3D?: string;
   scale: {

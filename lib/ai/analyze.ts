@@ -8,17 +8,38 @@ import {
 } from "./keys";
 import type { AIAnalysis, ReportInputs } from "./types";
 
+/** 서버 내장 분석 키 가용 여부 — ReportDialog가 열릴 때 확인. */
+export type ServerKeyStatus = { serverGemini: boolean; serverClaude: boolean };
+
+export async function fetchServerKeys(): Promise<ServerKeyStatus> {
+  try {
+    const res = await fetch("/api/ai/analyze");
+    if (!res.ok) return { serverGemini: false, serverClaude: false };
+    const j = (await res.json()) as Partial<ServerKeyStatus>;
+    return {
+      serverGemini: Boolean(j.serverGemini),
+      serverClaude: Boolean(j.serverClaude),
+    };
+  } catch {
+    return { serverGemini: false, serverClaude: false };
+  }
+}
+
 export async function analyzeReport(input: ReportInputs): Promise<AIAnalysis> {
   const provider: AIProvider = getActiveProvider();
-  if (!provider) {
-    throw new Error("AI API 키가 등록되지 않았습니다. /settings에서 등록하세요.");
-  }
-  const apiKey = provider === "gemini" ? getGeminiKey() : getClaudeKey();
+  // BYOK 우선, 없으면 provider/apiKey 생략 → 서버가 환경변수 키로 자동 분석 (서버 폴백)
+  const body = provider
+    ? {
+        provider,
+        apiKey: provider === "gemini" ? getGeminiKey() : getClaudeKey(),
+        input,
+      }
+    : { input };
 
   const res = await fetch("/api/ai/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, apiKey, input }),
+    body: JSON.stringify(body),
   });
 
   let payload: { analysis?: AIAnalysis; error?: string } = {};

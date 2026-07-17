@@ -442,8 +442,90 @@ function SummaryPage({
         ]}
       />
 
+      {input.land && <LandInfoBox land={input.land} brand={brand} />}
+
       {input.profit && <ProfitKpiBox profit={input.profit} brand={brand} />}
     </Page>
+  );
+}
+
+/** 토지 정보·시세 (① 지번 조회 결과) — 지목·형상·도로접면·토지이용계획·추정가. */
+function LandInfoBox({
+  land,
+  brand,
+}: {
+  land: NonNullable<ReportInputs["land"]>;
+  brand: BrandConfig;
+}) {
+  const eok = (v: number) =>
+    `${(v / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억원`;
+  const rows: [string, string][] = [];
+
+  if (land.jimok || land.landUseSituation) {
+    rows.push([
+      "지목 / 이용상황",
+      `${land.jimok ?? "미상"}${land.landUseSituation ? ` / ${land.landUseSituation}` : ""}`,
+    ]);
+  }
+  const phys = [
+    land.landShape ? `형상 ${land.landShape}` : null,
+    land.landHeight ? `지세 ${land.landHeight}` : null,
+    land.roadSide ? `도로접면 ${land.roadSide}` : null,
+    land.roadVerdict ? `접도 ${land.roadVerdict}` : null,
+  ].filter(Boolean);
+  if (phys.length > 0) rows.push(["토지 특성", phys.join(" · ")]);
+  if (land.useAttrs && land.useAttrs.length > 0) {
+    rows.push([
+      "토지이용계획",
+      `${land.useAttrs.slice(0, 8).join(", ")}${land.useAttrs.length > 8 ? ` 외 ${land.useAttrs.length - 8}건` : ""}`,
+    ]);
+  }
+  if (land.publicPricePerSqm && land.publicPricePerSqm > 0) {
+    rows.push([
+      `개별공시지가${land.publicPriceYear ? ` (${land.publicPriceYear})` : ""}`,
+      `${fmtNum(land.publicPricePerSqm)}원/㎡ · 총 ${eok(land.publicPricePerSqm * land.areaSqm)}`,
+    ]);
+  }
+  if (land.landTrades) {
+    rows.push([
+      "실거래 기반 추정 토지가",
+      `${eok(land.landTrades.estimatedPrice)} (${land.landTrades.sampleCount}건${land.landTrades.ratioToJiga > 0 ? ` · 공시지가 ${land.landTrades.ratioToJiga}배` : ""})`,
+    ]);
+  }
+  if (land.buildingPrice) {
+    rows.push([
+      "기존 건물 추정가",
+      `${eok(land.buildingPrice.value)} (${land.buildingPrice.method})`,
+    ]);
+  }
+  if (land.newbuild && land.newbuild.resTradeCount > 0) {
+    rows.push([
+      "인근 신축 주거 시세",
+      `㎡당 ${fmtNum(Math.round(land.newbuild.resTradeUnitWon / 10000))}만원 (매매 ${land.newbuild.resTradeCount}건 중앙값)`,
+    ]);
+  }
+  if (land.permits && land.permits.length > 0) {
+    rows.push([
+      "건축 인허가 이력",
+      land.permits
+        .map((p) => `${p.permitDay || ""} ${p.archGb || p.mainUse || "건축물"}(${p.status})`)
+        .join(" / "),
+    ]);
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <View wrap={false} style={{ marginTop: 14 }}>
+      <PdfText style={styles.h3}>
+        토지 정보·시세 (지번 조회 · VWorld/국토부 실거래가)
+      </PdfText>
+      <TwoColTable rows={rows} />
+      <PdfText style={[styles.muted, { marginTop: 4 }]}>
+        ※ 추정가는 실거래 통계 기반 참고치로 감정평가가 아닙니다. 규제·저촉 여부는{" "}
+        {brand.legalAdvisor} 및 관할청 확인을 권장합니다.
+      </PdfText>
+    </View>
   );
 }
 

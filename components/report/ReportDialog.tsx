@@ -21,7 +21,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { analyzeReport } from "@/lib/ai/analyze";
+import {
+  analyzeReport,
+  fetchServerKeys,
+  type ServerKeyStatus,
+} from "@/lib/ai/analyze";
 import { formatEok } from "@/lib/calc/cost";
 import {
   getActiveProvider,
@@ -87,10 +91,16 @@ export function ReportDialog() {
   const [pdfStatus, setPdfStatus] = useState<PdfStatus>("idle");
   // useSyncExternalStore로 LocalStorage 키 상태를 SSR-safe하게 구독.
   const provider: AIProvider = useActiveProvider();
+  // 서버 내장 분석 키 (GEMINI_API_KEY/ANTHROPIC_API_KEY 환경변수) 가용 여부 — 열 때 1회 확인.
+  const [serverKeys, setServerKeys] = useState<ServerKeyStatus | null>(null);
+  const serverReady = Boolean(serverKeys?.serverGemini || serverKeys?.serverClaude);
 
   // Dialog open 토글 — 에러 상태에서 다시 열면 idle로 초기화 (ready는 보존).
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
+    if (next && serverKeys === null) {
+      void fetchServerKeys().then(setServerKeys);
+    }
     if (next && status === "error") {
       setStatus("idle");
       setErrorMsg("");
@@ -106,8 +116,10 @@ export function ReportDialog() {
     console.log("[ReportDialog] AI 분석 시작 클릭됨");
 
     const activeProvider = getActiveProvider();
-    if (!activeProvider) {
-      setErrorMsg("API 키가 등록되지 않았습니다. 설정 페이지에서 키를 입력해주세요.");
+    if (!activeProvider && !serverReady) {
+      setErrorMsg(
+        "분석 키가 없습니다. 설정 페이지에서 개인 키를 등록하거나, 운영자에게 서버 분석 활성화를 요청하세요.",
+      );
       setStatus("error");
       return;
     }
@@ -261,6 +273,8 @@ export function ReportDialog() {
           {status === "idle" && (
             <IdleView
               provider={provider}
+              serverReady={serverReady}
+              serverChecking={serverKeys === null}
               onStart={handleStart}
               onSkip={handleSkip}
             />
@@ -282,6 +296,7 @@ export function ReportDialog() {
           <DebugDetails
             status={status}
             provider={provider}
+            serverKeys={serverKeys}
             errorMsg={errorMsg}
           />
         </div>
@@ -328,13 +343,18 @@ export function ReportDialog() {
 /* ── idle ─────────────────────────────────────────────── */
 function IdleView({
   provider,
+  serverReady,
+  serverChecking,
   onStart,
   onSkip,
 }: {
   provider: AIProvider;
+  serverReady: boolean;
+  serverChecking: boolean;
   onStart: () => void;
   onSkip: () => void;
 }) {
+  const canAnalyze = Boolean(provider) || serverReady;
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground leading-relaxed">
@@ -346,12 +366,20 @@ function IdleView({
 
       <Card
         className={`p-4 ${
-          provider ? "border-[var(--success)]/60" : "border-amber-500/60"
+          canAnalyze ? "border-[var(--success)]/60" : "border-amber-500/60"
         }`}
       >
         {provider ? (
           <div className="flex items-center gap-2 text-[var(--success)] text-[13px] font-medium">
-            <CheckIcon className="size-4" /> ✓ 분석 준비 완료
+            <CheckIcon className="size-4" /> ✓ 분석 준비 완료 (내 API 키)
+          </div>
+        ) : serverReady ? (
+          <div className="flex items-center gap-2 text-[var(--success)] text-[13px] font-medium">
+            <CheckIcon className="size-4" /> ✓ 분석 준비 완료 — 별도 설정 없이 바로 분석됩니다
+          </div>
+        ) : serverChecking ? (
+          <div className="flex items-center gap-2 text-muted-foreground text-[13px] font-medium">
+            <Loader2Icon className="size-4 animate-spin" /> 분석 환경 확인 중...
           </div>
         ) : (
           <div className="space-y-3">
@@ -372,7 +400,7 @@ function IdleView({
       <div className="flex flex-wrap gap-2">
         <Button
           onClick={onStart}
-          disabled={!provider}
+          disabled={!canAnalyze}
           size="lg"
           className="flex-1 bg-[#993C1D] hover:bg-[#7A2F16] disabled:bg-secondary disabled:text-muted-foreground"
         >
@@ -592,10 +620,12 @@ function ErrorView({
 function DebugDetails({
   status,
   provider,
+  serverKeys,
   errorMsg,
 }: {
   status: ReportStatus;
   provider: AIProvider;
+  serverKeys: ServerKeyStatus | null;
   errorMsg: string;
 }) {
   return (
@@ -604,6 +634,12 @@ function DebugDetails({
       <div className="mt-2 space-y-1 font-mono">
         <div>현재 상태: {status}</div>
         <div>활성 제공자: {provider || "없음"}</div>
+        <div>
+          서버 내장 키:{" "}
+          {serverKeys === null
+            ? "미확인"
+            : `Gemini ${serverKeys.serverGemini ? "✓" : "✗"} · Claude ${serverKeys.serverClaude ? "✓" : "✗"}`}
+        </div>
         <div>
           Gemini 키:{" "}
           {getGeminiKey() ? maskKey(getGeminiKey()) : "미등록"}
