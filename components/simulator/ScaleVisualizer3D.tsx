@@ -20,6 +20,7 @@ import {
 import { calculateGroundParking } from "@/lib/calc/groundParking";
 import { PARKING_STANDARDS, SQM_PER_SPACE } from "@/lib/parking-standards";
 import { getUseStyle } from "@/lib/building-use";
+import { calculateSchematic, RESIDENTIAL_USAGES } from "@/lib/calc/schematic";
 import {
   scalePolygon,
   clipPolygonBelowY,
@@ -158,6 +159,8 @@ function Scene({
   const parkingPilotiMode = useSimulatorStore((s) => s.parkingPilotiMode);
   const mergedParcels = useSimulatorStore((s) => s.mergedParcels);
   const parcelShape = useSimulatorStore((s) => s.parcelShape);
+  const schematicUnitSqm = useSimulatorStore((s) => s.schematicUnitSqm);
+  const schematicEfficiencyPct = useSimulatorStore((s) => s.schematicEfficiencyPct);
 
   const z = ZONES[zone];
   const sunOn = sunOnRaw && z.residential;
@@ -211,6 +214,22 @@ function Scene({
     bldArea > 0 && gp.groundParkingArea > 0
       ? Math.min(1, gp.groundParkingArea / bldArea)
       : 0;
+
+  // ⑥ 가설계 — 주거계 용도면 세대수·코어를 3D에 반영
+  const schematic = RESIDENTIAL_USAGES.includes(parkingUsage)
+    ? calculateSchematic({
+        floorAreaSqm: bldArea,
+        floors,
+        exclusiveUnitSqm: schematicUnitSqm,
+        efficiencyPct: schematicEfficiencyPct,
+        groundPiloti:
+          (parkingMode === "ground" || parkingMode === "mixed") &&
+          parkingPilotiMode,
+      })
+    : null;
+  const massLabel =
+    useStyle.usageLabel +
+    (schematic?.feasible ? ` ${schematic.totalUnits}세대` : "");
 
   // 실형상 폴리곤 있으면 남/북 경계를 폴리곤 bounds 기준으로 (z = -y_north)
   const pb = parcelShape ? parcelShape.bounds : null;
@@ -390,7 +409,7 @@ function Scene({
           glassColor={useStyle.glass}
           edgeColor={useStyle.edge}
           useIcon={useStyle.icon}
-          useLabel={useStyle.usageLabel}
+          useLabel={massLabel}
         />
       ) : (
         <BuildingMass
@@ -406,7 +425,17 @@ function Scene({
           glassColor={useStyle.glass}
           edgeColor={useStyle.edge}
           useIcon={useStyle.icon}
-          useLabel={useStyle.usageLabel}
+          useLabel={massLabel}
+        />
+      )}
+
+      {/* ⑥ 가설계 코어 타워 (주거계 · 옥탑 계단실 포함) */}
+      {schematic?.feasible && schematic.corePerFloorSqm > 1 && heightM > 0 && (
+        <CoreTower
+          coreSqm={schematic.corePerFloorSqm}
+          maxSide={bldSide * 0.55}
+          heightM={heightM}
+          z={parcelShape ? 0 : bldOffsetZ}
         />
       )}
 
@@ -1308,6 +1337,51 @@ function ParcelMass({
           </div>
         </Html>
       )}
+    </group>
+  );
+}
+
+/** ⑥ 가설계 코어 타워 — 기준층 코어면적을 정사각 근사해 옥탑(+1.2m)까지 표시. */
+function CoreTower({
+  coreSqm,
+  maxSide,
+  heightM,
+  z,
+}: {
+  coreSqm: number;
+  maxSide: number;
+  heightM: number;
+  z: number;
+}) {
+  const side = Math.min(Math.sqrt(Math.max(coreSqm, 1)), Math.max(maxSide, 2));
+  const h = heightM + 1.2; // 옥탑 계단실 돌출
+  return (
+    <group position={[0, h / 2, z]}>
+      <mesh castShadow>
+        <boxGeometry args={[side, h, side]} />
+        <meshStandardMaterial color="#8B8F96" roughness={0.9} />
+      </mesh>
+      <Html
+        position={[0, h / 2 + 0.8, 0]}
+        center
+        distanceFactor={38}
+        style={{ pointerEvents: "none" }}
+      >
+        <div
+          style={{
+            background: "rgba(255,255,255,0.92)",
+            border: "1px solid #6B7280",
+            borderRadius: 4,
+            padding: "1px 5px",
+            fontSize: 10,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
+            color: "#374151",
+          }}
+        >
+          코어 {Math.round(coreSqm)}㎡
+        </div>
+      </Html>
     </group>
   );
 }

@@ -63,6 +63,25 @@ export function calculateSchematic(i: SchematicInput): SchematicResult {
   };
 }
 
+import type { ParkingUsageCode } from "@/lib/parking-standards";
+
+/** ⑥ 가설계 활성 대상 (세대 개념이 있는 주거계 용도) — UI·3D 공용 */
+export const RESIDENTIAL_USAGES: ParkingUsageCode[] = [
+  "공동주택",
+  "다세대연립",
+  "다가구",
+  "도시형생활주택",
+  "오피스텔",
+];
+
+/** 주차 tieredHousehold 배정 가능한 용도 (전용면적 티어 보유) */
+export const TIERED_USAGES: ParkingUsageCode[] = [
+  "공동주택",
+  "다세대연립",
+  "오피스텔",
+  "도시형생활주택",
+];
+
 /** 유닛 전용면적 프리셋 (시장 통용 타입) */
 export const UNIT_PRESETS = [
   { sqm: 29, label: "29㎡ (원룸·도생)" },

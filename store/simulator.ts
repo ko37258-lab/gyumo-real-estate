@@ -67,6 +67,12 @@ type SimulatorState = {
   /** 연속지적도 실형상 폴리곤 (지번 조회 성공 시 세팅, null = 정사각형 가정) */
   parcelShape: ParcelShape | null;
 
+  /** ⑥ 가설계 입력 — SchematicPlanner·3D 세대 라벨·코어 표시 공유 */
+  schematicUnitSqm: number;
+  schematicEfficiencyPct: number;
+  /** 인근 신축 주거 매매 ㎡당 시세 (전용 기준, 원) — 지번 조회 시 자동 저장, 0=미조회 */
+  newbuildResUnitWon: number;
+
   setAddress: (v: string) => void;
   setMergedParcels: (parcels: MergedParcel[]) => void;
   applyLotInfo: (info: LotInfo) => void;
@@ -89,6 +95,9 @@ type SimulatorState = {
   setParkingPilotiMode: (v: boolean) => void;
   setCapture3D: (fn: (() => string) | null) => void;
   setParcelShape: (shape: ParcelShape | null) => void;
+  setSchematicUnitSqm: (v: number) => void;
+  setSchematicEfficiencyPct: (v: number) => void;
+  setNewbuildResUnitWon: (v: number) => void;
 };
 
 const initialParking = (() => {
@@ -127,6 +136,9 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   capture3D: null,
   mergedParcels: [],
   parcelShape: null,
+  schematicUnitSqm: 59,
+  schematicEfficiencyPct: 78,
+  newbuildResUnitWon: 0,
 
   setAddress: (v) => set({ address: v }),
   setMergedParcels: (parcels) => set({ mergedParcels: parcels }),
@@ -237,4 +249,14 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   setCapture3D: (fn) => set({ capture3D: fn }),
 
   setParcelShape: (shape) => set({ parcelShape: shape }),
+
+  setSchematicUnitSqm: (v) => {
+    if (Number.isFinite(v) && v > 0) set({ schematicUnitSqm: v });
+  },
+  setSchematicEfficiencyPct: (v) => {
+    if (Number.isFinite(v)) set({ schematicEfficiencyPct: Math.max(40, Math.min(95, v)) });
+  },
+  setNewbuildResUnitWon: (v) => {
+    if (Number.isFinite(v) && v >= 0) set({ newbuildResUnitWon: v });
+  },
 }));

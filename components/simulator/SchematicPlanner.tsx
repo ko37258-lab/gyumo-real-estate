@@ -8,27 +8,18 @@
 
 import { useState } from "react";
 import { useSimulatorStore } from "@/store/simulator";
+import { useProfitStore } from "@/store/profit";
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
 import { lotPyToSqm, buildingFootprintSqm } from "@/lib/calc/coverage";
 import { floorsFromFarAndCov } from "@/lib/calc/far";
 import {
   calculateSchematic,
   UNIT_PRESETS,
+  RESIDENTIAL_USAGES,
+  TIERED_USAGES,
 } from "@/lib/calc/schematic";
 import { PARKING_STANDARDS, type ParkingUsageCode } from "@/lib/parking-standards";
 import { getUseStyle } from "@/lib/building-use";
-
-/** ⑥ 활성 대상 (세대 개념이 있는 주거계 용도) */
-const RESIDENTIAL_USAGES: ParkingUsageCode[] = [
-  "공동주택",
-  "다세대연립",
-  "다가구",
-  "도시형생활주택",
-  "오피스텔",
-];
-
-/** 주차 tieredHousehold 배정 가능한 용도 (전용면적 티어 보유) */
-const TIERED_USAGES: ParkingUsageCode[] = ["공동주택", "다세대연립", "오피스텔", "도시형생활주택"];
 
 export function SchematicPlanner() {
   const lotPy = useSimulatorStore((s) => s.lotPy);
@@ -37,10 +28,14 @@ export function SchematicPlanner() {
   const parkingUsage = useSimulatorStore((s) => s.parkingUsage);
   const parkingMode = useSimulatorStore((s) => s.parkingMode);
   const parkingPilotiMode = useSimulatorStore((s) => s.parkingPilotiMode);
+  const unitSqm = useSimulatorStore((s) => s.schematicUnitSqm);
+  const efficiency = useSimulatorStore((s) => s.schematicEfficiencyPct);
+  const setUnitSqm = useSimulatorStore((s) => s.setSchematicUnitSqm);
+  const setEfficiency = useSimulatorStore((s) => s.setSchematicEfficiencyPct);
+  const newbuildUnitWon = useSimulatorStore((s) => s.newbuildResUnitWon);
 
-  const [unitSqm, setUnitSqm] = useState(59);
-  const [efficiency, setEfficiency] = useState(78);
   const [applied, setApplied] = useState(false);
+  const [profitApplied, setProfitApplied] = useState(false);
 
   const isResidential = RESIDENTIAL_USAGES.includes(parkingUsage);
   const useStyle = getUseStyle(parkingUsage);
@@ -77,6 +72,24 @@ export function SchematicPlanner() {
     );
     setApplied(true);
     setTimeout(() => setApplied(false), 2500);
+  };
+
+  // ── 세대 기반 수익 → 📊 사업성 탭 원클릭 반영 ──
+  // 신축 시세(전용 ㎡당) × 전용률 = 공급면적 ㎡당가 → 평당 분양가 환산.
+  const salesManPerPy =
+    newbuildUnitWon > 0
+      ? Math.round((newbuildUnitWon * (efficiency / 100) * 3.305785) / 10000)
+      : 0;
+  const unitSalePrice = newbuildUnitWon > 0 ? newbuildUnitWon * unitSqm : 0; // 세대당 (원)
+  const grossSales = unitSalePrice * r.totalUnits;
+
+  const applyToProfit = () => {
+    if (salesManPerPy <= 0) return;
+    const p = useProfitStore.getState();
+    p.set("revenueModel", "sales");
+    p.set("salesPricePerPyeong", salesManPerPy);
+    setProfitApplied(true);
+    setTimeout(() => setProfitApplied(false), 2500);
   };
 
   // ── 기준층 개략 배치도 (판상형 · 중앙 코어 가정) ──
@@ -324,6 +337,53 @@ export function SchematicPlanner() {
                   ? "✓ ⑤ 주차 산정에 세대수 반영됨"
                   : `🚗 ⑤ 주차 산정에 ${r.totalUnits}세대 자동 반영 (전용 ${unitSqm}㎡ 구간)`}
               </button>
+
+              {/* 세대 기반 수익 → 사업성 연동 (신축 시세 자동, 지번 조회 필요) */}
+              {salesManPerPy > 0 ? (
+                <div className="rounded-md bg-card border border-border p-2.5 space-y-1.5">
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+                    <span className="text-muted-foreground">
+                      세대당 분양가(인근 신축 시세)
+                      <b className="ml-1 text-foreground">
+                        {(unitSalePrice / 1e8).toFixed(2)}억
+                      </b>
+                    </span>
+                    <span className="text-muted-foreground">
+                      총 분양수입 추정
+                      <b className="ml-1 text-foreground">
+                        {(grossSales / 1e8).toFixed(1)}억
+                      </b>
+                      <span className="ml-1 text-[9.5px]">({r.totalUnits}세대)</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      평당(공급 기준)
+                      <b className="ml-1 text-foreground">
+                        {salesManPerPy.toLocaleString("ko-KR")}만원
+                      </b>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={applyToProfit}
+                    disabled={profitApplied}
+                    className="w-full text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md border transition-colors disabled:opacity-70"
+                    style={
+                      profitApplied
+                        ? { background: "var(--info-bg)", borderColor: "var(--info)", color: "var(--info)" }
+                        : { background: "var(--card)", borderColor: "var(--info)", color: "var(--info)" }
+                    }
+                  >
+                    {profitApplied
+                      ? "✓ 📊 사업성 탭 분양가에 반영됨 (분양 모델)"
+                      : `📊 사업성 탭에 세대 수익 반영 (평당 ${salesManPerPy.toLocaleString("ko-KR")}만원 · 분양 모델)`}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground/80">
+                  💡 ① 지번 조회를 하면 인근 신축 실거래 시세로 세대당 분양가·총 분양수입이 자동 계산되고,
+                  📊 사업성 탭 원클릭 반영이 활성화됩니다.
+                </p>
+              )}
             </>
           ) : (
             <div className="px-3 py-2.5 rounded-md bg-amber-50 border border-amber-300 text-[11px] text-amber-800">

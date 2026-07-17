@@ -152,6 +152,7 @@ export function LandLookup() {
   const setRoadM = useSimulatorStore((s) => s.setRoadM);
   const setMergedParcels = useSimulatorStore((s) => s.setMergedParcels);
   const setParcelShape = useSimulatorStore((s) => s.setParcelShape);
+  const setNewbuildResUnitWon = useSimulatorStore((s) => s.setNewbuildResUnitWon);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -379,6 +380,9 @@ export function LandLookup() {
           })
           .catch(() => null),
       ]);
+
+      // ⑥ 가설계 사업성 연동용 — 신축 주거 매매 ㎡당 시세 store 공유
+      setNewbuildResUnitWon(newbuild?.residential.tradeUnitWon ?? 0);
 
       const out: ApiResult = {
         roads,
