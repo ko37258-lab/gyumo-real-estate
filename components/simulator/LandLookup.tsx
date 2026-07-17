@@ -128,6 +128,8 @@ type ApiResult = {
   landTrades: LandTrades | null;
   /** 신축 시세 (연립다세대·상업 실거래 집계, null = 조회 실패) */
   newbuild: NewbuildPrice | null;
+  /** 기존 건물 추정가 (건축물대장 시가표준액 최신연도 합계, 원. null = 없음/조회실패) */
+  buildingPrice: number | null;
   /** 합필 조회 결과 (2필지 이상) */
   merged?: {
     parcels: MergedParcelRow[];
@@ -317,7 +319,7 @@ export function LandLookup() {
         const parts = geo.refined.split(" ").filter(Boolean);
         return parts.length >= 2 ? parts[parts.length - 2] : "";
       })();
-      const [landTrades, newbuild] = await Promise.all([
+      const [landTrades, newbuild, buildingPrice] = await Promise.all([
         fetch(
           `/api/land-trades?pnu=${geo.pnu}&umd=${encodeURIComponent(umdName)}` +
             `&zone=${encodeURIComponent(zoneName ?? "")}` +
@@ -327,6 +329,25 @@ export function LandLookup() {
           .catch(() => null),
         fetch(`/api/newbuild-price?pnu=${geo.pnu}&umd=${encodeURIComponent(umdName)}`)
           .then(async (r) => (r.ok ? ((await r.json()) as NewbuildPrice) : null))
+          .catch(() => null),
+        // 기존 건물 추정가 — 건축물대장 시가표준액(주택가격) 최신연도 합계 (플렉시티 벤치마킹)
+        fetch(`/api/building?pnu=${geo.pnu}`)
+          .then(async (r) => {
+            if (!r.ok) return null;
+            const d = (await r.json()) as {
+              buildings?: Array<{ priceHistory?: Array<{ year: string; price: number }> }>;
+            };
+            if (!d.buildings?.length) return null;
+            const total = d.buildings.reduce((sum, b) => {
+              const hist = (b.priceHistory ?? []).filter((h) => h.price > 0);
+              if (!hist.length) return sum;
+              const latest = hist.reduce((a, c) =>
+                Number(c.year) > Number(a.year) ? c : a,
+              );
+              return sum + latest.price;
+            }, 0);
+            return total > 0 ? total : null;
+          })
           .catch(() => null),
       ]);
 
@@ -340,6 +361,7 @@ export function LandLookup() {
         permits,
         landTrades,
         newbuild,
+        buildingPrice,
         merged,
       };
       setResult(out);
@@ -929,50 +951,81 @@ export function LandLookup() {
                   ({result.landTrades.basis} · 최근 {result.landTrades.periodMonths}개월 {result.landTrades.sampleCount}건)
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-1.5">
+              {/* 플렉시티식 3분할 가격보드: 추정 토지가 / 공시지가 / 기존 건물 */}
+              <div className="grid grid-cols-3 gap-2 mb-1.5">
                 <div className="rounded bg-[var(--info-bg)] px-2.5 py-1.5">
-                  <div className="text-[9.5px]" style={{ color: "var(--info)" }}>추정 토지 가격</div>
+                  <div className="text-[9.5px] font-semibold" style={{ color: "var(--info)" }}>
+                    추정 토지 가격
+                  </div>
                   <div className="text-[15px] font-bold" style={{ color: "var(--info)" }}>
                     {result.landTrades.estimatedPrice > 0
                       ? `${(result.landTrades.estimatedPrice / 1e8).toFixed(1)}억`
                       : "—"}
                   </div>
-                  {result.landTrades.ratioToJiga > 0 && (
-                    <div className="text-[9.5px] text-muted-foreground">
-                      공시지가 대비 {result.landTrades.ratioToJiga}배
-                    </div>
-                  )}
+                  <div className="text-[9.5px] text-muted-foreground">
+                    {result.landTrades.ratioToJiga > 0
+                      ? `공시지가 대비 ${result.landTrades.ratioToJiga}배`
+                      : `㎡당 중앙 ${Math.round(result.landTrades.medianUnitWon / 10000).toLocaleString("ko-KR")}만`}
+                  </div>
                 </div>
-                <div className="rounded bg-secondary/60 px-2.5 py-1.5">
-                  <div className="text-[9.5px] text-muted-foreground">인근 ㎡당 중앙값</div>
-                  <div className="text-[15px] font-bold text-foreground">
-                    {result.landTrades.medianUnitWon > 0
-                      ? `${Math.round(result.landTrades.medianUnitWon / 10000).toLocaleString("ko-KR")}만원`
+                <div className="rounded bg-emerald-50 border border-emerald-200 px-2.5 py-1.5">
+                  <div className="text-[9.5px] font-semibold text-emerald-700">공시지가</div>
+                  <div className="text-[15px] font-bold text-emerald-700">
+                    {result.landTrades.jigaTotal > 0
+                      ? `${(result.landTrades.jigaTotal / 1e8).toFixed(1)}억`
                       : "—"}
                   </div>
-                  {result.landTrades.jigaTotal > 0 && (
-                    <div className="text-[9.5px] text-muted-foreground">
-                      공시지가 총액 {(result.landTrades.jigaTotal / 1e8).toFixed(1)}억
-                    </div>
-                  )}
+                  <div className="text-[9.5px] text-muted-foreground">
+                    {bld?.price
+                      ? `${Math.round(bld.price / 10000).toLocaleString("ko-KR")}만원/㎡`
+                      : ""}
+                  </div>
+                </div>
+                <div className="rounded bg-secondary/60 px-2.5 py-1.5">
+                  <div className="text-[9.5px] font-semibold text-muted-foreground">
+                    기존 건물 추정가
+                  </div>
+                  <div className="text-[15px] font-bold text-foreground">
+                    {result.buildingPrice
+                      ? `${(result.buildingPrice / 1e8).toFixed(1)}억`
+                      : "—"}
+                  </div>
+                  <div className="text-[9.5px] text-muted-foreground">
+                    {result.buildingPrice ? "시가표준액 기준" : "건물 없음(나대지)"}
+                  </div>
                 </div>
               </div>
-              {result.landTrades.trades.length > 0 && (
-                <div className="space-y-0.5">
-                  {result.landTrades.trades.slice(0, 4).map((t, i) => (
-                    <div key={i} className="flex items-center justify-between text-[10.5px] px-2 py-0.5 rounded bg-secondary/40">
-                      <span className="min-w-0 truncate text-muted-foreground">
-                        {t.yearMonth} · {t.umdNm} {t.jibun || "—"} ({t.jimok}
-                        {t.landUse ? ` · ${t.landUse.replace("지역", "")}` : ""})
-                      </span>
-                      <span className="shrink-0 font-medium text-foreground">
-                        {t.areaSqm}㎡ · {(t.amountWon / 1e8).toFixed(2)}억
-                        <span className="text-muted-foreground"> ({Math.round(t.unitWon / 10000).toLocaleString("ko-KR")}만/㎡)</span>
-                      </span>
+              {result.landTrades.trades.length > 0 && (() => {
+                const myJiga = bld?.price ?? 0; // 대상 필지 공시지가 원/㎡
+                return (
+                  <div className="space-y-0.5">
+                    <div className="flex items-center justify-between text-[9px] text-muted-foreground px-2">
+                      <span>계약 · 소재지 (지목·용도지역)</span>
+                      <span>면적 · 거래가 (㎡당 · 배수*)</span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    {result.landTrades.trades.slice(0, 4).map((t, i) => (
+                      <div key={i} className="flex items-center justify-between text-[10.5px] px-2 py-0.5 rounded bg-secondary/40">
+                        <span className="min-w-0 truncate text-muted-foreground">
+                          {t.yearMonth} · {t.umdNm} {t.jibun || "—"} ({t.jimok}
+                          {t.landUse ? ` · ${t.landUse.replace("지역", "")}` : ""})
+                        </span>
+                        <span className="shrink-0 font-medium text-foreground">
+                          {t.areaSqm}㎡ · {(t.amountWon / 1e8).toFixed(2)}억
+                          <span className="text-muted-foreground">
+                            {" "}({Math.round(t.unitWon / 10000).toLocaleString("ko-KR")}만
+                            {myJiga > 0 ? ` · ${(t.unitWon / myJiga).toFixed(1)}배` : ""})
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                    {myJiga > 0 && (
+                      <div className="text-[9px] text-muted-foreground/80 px-2">
+                        * 배수 = 거래 ㎡당가 ÷ 대상 필지 공시지가(㎡당) — 시세 수준 참고용
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="mt-1 text-[9.5px] text-muted-foreground/80">
                 ※ 국토부 실거래가공개시스템 신고 자료 기반 통계 추정치 — 감정평가가 아니며 개별 필지 조건(도로·형상·개발계획)에 따라 달라질 수 있음.
               </div>

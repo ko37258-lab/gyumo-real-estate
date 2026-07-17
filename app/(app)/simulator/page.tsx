@@ -8,6 +8,7 @@ import { ControlPanel } from "@/components/simulator/ControlPanel";
 import { ScaleVisualizer } from "@/components/simulator/ScaleVisualizer";
 import { ResultMetrics } from "@/components/simulator/ResultMetrics";
 import { ParkingCalculator } from "@/components/simulator/ParkingCalculator";
+import { SchematicPlanner } from "@/components/simulator/SchematicPlanner";
 import { LegalBasis } from "@/components/simulator/LegalBasis";
 import { CostSimulator } from "@/components/simulator/cost/CostSimulator";
 import { ProfitAnalyzer } from "@/components/simulator/profit/ProfitAnalyzer";
@@ -91,6 +92,7 @@ export default function SimulatorPage() {
               <ScaleVisualizer />
               <ResultMetrics />
               <ParkingCalculator />
+              <SchematicPlanner />
               <LegalBasis />
             </div>
           </TabsContent>
