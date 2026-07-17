@@ -128,8 +128,8 @@ type ApiResult = {
   landTrades: LandTrades | null;
   /** 신축 시세 (연립다세대·상업 실거래 집계, null = 조회 실패) */
   newbuild: NewbuildPrice | null;
-  /** 기존 건물 추정가 (건축물대장 시가표준액 최신연도 합계, 원. null = 없음/조회실패) */
-  buildingPrice: number | null;
+  /** 기존 건물 추정가 (원) + 산정 방식. null = 건물 없음/조회 실패 */
+  buildingPrice: { value: number; method: string } | null;
   /** 합필 조회 결과 (2필지 이상) */
   merged?: {
     parcels: MergedParcelRow[];
@@ -330,15 +330,22 @@ export function LandLookup() {
         fetch(`/api/newbuild-price?pnu=${geo.pnu}&umd=${encodeURIComponent(umdName)}`)
           .then(async (r) => (r.ok ? ((await r.json()) as NewbuildPrice) : null))
           .catch(() => null),
-        // 기존 건물 추정가 — 건축물대장 시가표준액(주택가격) 최신연도 합계 (플렉시티 벤치마킹)
+        // 기존 건물 추정가 (플렉시티 벤치마킹) —
+        // ① 건축물대장 시가표준액(주택가격) 최신연도 합계 우선
+        // ② 없으면 연식 감가 추정: 연면적 × 구조별 재조달원가 × 잔가율(내용연수 40년, 잔존 10%)
         fetch(`/api/building?pnu=${geo.pnu}`)
           .then(async (r) => {
             if (!r.ok) return null;
             const d = (await r.json()) as {
-              buildings?: Array<{ priceHistory?: Array<{ year: string; price: number }> }>;
+              buildings?: Array<{
+                totArea?: number;
+                structure?: string;
+                useAprDay?: string;
+                priceHistory?: Array<{ year: string; price: number }>;
+              }>;
             };
             if (!d.buildings?.length) return null;
-            const total = d.buildings.reduce((sum, b) => {
+            const stdTotal = d.buildings.reduce((sum, b) => {
               const hist = (b.priceHistory ?? []).filter((h) => h.price > 0);
               if (!hist.length) return sum;
               const latest = hist.reduce((a, c) =>
@@ -346,7 +353,29 @@ export function LandLookup() {
               );
               return sum + latest.price;
             }, 0);
-            return total > 0 ? total : null;
+            if (stdTotal > 0) return { value: stdTotal, method: "시가표준액 기준" };
+            // 감가 추정 폴백
+            const nowYear = new Date().getFullYear();
+            const est = d.buildings.reduce((sum, b) => {
+              const area = Number(b.totArea) || 0;
+              if (area <= 0) return sum;
+              const year = Number(String(b.useAprDay ?? "").slice(0, 4)) || 0;
+              const age = year > 1900 ? Math.max(0, nowYear - year) : 30;
+              const s = String(b.structure ?? "");
+              // ㎡당 재조달원가 (만원) — 국세청 건물 기준시가 계산 방식 근사
+              const unitMan = /철근|철골|콘크리트/.test(s)
+                ? 110
+                : /벽돌|조적|블록|석/.test(s)
+                  ? 80
+                  : /목/.test(s)
+                    ? 60
+                    : 90;
+              const residual = Math.max(0.1, 1 - age / 40);
+              return sum + area * unitMan * 10000 * residual;
+            }, 0);
+            return est > 0
+              ? { value: Math.round(est), method: "연식 감가 추정" }
+              : null;
           })
           .catch(() => null),
       ]);
@@ -987,11 +1016,13 @@ export function LandLookup() {
                   </div>
                   <div className="text-[15px] font-bold text-foreground">
                     {result.buildingPrice
-                      ? `${(result.buildingPrice / 1e8).toFixed(1)}억`
+                      ? `${(result.buildingPrice.value / 1e8).toFixed(1)}억`
                       : "—"}
                   </div>
                   <div className="text-[9.5px] text-muted-foreground">
-                    {result.buildingPrice ? "시가표준액 기준" : "건물 없음(나대지)"}
+                    {result.buildingPrice
+                      ? result.buildingPrice.method
+                      : "건물 없음(나대지)"}
                   </div>
                 </div>
               </div>
