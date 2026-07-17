@@ -58,3 +58,17 @@ export async function fetchNearbyRoads(
   const d = (await r.json().catch(() => null)) as RoadCheck | null;
   return d;
 }
+
+/** 연속지적도 필지 폴리곤 (경위도 외곽 링) — 서버 프록시 경유. 실형상 2D/3D용 */
+export async function fetchParcelPolygon(
+  pnu: string,
+): Promise<{ ring: Array<[number, number]>; jibun: string } | null> {
+  const r = await fetch(`/api/vworld?kind=parcel&pnu=${pnu}`).catch(() => null);
+  if (!r || !r.ok) return null;
+  const d = (await r.json().catch(() => null)) as {
+    ring?: Array<[number, number]>;
+    jibun?: string;
+  } | null;
+  if (!d?.ring || d.ring.length < 3) return null;
+  return { ring: d.ring, jibun: d.jibun ?? "" };
+}

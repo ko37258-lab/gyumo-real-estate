@@ -6,11 +6,13 @@
 //   GET /api/vworld?kind=landchar&pnu=<19자리>     → 면적·공시지가·지목
 //   GET /api/vworld?kind=zone&x=<경도>&y=<위도>     → 용도지역명
 //   GET /api/vworld?kind=roads&x=<경도>&y=<위도>    → 주변 도로 접면 판정
+//   GET /api/vworld?kind=parcel&pnu=<19자리>       → 연속지적도 필지 폴리곤 (실형상)
 import { NextResponse } from "next/server";
 import {
   fetchVworldLandChar,
   fetchVworldZone,
   fetchVworldRoads,
+  fetchVworldParcelPolygon,
   hasVworldDataKey,
 } from "@/lib/vworld-data";
 
@@ -64,8 +66,20 @@ export async function GET(request: Request) {
       return NextResponse.json(data);
     }
 
+    if (kind === "parcel") {
+      const pnu = searchParams.get("pnu");
+      if (!pnu || pnu.length !== 19) {
+        return NextResponse.json({ error: "pnu(19자리) 필요" }, { status: 400 });
+      }
+      const data = await fetchVworldParcelPolygon(pnu);
+      if (!data) {
+        return NextResponse.json({ error: "필지 폴리곤 없음" }, { status: 404 });
+      }
+      return NextResponse.json(data);
+    }
+
     return NextResponse.json(
-      { error: "kind는 landchar|zone|roads 중 하나여야 합니다" },
+      { error: "kind는 landchar|zone|roads|parcel 중 하나여야 합니다" },
       { status: 400 },
     );
   } catch (e) {

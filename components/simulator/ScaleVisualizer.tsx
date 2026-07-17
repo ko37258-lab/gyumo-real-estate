@@ -17,6 +17,11 @@ import { calculateGroundParking } from "@/lib/calc/groundParking";
 import { PARKING_STANDARDS, SQM_PER_SPACE } from "@/lib/parking-standards";
 import { getUseStyle, type FacadeStyle } from "@/lib/building-use";
 import {
+  scalePolygon,
+  polygonBounds,
+  type Pt,
+} from "@/lib/geo/parcel";
+import {
   Tabs,
   TabsContent,
   TabsList,
@@ -232,6 +237,7 @@ export function ScaleVisualizer() {
   const parkingUnitArea = useSimulatorStore((s) => s.parkingUnitArea);
   const parkingPilotiMode = useSimulatorStore((s) => s.parkingPilotiMode);
   const mergedParcels = useSimulatorStore((s) => s.mergedParcels);
+  const parcelShape = useSimulatorStore((s) => s.parcelShape);
 
   const z = ZONES[zone];
   const sunOn = sunOnRaw && z.residential;
@@ -244,7 +250,16 @@ export function ScaleVisualizer() {
   const bldArea = buildingFootprintSqm(lotSqm, covPct);
   const floors = floorsFromFarAndCov(farPct, covPct);
   const heightM = totalHeightM(floors);
-  const northDepth = Math.sqrt(bldArea);
+
+  // 실형상 footprint (건폐율 √배 축소 근사) — 있으면 입면 깊이도 실형상 기준
+  const bldScaleFactor = Math.sqrt(Math.max(covPct, 1) / 100);
+  const parcelFp = parcelShape
+    ? scalePolygon(parcelShape.pts, bldScaleFactor)
+    : null;
+  const parcelFpBounds = parcelFp ? polygonBounds(parcelFp) : null;
+  const northDepth = parcelFpBounds
+    ? parcelFpBounds.maxY - parcelFpBounds.minY
+    : Math.sqrt(bldArea);
 
   // 주차 대수 → 필요 면적 → 지상/지하 분리
   const parkingStd = PARKING_STANDARDS[parkingUsage];
@@ -300,6 +315,51 @@ export function ScaleVisualizer() {
     const setbackPx = (maxSetback / Math.sqrt(lotSqm)) * lotPx;
     const limitY = ly + Math.min(setbackPx, lotPx * 0.3);
     return { maxSetback, limitY };
+  })();
+
+  // ── 실형상 평면 지오메트리 (연속지적도 폴리곤 → SVG 좌표 변환) ──
+  // 로컬 미터(x=동+, y=북+) → SVG(x=우+, y=하+). 북=위이므로 y 부호 반전.
+  const parcelPlan = (() => {
+    if (!parcelShape || !parcelFp || !parcelFpBounds) return null;
+    const b = parcelShape.bounds;
+    const w = b.maxX - b.minX;
+    const h = b.maxY - b.minY;
+    if (w <= 0 || h <= 0) return null;
+    const s = lotPx / Math.max(w, h); // m → px
+    const cx0 = (b.minX + b.maxX) / 2;
+    const cy0 = (b.minY + b.maxY) / 2;
+    const toSvg = ([x, y]: Pt): [number, number] => [
+      planCx + (x - cx0) * s,
+      planCy - (y - cy0) * s,
+    ];
+    const pathOf = (pts: Pt[]) =>
+      pts
+        .map((p, i) => {
+          const [sx, sy] = toSvg(p);
+          return `${i === 0 ? "M" : "L"}${sx.toFixed(1)} ${sy.toFixed(1)}`;
+        })
+        .join(" ") + " Z";
+    // 일조권 후퇴선: 필지 최북단에서 maxSetback(m)만큼 남쪽
+    const sunSvgY = planSunlight
+      ? planCy - (b.maxY - planSunlight.maxSetback - cy0) * s
+      : null;
+    const topSvgY = planCy - (b.maxY - cy0) * s;
+    // footprint svg bbox (주차 띠 배치용)
+    const fpTopY = planCy - (parcelFpBounds.maxY - cy0) * s;
+    const fpBotY = planCy - (parcelFpBounds.minY - cy0) * s;
+    const fpLeftX = planCx + (parcelFpBounds.minX - cx0) * s;
+    const fpRightX = planCx + (parcelFpBounds.maxX - cx0) * s;
+    return {
+      parcelPath: pathOf(parcelShape.pts),
+      fpPath: pathOf(parcelFp),
+      sunSvgY,
+      topSvgY,
+      fpTopY,
+      fpBotY,
+      fpLeftX,
+      fpRightX,
+      centroid: toSvg([0, 0]),
+    };
   })();
 
   const rPx = Math.min(roadM * 5, 60);
@@ -450,6 +510,14 @@ export function ScaleVisualizer() {
         <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
           <div className="text-xs text-muted-foreground font-medium">
             ④ 건축 가능 매스 시각화
+            {parcelShape && (
+              <span
+                className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded"
+                style={{ background: "#2563EB18", color: "#2563EB" }}
+              >
+                📐 실제 지적 형상 반영 ({parcelShape.areaSqm.toLocaleString("ko-KR")}㎡)
+              </span>
+            )}
           </div>
           <TabsList>
             <TabsTrigger value="2d">2D 도면</TabsTrigger>
@@ -602,26 +670,80 @@ export function ScaleVisualizer() {
         >
           ↑ 정북방향 (인접대지)
         </text>
-        <rect
-          x={lx}
-          y={ly}
-          width={lotPx}
-          height={lotPx}
-          className="fill-card stroke-foreground/60"
-          strokeWidth={1}
-          strokeDasharray="4 3"
-        />
-        <text
-          x={planCx}
-          y={ly - 6}
-          textAnchor="middle"
-          style={{ fontSize: 9 }}
-          className="fill-muted-foreground"
-        >
-          대지경계선
-        </text>
+        {parcelPlan ? (
+          <>
+            <clipPath id="parcel-clip">
+              <path d={parcelPlan.parcelPath} />
+            </clipPath>
+            <path
+              d={parcelPlan.parcelPath}
+              className="fill-card stroke-foreground/60"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+            />
+            <text
+              x={planCx}
+              y={ly - 6}
+              textAnchor="middle"
+              style={{ fontSize: 9 }}
+              className="fill-muted-foreground"
+            >
+              대지경계선 (실제 지적 형상)
+            </text>
+          </>
+        ) : (
+          <>
+            <rect
+              x={lx}
+              y={ly}
+              width={lotPx}
+              height={lotPx}
+              className="fill-card stroke-foreground/60"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+            />
+            <text
+              x={planCx}
+              y={ly - 6}
+              textAnchor="middle"
+              style={{ fontSize: 9 }}
+              className="fill-muted-foreground"
+            >
+              대지경계선
+            </text>
+          </>
+        )}
 
-        {planSunlight && (
+        {planSunlight && parcelPlan?.sunSvgY != null ? (
+          <>
+            {/* 실형상: 필지 최북단 − 이격거리 라인 북쪽을 폴리곤에 클리핑해 해칭 */}
+            <rect
+              x={lx - 10}
+              y={parcelPlan.topSvgY - 2}
+              width={lotPx + 20}
+              height={Math.max(0, parcelPlan.sunSvgY - parcelPlan.topSvgY + 2)}
+              fill="url(#no-build)"
+              clipPath="url(#parcel-clip)"
+            />
+            <line
+              x1={lx}
+              y1={parcelPlan.sunSvgY}
+              x2={lx + lotPx}
+              y2={parcelPlan.sunSvgY}
+              stroke={DANGER}
+              strokeWidth={1}
+              strokeDasharray="3 2"
+            />
+            <text
+              x={lx + lotPx - 4}
+              y={parcelPlan.sunSvgY - 3}
+              textAnchor="end"
+              style={{ fontSize: 8, fill: DANGER }}
+            >
+              사선이격 {fmt(planSunlight.maxSetback, 1)}m
+            </text>
+          </>
+        ) : planSunlight ? (
           <>
             <rect
               x={lx}
@@ -648,9 +770,95 @@ export function ScaleVisualizer() {
               사선이격 {fmt(planSunlight.maxSetback, 1)}m
             </text>
           </>
-        )}
+        ) : null}
 
-        {day10ParkingFraction > 0 ? (
+        {parcelPlan ? (
+          (() => {
+            // ── 실형상 건축면적 footprint ──
+            const fpH = parcelPlan.fpBotY - parcelPlan.fpTopY;
+            const stripH = fpH * day10ParkingFraction;
+            const [ccx, ccy] = parcelPlan.centroid;
+            return (
+              <>
+                <path
+                  d={parcelPlan.fpPath}
+                  fill="url(#mass-grad)"
+                  stroke={massEdge}
+                  strokeWidth={0.8}
+                  filter="url(#soft-shadow)"
+                />
+                {/* 1층 지상주차 띠 (남측=하단, footprint에 클리핑) */}
+                {stripH > 0 && (
+                  <>
+                    <clipPath id="fp-clip">
+                      <path d={parcelPlan.fpPath} />
+                    </clipPath>
+                    <g clipPath="url(#fp-clip)">
+                      <rect
+                        x={parcelPlan.fpLeftX - 2}
+                        y={parcelPlan.fpBotY - stripH}
+                        width={parcelPlan.fpRightX - parcelPlan.fpLeftX + 4}
+                        height={stripH + 2}
+                        fill="url(#parking-h)"
+                        stroke="#993C1D"
+                        strokeWidth={1}
+                        strokeDasharray="4 3"
+                        opacity={0.95}
+                      />
+                    </g>
+                    {stripH >= 12 && (
+                      <text
+                        x={ccx}
+                        y={parcelPlan.fpBotY - 5}
+                        textAnchor="middle"
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          fill: "#993C1D",
+                          paintOrder: "stroke",
+                          stroke: "#ffffff",
+                          strokeWidth: 2.5,
+                        }}
+                      >
+                        🚗 주차 {day10.groundSpaces}대 · {fmt(day10.groundParkingArea, 0)}㎡
+                      </text>
+                    )}
+                  </>
+                )}
+                <text
+                  x={ccx}
+                  y={ccy - 5}
+                  textAnchor="middle"
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 500,
+                    fill: massEdge,
+                    paintOrder: "stroke",
+                    stroke: "#ffffff",
+                    strokeWidth: 2.5,
+                  }}
+                >
+                  건축면적 {fmt(bldArea / PY_TO_SQM, 0)}평
+                </text>
+                <text
+                  x={ccx}
+                  y={ccy + 9}
+                  textAnchor="middle"
+                  style={{
+                    fontSize: 8.5,
+                    fontWeight: 700,
+                    fill: massEdge,
+                    paintOrder: "stroke",
+                    stroke: "#ffffff",
+                    strokeWidth: 2.5,
+                  }}
+                >
+                  {useStyle.icon} {useStyle.usageLabel}
+                </text>
+              </>
+            );
+          })()
+        ) : day10ParkingFraction > 0 ? (
           (() => {
             // 평면도: 도로(남=하단) 쪽에 주차 띠 배치
             const parkH = Math.min(bldPx, bldPx * day10ParkingFraction);

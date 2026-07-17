@@ -20,6 +20,13 @@ import {
 import { calculateGroundParking } from "@/lib/calc/groundParking";
 import { PARKING_STANDARDS, SQM_PER_SPACE } from "@/lib/parking-standards";
 import { getUseStyle } from "@/lib/building-use";
+import {
+  scalePolygon,
+  clipPolygonBelowY,
+  polygonBounds,
+  type ParcelShape,
+  type Pt,
+} from "@/lib/geo/parcel";
 
 const DANGER = "#E24B4A";
 const PARKING_COLOR = "#9CA3AF";
@@ -149,6 +156,7 @@ function Scene({
   const parkingUnitArea = useSimulatorStore((s) => s.parkingUnitArea);
   const parkingPilotiMode = useSimulatorStore((s) => s.parkingPilotiMode);
   const mergedParcels = useSimulatorStore((s) => s.mergedParcels);
+  const parcelShape = useSimulatorStore((s) => s.parcelShape);
 
   const z = ZONES[zone];
   const sunOn = sunOnRaw && z.residential;
@@ -203,9 +211,14 @@ function Scene({
       ? Math.min(1, gp.groundParkingArea / bldArea)
       : 0;
 
+  // 실형상 폴리곤 있으면 남/북 경계를 폴리곤 bounds 기준으로 (z = -y_north)
+  const pb = parcelShape ? parcelShape.bounds : null;
+  const southZ = pb ? -pb.minY : lotSide / 2;
+  const northZ = pb ? -pb.maxY : -lotSide / 2;
+
   // 도로: 대지 남쪽
   const roadDepth = Math.min(roadM, 25);
-  const roadZ = lotSide / 2 + roadDepth / 2;
+  const roadZ = southZ + roadDepth / 2;
 
   return (
     <>
@@ -249,12 +262,18 @@ function Scene({
         <meshStandardMaterial color="#e9ebe0" roughness={1} />
       </mesh>
 
-      {/* 대지 */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[lotSide, lotSide]} />
-        <meshStandardMaterial color={LOT_COLOR} roughness={1} />
-      </mesh>
-      <LotBoundary side={lotSide} />
+      {/* 대지 — 실형상 폴리곤 있으면 실제 지적 모양으로 */}
+      {parcelShape ? (
+        <ParcelLot shape={parcelShape} />
+      ) : (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+            <planeGeometry args={[lotSide, lotSide]} />
+            <meshStandardMaterial color={LOT_COLOR} roughness={1} />
+          </mesh>
+          <LotBoundary side={lotSide} />
+        </>
+      )}
 
       {/* 합필 필지 경계 (지면 점선 + 라벨) */}
       {mergedParcels.length >= 2 && (() => {
@@ -315,7 +334,7 @@ function Scene({
       })()}
 
       {/* 인도 (대지-도로 사이) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, lotSide / 2 + 0.7]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, southZ + 0.7]} receiveShadow>
         <planeGeometry args={[lotSide + 6, 1.4]} />
         <meshStandardMaterial color="#d8d5ca" roughness={1} />
       </mesh>
@@ -357,27 +376,42 @@ function Scene({
       )}
 
       {/* 정북 표시 */}
-      <NorthArrow z={-lotSide / 2 - 4} />
+      <NorthArrow z={northZ - 4} />
 
-      {/* 건물 매스 */}
-      <BuildingMass
-        bldSide={bldSide}
-        floors={floors}
-        offsetZ={bldOffsetZ}
-        sunOn={sunOn}
-        pilotisFloors={pilotisFloors}
-        day10ParkingFraction={day10ParkingFraction}
-        day10IsPiloti={gp.isReducingFloor1}
-        day10GroundSpaces={gp.groundSpaces}
-        massColor={useStyle.gradMid}
-        glassColor={useStyle.glass}
-        edgeColor={useStyle.edge}
-        useIcon={useStyle.icon}
-        useLabel={useStyle.usageLabel}
-      />
+      {/* 건물 매스 — 실형상 폴리곤 있으면 실제 지적 모양으로 압출 */}
+      {parcelShape ? (
+        <ParcelMass
+          shape={parcelShape}
+          covPct={covPct}
+          floors={floors}
+          sunOn={sunOn}
+          massColor={useStyle.gradMid}
+          glassColor={useStyle.glass}
+          edgeColor={useStyle.edge}
+          useIcon={useStyle.icon}
+          useLabel={useStyle.usageLabel}
+        />
+      ) : (
+        <BuildingMass
+          bldSide={bldSide}
+          floors={floors}
+          offsetZ={bldOffsetZ}
+          sunOn={sunOn}
+          pilotisFloors={pilotisFloors}
+          day10ParkingFraction={day10ParkingFraction}
+          day10IsPiloti={gp.isReducingFloor1}
+          day10GroundSpaces={gp.groundSpaces}
+          massColor={useStyle.gradMid}
+          glassColor={useStyle.glass}
+          edgeColor={useStyle.edge}
+          useIcon={useStyle.icon}
+          useLabel={useStyle.usageLabel}
+        />
+      )}
 
-      {/* 일조권 사선면 (참고용 — 정북측 envelope) */}
-      {sunOn && heightM > 0 && (
+      {/* 일조권 사선면 (참고용 — 정북측 envelope)
+          실형상 모드는 층별 클리핑으로 후퇴가 이미 표현되므로 envelope 생략 */}
+      {sunOn && heightM > 0 && !parcelShape && (
         <SunlightEnvelope
           bldSide={bldSide}
           heightM={heightM}
@@ -1069,4 +1103,195 @@ function BasementBoxes({
     );
   }
   return <>{items}</>;
+}
+
+/* ───────── 실형상 (연속지적도 폴리곤) 렌더 — Phase A ─────────
+   좌표 규약: 로컬 미터 (x=동+, y=북+) → three (x, -z). 압출은 +y(상공).
+   Shape를 XY평면에 만들고 rotateX(-π/2)하면 y_north → -z(북), 압출 z → +y. */
+
+function shapeFromPts(pts: Pt[]): THREE.Shape {
+  const s = new THREE.Shape();
+  pts.forEach(([x, y], i) => (i === 0 ? s.moveTo(x, y) : s.lineTo(x, y)));
+  s.closePath();
+  return s;
+}
+
+/** 대지: 실제 지적 폴리곤 평면 + 점선 외곽 */
+function ParcelLot({ shape }: { shape: ParcelShape }) {
+  const geom = useMemo(() => {
+    const g = new THREE.ShapeGeometry(shapeFromPts(shape.pts));
+    g.rotateX(-Math.PI / 2);
+    return g;
+  }, [shape]);
+  const outline = useMemo(
+    () =>
+      [...shape.pts, shape.pts[0]].map(
+        ([x, y]) => [x, 0.06, -y] as [number, number, number],
+      ),
+    [shape],
+  );
+  return (
+    <group>
+      <mesh geometry={geom} position={[0, 0.015, 0]} receiveShadow>
+        <meshStandardMaterial color={LOT_COLOR} roughness={1} />
+      </mesh>
+      <Line
+        points={outline}
+        color="#6b6357"
+        lineWidth={1.6}
+        dashed
+        dashSize={1.2}
+        gapSize={0.8}
+      />
+    </group>
+  );
+}
+
+/** 층 하나: 폴리곤 압출 + 유리 밴드 + 상단 윤곽선 */
+function ExtrudedFloor({
+  pts,
+  baseY,
+  h,
+  color,
+  glassColor,
+  edgeColor,
+  withGlass,
+}: {
+  pts: Pt[];
+  baseY: number;
+  h: number;
+  color: string;
+  glassColor: string;
+  edgeColor: string;
+  withGlass: boolean;
+}) {
+  const geom = useMemo(() => {
+    const g = new THREE.ExtrudeGeometry(shapeFromPts(pts), {
+      depth: h,
+      bevelEnabled: false,
+    });
+    g.rotateX(-Math.PI / 2);
+    return g;
+  }, [pts, h]);
+  const glassGeom = useMemo(() => {
+    if (!withGlass) return null;
+    const g = new THREE.ExtrudeGeometry(shapeFromPts(scalePolygon(pts, 1.015)), {
+      depth: h * 0.4,
+      bevelEnabled: false,
+    });
+    g.rotateX(-Math.PI / 2);
+    return g;
+  }, [pts, h, withGlass]);
+  const topOutline = useMemo(
+    () =>
+      [...pts, pts[0]].map(
+        ([x, y]) => [x, baseY + h + 0.02, -y] as [number, number, number],
+      ),
+    [pts, baseY, h],
+  );
+  return (
+    <group>
+      <mesh geometry={geom} position={[0, baseY, 0]} castShadow>
+        <meshStandardMaterial color={color} roughness={0.85} side={THREE.DoubleSide} />
+      </mesh>
+      {glassGeom && (
+        <mesh geometry={glassGeom} position={[0, baseY + h * 0.3, 0]}>
+          <meshStandardMaterial
+            color={glassColor}
+            roughness={0.12}
+            metalness={0.35}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+      <Line points={topOutline} color={edgeColor} lineWidth={1} />
+    </group>
+  );
+}
+
+/** 건물 매스: 실형상 footprint(√건폐율 축소 근사)를 층별 압출.
+    일조권 사선은 층 높이별 후퇴선(최북단 − s)으로 폴리곤을 클리핑해 표현. */
+function ParcelMass({
+  shape,
+  covPct,
+  floors,
+  sunOn,
+  massColor,
+  glassColor,
+  edgeColor,
+  useIcon,
+  useLabel,
+}: {
+  shape: ParcelShape;
+  covPct: number;
+  floors: number;
+  sunOn: boolean;
+  massColor: string;
+  glassColor: string;
+  edgeColor: string;
+  useIcon: string;
+  useLabel: string;
+}) {
+  const fp = useMemo(
+    () => scalePolygon(shape.pts, Math.sqrt(Math.max(covPct, 1) / 100)),
+    [shape, covPct],
+  );
+  const fpBounds = useMemo(() => polygonBounds(fp), [fp]);
+
+  const items: React.ReactNode[] = [];
+  const ceilFloors = Math.ceil(floors);
+  for (let i = 0; i < ceilFloors; i++) {
+    const fH = (i + 1) * FLOOR_HEIGHT_M;
+    let setback = 0;
+    if (sunOn && fH > SUNLIGHT_THRESHOLD_M) setback = fH / 2 - 1.5;
+    else if (sunOn) setback = 1.5;
+    const pts =
+      setback > 0 ? clipPolygonBelowY(fp, fpBounds.maxY - setback) : fp;
+    if (pts.length < 3) break;
+    const portion = i + 1 <= floors ? 1 : floors - i;
+    if (portion <= 0) break;
+    const floorH = FLOOR_HEIGHT_M * portion;
+    items.push(
+      <ExtrudedFloor
+        key={i}
+        pts={pts}
+        baseY={i * FLOOR_HEIGHT_M}
+        h={floorH}
+        color={massColor}
+        glassColor={glassColor}
+        edgeColor={edgeColor}
+        withGlass={portion >= 1 && floorH >= 2.5}
+      />,
+    );
+  }
+
+  const hM = floors * FLOOR_HEIGHT_M;
+  return (
+    <group>
+      {items}
+      {floors > 0 && (
+        <Html
+          position={[0, hM + 2.4, 0]}
+          center
+          distanceFactor={34}
+          style={{ pointerEvents: "none" }}
+        >
+          <div
+            style={{
+              background: "white",
+              border: `2px solid ${massColor}`,
+              borderRadius: 5,
+              padding: "2px 7px",
+              fontSize: 12,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              color: edgeColor,
+            }}
+          >
+            {useIcon} {useLabel} · 실형상
+          </div>
+        </Html>
+      )}
+    </group>
+  );
 }

@@ -166,6 +166,51 @@ export async function fetchVworldLandChar(
   };
 }
 
+export interface VworldParcelPolygon {
+  /** 외곽 링 경위도 [[lon,lat], ...] (첫 폴리곤의 outer ring) */
+  ring: Array<[number, number]>;
+  /** 지번 표기 (예: "1-20대") */
+  jibun: string;
+}
+
+/**
+ * 연속지적도 필지 폴리곤 — LP_PA_CBND_BUBUN을 PNU로 조회 (geometry=true).
+ * 플렉시티 벤치마크 Phase A: 실형상 2D/3D 가설계의 원천 데이터.
+ * MultiPolygon이면 첫 폴리곤, Polygon이면 그대로 — outer ring만 사용.
+ */
+export async function fetchVworldParcelPolygon(
+  pnu: string,
+): Promise<VworldParcelPolygon | null> {
+  const key = vworldKey();
+  if (!key) return null;
+  const vpnu = toVworldPnu(pnu);
+  const url =
+    `${VWORLD_DATA_ENDPOINT}?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN` +
+    `&key=${key}&format=json&attrFilter=pnu:=:${vpnu}` +
+    `&geometry=true&attribute=true&crs=EPSG:4326&size=1&domain=${vworldDomain()}`;
+  const data = await callVworldData(url); // 전송실패/빈응답은 throw(transient)
+  if (data?.response?.status !== "OK") return null; // NOT_FOUND 등 = 데이터 없음
+  const feature = data.response.result?.featureCollection?.features?.[0];
+  const geom = feature?.geometry;
+  if (!geom?.coordinates) return null;
+
+  // MultiPolygon: [[[ [lon,lat],... ]]], Polygon: [[ [lon,lat],... ]]
+  const coords = geom.coordinates as unknown;
+  let ring: Array<[number, number]> | null = null;
+  if (geom.type === "MultiPolygon") {
+    const mp = coords as number[][][][];
+    ring = (mp?.[0]?.[0] ?? null) as Array<[number, number]> | null;
+  } else if (geom.type === "Polygon") {
+    const p = coords as number[][][];
+    ring = (p?.[0] ?? null) as Array<[number, number]> | null;
+  }
+  if (!ring || ring.length < 3) return null;
+  return {
+    ring,
+    jibun: String((feature?.properties ?? {}).jibun ?? ""),
+  };
+}
+
 export interface VworldZone {
   zone: string; // 용도지역명 (예: 제2종일반주거지역)
   raw: Record<string, unknown>;

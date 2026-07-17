@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { LandLookup } from "@/components/simulator/LandLookup";
+import { DevParcelMock } from "@/components/simulator/DevParcelMock";
 import { ZoneSelector } from "@/components/simulator/ZoneSelector";
 import { ControlPanel } from "@/components/simulator/ControlPanel";
 import { ScaleVisualizer } from "@/components/simulator/ScaleVisualizer";
@@ -84,6 +85,7 @@ export default function SimulatorPage() {
           <TabsContent value="scale">
             <div className="space-y-3.5">
               <LandLookup />
+              <DevParcelMock />
               <ZoneSelector />
               <ControlPanel />
               <ScaleVisualizer />

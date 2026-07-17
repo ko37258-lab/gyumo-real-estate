@@ -252,6 +252,25 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (2)** — **Phase B: 건축 인허가 이력 + 토지 실거래·추정가** (운영자 data.go.kr 활용신청 승인 완료 — 인허가 15136267·토지 15126466·연립다세대 매매/전월세·상업업무용).
+  - **app/api/permits/route.ts 신규**: 건축HUB 건축인허가 기본개요(`ArchPmsHubService/getApBasisOulnInfo`) — PNU 분해(시군구5+법정동5+platGb1+bun4+ji4) → 허가일·실착공일·사용승인일·건축구분·주용도·연면적·세대수, 최신 허가일 desc. 라이브 검증: 성내동 562 → 2건(2013-08-30 허가, 신축 공동주택 연면적 403.15㎡).
+  - **app/api/land-trades/route.ts 신규**: 토지 매매 실거래(`RTMSDataSvcLandTrade`, XML) — 최근 12개월 병렬 조회(~4.7s) 후 플렉시티 방법론 재현: 같은 법정동→같은 용도지역(3건 미만 시 동전체→시군구 단계 완화) + 지분거래 제외 + **특수지목(도로·구거·하천·제방·묘지) 무조건 제외**(도로 683만 vs 대 2,816만/㎡ 중앙값 붕괴 실측) + <15㎡ 자투리 제외(2건 이상 남을 때만). ㎡당 중앙값 × 면적 = 추정가, 공시지가 총액 대비 배수(`ratioToJiga`). 표본 0건이면 추정가 미제공(정직 우선). 검증: 성내동 562 → 대 2건 중앙값 2,649만/㎡ → 53.4억(공시 4.54배), basis "같은 법정동 (용도지역 무관) · 건축지목" 투명 표시.
+  - **⚠ data.go.kr 실거래 API는 UA 없는 요청을 WAF가 차단**("Request Blocked") — fetch에 User-Agent 헤더 필수 (실측).
+  - **LandLookup**: 조회 Promise.all에 `/api/permits` 추가, 조회 후 `/api/land-trades`(동명은 refined 주소에서 추출, zone·면적·공시지가 전달). 카드 2종 신규 — "📋 건축 인허가 이력"(상태 배지 사용승인/착공/허가 + 허가일·구분·주용도·연면적, 최근 3건) + "💹 토지 실거래 기반 추정가"(추정가·공시 대비 배수·㎡당 중앙값·근거·최근 거래 4건 + 감정평가 아님 면책).
+  - 키: data.go.kr 계정 공통키 1개로 5종 모두 커버(대표님 승인, 기존 DATAGO_KEY와 동일 여부는 Vercel 대시보드에서 확인 — 다르면 교체 필요). 로컬 `.env.local` DATAGO_KEY 실키로 교체(gitignore).
+  - 검증: tsc 0 / eslint 0 / `next build` ✓ 17 routes(+permits, +land-trades) / permits·land-trades 로컬 라이브 200. UI 카드는 지번 조회가 로그인 게이트라 브라우저 미확인 — 배포 후 운영자 확인 필요.
+  - 미착수(다음): 연립다세대 매매/전월세·상업업무용 → 신축 분양가·임대료 자동 제안(사업성 탭 연동), 토지이용계획 전체 표시, 지도 필지 클릭(Phase C).
+
+- **2026-07-17** — 플렉시티 벤치마크 분석 + **Phase A: 필지 실형상(연속지적도 폴리곤) 2D/3D**.
+  - **벤치마크**: flexity.app 실측 분석 → `docs/flexity-benchmark.md`. 핵심 발견 — 단일 lot API(`/api/lot/{PNU}/`)에 필지 GeoJSON·건축물대장·토지특성(형상/도로접면/지세)·토지이용계획 그룹·조례/법정 상한 분리·건축가능용도·둘 이상 용도지역 가중평균·주차상한 포함. 토지 추정가 = 공시지가 × 인근 실거래 배율(`ratio_price_to_jiga`), 신축 시세 테이블(`/building/price/`)로 분양가 자동화. 지도=네이버, 3D=VWorld. 갭 분석 + Phase A~E 로드맵 + 운영자 API 신청 목록(인허가 15136267, 토지실거래 15126466 등) 문서화.
+  - **lib/geo/parcel.ts 신규**: 경위도 링→로컬 미터(x=동+, y=북+, 원점=무게중심) equirectangular 변환, shoelace 면적, bounds, centroid, `clipPolygonBelowY`(일조권 북측 후퇴 half-plane 클리핑), `scalePolygon`(√건폐율 footprint 근사), `buildParcelShape`.
+  - **데이터 파이프라인**: `fetchVworldParcelPolygon`(LP_PA_CBND_BUBUN attrFilter=pnu, geometry=true) → `/api/vworld?kind=parcel` → `lib/vworld.ts fetchParcelPolygon` → `store.parcelShape` (LandLookup 조회 시 자동 세팅, 합필은 v1 미지원=null).
+  - **2D ScaleVisualizer**: parcelShape 있으면 평면도가 실형상 — 대지경계선 폴리곤 path + 일조권 해칭(clipPath 폴리곤 클리핑, 후퇴선=최북단−이격) + footprint(√cov 축소) + 주차 띠(남측, fp 클리핑) + 헤더 "📐 실제 지적 형상 반영 (N㎡)" 배지. 입면 northDepth도 fp bounds 기준.
+  - **3D ScaleVisualizer3D**: `ParcelLot`(ShapeGeometry 대지 + 점선 외곽), `ParcelMass`/`ExtrudedFloor`(층별 ExtrudeGeometry, 일조권은 층높이별 `clipPolygonBelowY` 후퇴, 유리 밴드 1.015 스케일, rotateX(-π/2)로 y_north→−z 매핑), 도로/인도/정북화살표 위치를 폴리곤 bounds 기준(southZ/northZ)으로. 실형상 모드에선 사각 envelope 생략.
+  - **DevParcelMock**: `?mockParcel=1` + NODE_ENV=development에서 사다리꼴 mock(311.54㎡) 주입 — 로컬 VWorld 키 placeholder(실키는 Vercel Production 전용, sensitive라 pull 불가) 우회 검증용.
+  - 검증: tsc 0 / eslint 0(신규·수정 파일) / 로컬 브라우저 — 2D 실형상 사다리꼴+일조 해칭+사선이격 4.3m 라벨 ✓, 3D 실형상 압출+"업무시설 · 실형상" 라벨 ✓, 콘솔 에러 0. ⚠️ 실 PNU 폴리곤은 프로덕션(키 있는 환경) 배포 후 확인 필요.
+  - 미해결: `attrFilter pnu` 실키 검증(로컬 placeholder라 INVALID_KEY), MarketInsight.tsx 기존 lint 에러(set-state-in-effect, 이번 작업 무관).
+
 - **2026-06-15** — 비도시 용도지역 + 토지데이터 NED 통합 + **Netlify→Vercel 이전**.
   - **Fix A — 비도시 용도지역 5종 + 지목 약어 매핑** (`1d05b8b`):
     - `lib/zones.ts`: 계획관리(건폐 40%/용적 100%)·생산관리·보전관리·농림·자연환경보전(나머지 20%/80%) 추가. 국토계획법 시행령 제84·85조 상한. `ZoneCategory`에 `"management"` 추가, ZoneSelector 드롭다운 자동 노출(16→21종).

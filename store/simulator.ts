@@ -9,6 +9,7 @@ import {
 } from "@/lib/parking-standards";
 import { resolveAreaPerSpace } from "@/lib/parking-regions";
 import type { ParkingMode } from "@/lib/calc/parking";
+import type { ParcelShape } from "@/lib/geo/parcel";
 
 export type LotInfo = {
   address: string;
@@ -63,6 +64,9 @@ type SimulatorState = {
   /** 합필 구성 필지 (2개 이상일 때만 시각화에 경계 표시, 빈 배열 = 단일 필지) */
   mergedParcels: MergedParcel[];
 
+  /** 연속지적도 실형상 폴리곤 (지번 조회 성공 시 세팅, null = 정사각형 가정) */
+  parcelShape: ParcelShape | null;
+
   setAddress: (v: string) => void;
   setMergedParcels: (parcels: MergedParcel[]) => void;
   applyLotInfo: (info: LotInfo) => void;
@@ -84,6 +88,7 @@ type SimulatorState = {
   setParkingUnitArea: (v: number) => void;
   setParkingPilotiMode: (v: boolean) => void;
   setCapture3D: (fn: (() => string) | null) => void;
+  setParcelShape: (shape: ParcelShape | null) => void;
 };
 
 const initialParking = (() => {
@@ -121,6 +126,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   ...initialParking,
   capture3D: null,
   mergedParcels: [],
+  parcelShape: null,
 
   setAddress: (v) => set({ address: v }),
   setMergedParcels: (parcels) => set({ mergedParcels: parcels }),
@@ -229,4 +235,6 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   setParkingPilotiMode: (v) => set({ parkingPilotiMode: v }),
 
   setCapture3D: (fn) => set({ capture3D: fn }),
+
+  setParcelShape: (shape) => set({ parcelShape: shape }),
 }));

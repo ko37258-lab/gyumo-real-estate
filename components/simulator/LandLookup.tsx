@@ -7,8 +7,10 @@ import { useSimulatorStore } from "@/store/simulator";
 import {
   fetchZoneByCoord,
   fetchNearbyRoads,
+  fetchParcelPolygon,
   type RoadCheck,
 } from "@/lib/vworld";
+import { buildParcelShape } from "@/lib/geo/parcel";
 import { findZoneCodeByName, ZONES, isLikelyCBD } from "@/lib/zones";
 import { useCostStore } from "@/store/cost";
 import {
@@ -43,6 +45,42 @@ type MergedParcelRow = {
   price: number | null;
 };
 
+// /api/land-trades 응답 — 토지 실거래 + 추정가
+type LandTrades = {
+  trades: Array<{
+    yearMonth: string;
+    jibun: string;
+    umdNm: string;
+    jimok: string;
+    landUse: string;
+    areaSqm: number;
+    amountWon: number;
+    unitWon: number;
+    dealingGbn: string;
+  }>;
+  sampleCount: number;
+  periodMonths: number;
+  basis: string;
+  medianUnitWon: number;
+  estimatedPrice: number;
+  jigaTotal: number;
+  ratioToJiga: number;
+};
+
+// /api/permits 응답 — 건축HUB 건축인허가 기본개요
+type Permit = {
+  pk: string;
+  bldName: string;
+  archGb: string;
+  mainUse: string;
+  totArea: number;
+  hhldCnt: number;
+  permitDay: string;
+  realStcnsDay: string;
+  stcnsSchedDay: string;
+  useAprDay: string;
+};
+
 type ApiResult = {
   roads: RoadCheck | null;
   zone: string | null;
@@ -50,6 +88,10 @@ type ApiResult = {
   pnu: string | null;
   refinedAddress: string | null;
   errors: string[];
+  /** 건축 인허가 이력 (건축HUB, null = 조회 실패) */
+  permits: Permit[] | null;
+  /** 토지 실거래 + 추정가 (국토부 실거래가, null = 조회 실패) */
+  landTrades: LandTrades | null;
   /** 합필 조회 결과 (2필지 이상) */
   merged?: {
     parcels: MergedParcelRow[];
@@ -71,6 +113,7 @@ export function LandLookup() {
   const setLotPy = useSimulatorStore((s) => s.setLotPy);
   const setRoadM = useSimulatorStore((s) => s.setRoadM);
   const setMergedParcels = useSimulatorStore((s) => s.setMergedParcels);
+  const setParcelShape = useSimulatorStore((s) => s.setParcelShape);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +184,7 @@ export function LandLookup() {
       // 2) 모든 외부 조회는 서버사이드 경유 (CORS 회피).
       //    면적·공시지가·지목 = /api/landarea (건축물대장 → VWorld 토지특성 순차)
       //    용도지역·도로      = /api/vworld (VWorld 서버 프록시)
-      const [landAreaRes, zoneVW, roads] = await Promise.all([
+      const [landAreaRes, zoneVW, roads, parcelPoly, permits] = await Promise.all([
         fetch(`/api/landarea?pnu=${geo.pnu}`)
           .then(async (r) => (r.ok ? ((await r.json()) as LandArea) : null))
           .catch(() => null),
@@ -153,6 +196,14 @@ export function LandLookup() {
           errors.push("도로 조회 실패");
           return null;
         }),
+        // 연속지적도 실형상 폴리곤 — 실패해도 시뮬레이션은 정사각형 가정으로 진행
+        fetchParcelPolygon(geo.pnu).catch(() => null),
+        // 건축 인허가 이력 (건축HUB) — best-effort
+        fetch(`/api/permits?pnu=${geo.pnu}`)
+          .then(async (r) =>
+            r.ok ? ((await r.json()) as { permits: Permit[] }).permits : null,
+          )
+          .catch(() => null),
       ]);
 
       if (landAreaRes?.transient) {
@@ -212,6 +263,19 @@ export function LandLookup() {
         }
       }
 
+      // 토지 실거래 + 추정가 — 동명·용도지역·면적·공시지가 확정 후 조회 (best-effort)
+      const umdName = (() => {
+        const parts = geo.refined.split(" ").filter(Boolean);
+        return parts.length >= 2 ? parts[parts.length - 2] : "";
+      })();
+      const landTrades = await fetch(
+        `/api/land-trades?pnu=${geo.pnu}&umd=${encodeURIComponent(umdName)}` +
+          `&zone=${encodeURIComponent(zoneName ?? "")}` +
+          `&areaSqm=${primaryArea || 0}&jiga=${landAreaRes?.price ?? 0}`,
+      )
+        .then(async (r) => (r.ok ? ((await r.json()) as LandTrades) : null))
+        .catch(() => null);
+
       const out: ApiResult = {
         roads,
         zone: zoneName,
@@ -219,6 +283,8 @@ export function LandLookup() {
         pnu: geo.pnu,
         refinedAddress: geo.refined,
         errors,
+        permits,
+        landTrades,
         merged,
       };
       setResult(out);
@@ -241,6 +307,17 @@ export function LandLookup() {
           ? merged.parcels.map((p) => ({ label: p.label, areaSqm: p.areaSqm }))
           : [],
       );
+
+      // 실형상 폴리곤 → store (합필은 v1에서 실형상 미지원 — 정사각형 유지)
+      if (parcelPoly && !merged) {
+        try {
+          setParcelShape(buildParcelShape(parcelPoly.ring));
+        } catch {
+          setParcelShape(null);
+        }
+      } else {
+        setParcelShape(null);
+      }
 
       // 도로: 직접 검출 OR 건축 지목으로 접도 추정 → 6m, 그 외 0m.
       const jimokName = landAreaRes?.jimok ?? null;
@@ -634,6 +711,59 @@ export function LandLookup() {
               </div>
             )}
 
+          {/* 건축 인허가 이력 (건축HUB) */}
+          {result.permits && result.permits.length > 0 && (
+            <div className="px-3 py-2 rounded-md bg-card border border-border text-[11px]">
+              <div className="text-[10px] text-muted-foreground mb-1">
+                📋 건축 인허가 이력 (건축HUB · 최근 {Math.min(result.permits.length, 3)}건
+                {result.permits.length > 3 ? ` / 총 ${result.permits.length}건` : ""})
+              </div>
+              <div className="space-y-1">
+                {result.permits.slice(0, 3).map((p) => {
+                  const status = p.useAprDay
+                    ? { label: "사용승인", cls: "bg-emerald-100 text-emerald-700" }
+                    : p.realStcnsDay
+                      ? { label: "착공", cls: "bg-blue-100 text-blue-700" }
+                      : { label: "허가", cls: "bg-amber-100 text-amber-700" };
+                  return (
+                    <div
+                      key={p.pk}
+                      className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-secondary/50"
+                    >
+                      <span className="min-w-0 truncate">
+                        <span
+                          className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mr-1.5 ${status.cls}`}
+                        >
+                          {status.label}
+                        </span>
+                        {p.permitDay && (
+                          <span className="text-muted-foreground mr-1">
+                            {p.permitDay}
+                          </span>
+                        )}
+                        <b className="text-foreground">
+                          {p.archGb || p.mainUse || p.bldName || "건축물"}
+                        </b>
+                        {p.archGb && p.mainUse ? (
+                          <span className="text-muted-foreground"> · {p.mainUse}</span>
+                        ) : null}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {p.totArea > 0
+                          ? `연면적 ${p.totArea.toLocaleString("ko-KR")}㎡`
+                          : ""}
+                        {p.useAprDay ? ` · 승인 ${p.useAprDay}` : ""}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-1 text-[9.5px] text-muted-foreground/80">
+                ※ 국토교통부 건축HUB 건축인허가정보. 허가 이력이 있다고 현재 유효한 것은 아니며, 실효·취소 여부는 관할청 확인 필요.
+              </div>
+            </div>
+          )}
+
           {/* 공시지가 (VWorld 토지특성정보) */}
           {bld?.price && bld.price > 0 && (
             <div className="px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-[11px]">
@@ -647,6 +777,65 @@ export function LandLookup() {
               {resolvedArea > 0
                 ? ` · 토지가 추정 ${Math.round((bld.price * resolvedArea) / 1e8 * 100) / 100}억원`
                 : ""}
+            </div>
+          )}
+
+          {/* 토지 실거래 + 추정가 (국토부 실거래가공개시스템) */}
+          {result.landTrades && result.landTrades.sampleCount > 0 && (
+            <div className="rounded-md border p-2.5" style={{ borderColor: "var(--info)", background: "var(--card)" }}>
+              <div className="text-[10px] text-muted-foreground mb-1.5">
+                💹 토지 실거래 기반 추정가
+                <span className="ml-1 opacity-80">
+                  ({result.landTrades.basis} · 최근 {result.landTrades.periodMonths}개월 {result.landTrades.sampleCount}건)
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-1.5">
+                <div className="rounded bg-[var(--info-bg)] px-2.5 py-1.5">
+                  <div className="text-[9.5px]" style={{ color: "var(--info)" }}>추정 토지 가격</div>
+                  <div className="text-[15px] font-bold" style={{ color: "var(--info)" }}>
+                    {result.landTrades.estimatedPrice > 0
+                      ? `${(result.landTrades.estimatedPrice / 1e8).toFixed(1)}억`
+                      : "—"}
+                  </div>
+                  {result.landTrades.ratioToJiga > 0 && (
+                    <div className="text-[9.5px] text-muted-foreground">
+                      공시지가 대비 {result.landTrades.ratioToJiga}배
+                    </div>
+                  )}
+                </div>
+                <div className="rounded bg-secondary/60 px-2.5 py-1.5">
+                  <div className="text-[9.5px] text-muted-foreground">인근 ㎡당 중앙값</div>
+                  <div className="text-[15px] font-bold text-foreground">
+                    {result.landTrades.medianUnitWon > 0
+                      ? `${Math.round(result.landTrades.medianUnitWon / 10000).toLocaleString("ko-KR")}만원`
+                      : "—"}
+                  </div>
+                  {result.landTrades.jigaTotal > 0 && (
+                    <div className="text-[9.5px] text-muted-foreground">
+                      공시지가 총액 {(result.landTrades.jigaTotal / 1e8).toFixed(1)}억
+                    </div>
+                  )}
+                </div>
+              </div>
+              {result.landTrades.trades.length > 0 && (
+                <div className="space-y-0.5">
+                  {result.landTrades.trades.slice(0, 4).map((t, i) => (
+                    <div key={i} className="flex items-center justify-between text-[10.5px] px-2 py-0.5 rounded bg-secondary/40">
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {t.yearMonth} · {t.umdNm} {t.jibun || "—"} ({t.jimok}
+                        {t.landUse ? ` · ${t.landUse.replace("지역", "")}` : ""})
+                      </span>
+                      <span className="shrink-0 font-medium text-foreground">
+                        {t.areaSqm}㎡ · {(t.amountWon / 1e8).toFixed(2)}억
+                        <span className="text-muted-foreground"> ({Math.round(t.unitWon / 10000).toLocaleString("ko-KR")}만/㎡)</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-1 text-[9.5px] text-muted-foreground/80">
+                ※ 국토부 실거래가공개시스템 신고 자료 기반 통계 추정치 — 감정평가가 아니며 개별 필지 조건(도로·형상·개발계획)에 따라 달라질 수 있음.
+              </div>
             </div>
           )}
 
