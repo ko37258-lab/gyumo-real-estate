@@ -11,7 +11,9 @@ type CostState = CostInputs & {
 const INITIAL: CostInputs = {
   // 기본 건축비
   abovePyeong: 300,
-  basementPyeong: 80,
+  // 지하 연면적 기본 0 — 요즘 지하 건축을 잘 하지 않는 추세 (운영자 결정 2026-07-17).
+  // 필요 시 사용자가 슬라이더로 올려 반영.
+  basementPyeong: 0,
   aboveUnit: 850,
   basementPremium: 150,
   softRate: 12,
