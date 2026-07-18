@@ -30,11 +30,11 @@ export function getPlan(id: string): CreditPlan | undefined {
   return CREDIT_PLANS.find((p) => p.id === id);
 }
 
-/** 입금 계좌 — 환경변수 우선, 없으면 아래 placeholder (운영자가 교체). */
+/** 입금 계좌 — 환경변수로 덮어쓸 수 있음 (Vercel에 NEXT_PUBLIC_BANK_* 설정 시 우선). */
 export const BANK_INFO = {
-  bank: process.env.NEXT_PUBLIC_BANK_NAME || "○○은행",
-  account: process.env.NEXT_PUBLIC_BANK_ACCOUNT || "000-0000-0000-00",
-  holder: process.env.NEXT_PUBLIC_BANK_HOLDER || "고상철(미스터홈즈)",
+  bank: process.env.NEXT_PUBLIC_BANK_NAME || "카카오뱅크",
+  account: process.env.NEXT_PUBLIC_BANK_ACCOUNT || "3333-37-3784694",
+  holder: process.env.NEXT_PUBLIC_BANK_HOLDER || "고상철",
 };
 
 /** 신청 화면에 표시할 안내 문구 (운영자 지정 원문 유지). */

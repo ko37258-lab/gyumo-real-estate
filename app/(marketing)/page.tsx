@@ -1,5 +1,15 @@
 import Link from "next/link";
 import { SITE_HEADER } from "@/lib/branding/constants";
+import {
+  BANK_INFO,
+  CREDIT_PLANS,
+  SIGNUP_CREDITS,
+  CREDIT_VALID_MONTHS,
+  formatWon,
+} from "@/lib/credits";
+
+const NAVY = "#020425";
+const GOLD = "#FFCF0D";
 
 export default function LandingPage() {
   return (
@@ -7,7 +17,7 @@ export default function LandingPage() {
       {/* ── HERO ── */}
       <section
         className="relative overflow-hidden"
-        style={{ minHeight: "100dvh", background: "#020425" }}
+        style={{ minHeight: "100dvh", background: NAVY }}
       >
         {/* 배경: 건물 사진 블러 충전 레이어 */}
         <div
@@ -39,7 +49,7 @@ export default function LandingPage() {
         <div
           aria-hidden="true"
           className="absolute inset-0"
-          style={{ background: "#020425", opacity: 0.46, zIndex: 3 }}
+          style={{ background: NAVY, opacity: 0.46, zIndex: 3 }}
         />
         {/* 하단 그라디언트 */}
         <div
@@ -118,7 +128,7 @@ export default function LandingPage() {
         >
           {/* 뱃지 */}
           <div
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-5"
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-6"
             style={{
               background: "rgba(255,255,255,0.09)",
               border: "1px solid rgba(255,255,255,0.18)",
@@ -127,26 +137,8 @@ export default function LandingPage() {
               color: "rgba(255,255,255,0.68)",
             }}
           >
-            <span
-              className="size-1.5 rounded-full"
-              style={{ background: "#FFCF0D" }}
-            />
+            <span className="size-1.5 rounded-full" style={{ background: GOLD }} />
             {SITE_HEADER.subtitle}
-          </div>
-
-          {/* 아이브로 */}
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: "0.20em",
-              textTransform: "uppercase",
-              color: "#FFCF0D",
-              textShadow: "0 2px 14px rgba(0,0,0,0.55)",
-              marginBottom: 14,
-            }}
-          >
-            # SCALE REVIEW · 건축가능 규모검토
           </div>
 
           {/* 헤드라인 */}
@@ -154,19 +146,18 @@ export default function LandingPage() {
             style={{
               margin: 0,
               color: "#FFFFFF",
-              fontSize: "clamp(30px, 5.2vw, 66px)",
+              fontSize: "clamp(30px, 5.2vw, 62px)",
               fontWeight: 700,
               letterSpacing: "-0.015em",
-              lineHeight: 1.2,
+              lineHeight: 1.22,
               textShadow: "0 6px 34px rgba(0,0,0,0.60)",
               maxWidth: 820,
               marginBottom: 18,
             }}
           >
-            지번 한 줄 →
+            지번 한 줄로
             <br />
-            <span style={{ color: "#FFCF0D" }}>30초</span> 안에 건축가능
-            규모까지.
+            <span style={{ color: GOLD }}>땅값부터 사업성</span>까지.
           </h1>
 
           {/* 본문 */}
@@ -176,16 +167,13 @@ export default function LandingPage() {
               fontSize: "clamp(14px, 1.5vw, 18px)",
               fontWeight: 500,
               lineHeight: 1.68,
-              maxWidth: 520,
+              maxWidth: 500,
               marginBottom: 30,
               textShadow: "0 2px 12px rgba(0,0,0,0.45)",
             }}
           >
-            건폐율·용적률·일조권 사선제한을 자동 계산하고,
-            <br className="hidden sm:block" />
-            평면도와 정북단면을 시각화합니다.
-            <br className="hidden sm:block" />
-            디벨로퍼·토지투자자의 첫 번째 의사결정 도구.
+            주변 실거래로 땅값을 추정하고, 건폐율·용적률·일조권을 계산해
+            건축가능 규모와 수익률까지 한 화면에서 봅니다.
           </p>
 
           {/* CTA 버튼 */}
@@ -195,15 +183,14 @@ export default function LandingPage() {
               gap: 12,
               flexWrap: "wrap",
               justifyContent: "center",
-              marginBottom: 24,
             }}
           >
-            <Link href="/simulator">
+            <Link href="/signup">
               <button
                 className="transition-opacity hover:opacity-85"
                 style={{
-                  background: "#FFCF0D",
-                  color: "#020425",
+                  background: GOLD,
+                  color: NAVY,
                   padding: "14px 30px",
                   borderRadius: 9,
                   fontWeight: 700,
@@ -213,7 +200,7 @@ export default function LandingPage() {
                   letterSpacing: "-0.01em",
                 }}
               >
-                지번 조회 시작 →
+                무료 {SIGNUP_CREDITS}회로 시작하기
               </button>
             </Link>
             <Link href="/pricing">
@@ -231,193 +218,204 @@ export default function LandingPage() {
                   backdropFilter: "blur(4px)",
                 }}
               >
-                요금제 보기
+                크레딧 안내
               </button>
             </Link>
           </div>
+        </div>
+      </section>
 
-          {/* 법령 */}
-          <div style={{ color: "rgba(255,255,255,0.42)", fontSize: 12 }}>
-            ⚖️ 국토계획법 시행령 제84·85조 · 건축법 시행령 제86조 자동 적용 ·
-            법무법인 윤강 자문
+      {/* ── 실제 작업 흐름 (세로 스텝 + 우측 설명) ── */}
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
+        <h2 className="text-2xl sm:text-[32px] font-medium tracking-tight leading-snug max-w-lg">
+          지번을 넣으면, 검토는 네 단계로 이어집니다.
+        </h2>
+        <p className="mt-3 text-sm text-muted-foreground leading-relaxed max-w-md">
+          앞 단계의 결과가 다음 단계 입력값으로 그대로 넘어갑니다. 같은 숫자를
+          두 번 옮겨 적을 일이 없습니다.
+        </p>
+
+        <div className="mt-12 divide-y divide-border border-t border-border">
+          <Step
+            no="01"
+            title="토지가치분석"
+            body="지도에서 필지를 클릭하면 면적·용도지역·지목·공시지가를 불러오고, 주변 실거래 중앙값으로 땅값을 추정합니다. 건축물대장, 인허가 이력, 신축 분양가·임대료 시세도 같이 봅니다."
+            tags={["실거래 추정가", "건축물대장", "용도별 시세"]}
+          />
+          <Step
+            no="02"
+            title="규모 검토"
+            body="건폐율·용적률과 정북 일조권 사선을 층별로 깎아 실제 가능 연면적을 냅니다. 지적도 실형상 그대로 2D 평면·정북단면과 3D 매스로 확인하고, 연접 필지는 합필해서 함께 검토합니다."
+            tags={["일조권 사선", "실형상 3D", "합필 검토"]}
+          />
+          <Step
+            no="03"
+            title="비용·부담금"
+            body="공사비에 농지보전부담금·대체산림자원조성비·개발부담금을 얹어 총 사업비를 잡습니다. 각 부담금은 산식과 감면 요건을 함께 펼쳐볼 수 있습니다."
+            tags={["농지·산지", "개발부담금"]}
+          />
+          <Step
+            no="04"
+            title="사업성 분석"
+            body="분양 또는 임대 수익 모델로 IRR·ROE·손익분기 분양률을 계산합니다. 결과는 미스터홈즈 브랜드 PDF 보고서로 내려받습니다."
+            tags={["IRR·ROE", "PDF 보고서"]}
+          />
+        </div>
+      </section>
+
+      {/* ── 크레딧 제도 (신규) ── */}
+      <section style={{ background: NAVY }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
+          <div className="max-w-xl">
+            <h2
+              className="text-2xl sm:text-[32px] font-medium tracking-tight leading-snug"
+              style={{ color: "#FFFFFF" }}
+            >
+              구독료 없이, 쓴 만큼만.
+            </h2>
+            <p
+              className="mt-3 text-sm leading-relaxed"
+              style={{ color: "rgba(255,255,255,0.62)" }}
+            >
+              지번 조회 1건에 1크레딧이 차감됩니다. 조회한 물건의 규모검토·비용·
+              사업성·보고서는 추가 차감 없이 계속 쓸 수 있습니다. 월 자동결제는
+              없습니다.
+            </p>
           </div>
 
-          {/* 금색 선 */}
-          <div
-            style={{
-              width: 48,
-              height: 3,
-              background: "#FFCF0D",
-              borderRadius: 2,
-              opacity: 0.85,
-              marginTop: 22,
-            }}
-          />
-        </div>
-
-        {/* 스크롤 힌트 */}
-        <div
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-          style={{
-            zIndex: 10,
-            color: "rgba(255,255,255,0.32)",
-            fontSize: 12,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 5,
-          }}
-        >
-          <span style={{ letterSpacing: "0.08em" }}>SCROLL</span>
-          <svg width="12" height="18" viewBox="0 0 12 18" fill="none">
-            <path
-              d="M6 1v16M1 11l5 6 5-6"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          {/* 요금 */}
+          <div className="mt-10 grid gap-3 sm:grid-cols-3">
+            <PriceTile
+              label="가입 시"
+              amount="무료"
+              credits={`${SIGNUP_CREDITS}크레딧`}
+              note="첫 가입 1회 지급"
             />
-          </svg>
-        </div>
-      </section>
+            {CREDIT_PLANS.map((p) => (
+              <PriceTile
+                key={p.id}
+                label={p.label}
+                amount={formatWon(p.priceWon)}
+                credits={`${p.credits}크레딧`}
+                note={p.note}
+                highlighted={p.id === "30"}
+              />
+            ))}
+          </div>
 
-      {/* ── FEATURES ── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
-        <div className="text-[12px] text-muted-foreground font-medium mb-3">
-          핵심 기능
-        </div>
-        <h2 className="text-2xl sm:text-3xl font-medium tracking-tight max-w-xl">
-          현장 디벨로퍼가 매일 쓰는 의사결정 흐름.
-        </h2>
-        <div className="grid sm:grid-cols-3 gap-3 sm:gap-4 mt-10">
-          <Feature
-            badge="① 조회"
-            title="지번 → 용도지역 자동"
-            body="주소만 입력하면 VWorld 오픈 API로 대지면적·용도지역·전면도로폭을 가져와 그대로 시뮬레이터에 채웁니다."
-            note="v0.3 — VWorld 인증 후 활성화"
-          />
-          <Feature
-            badge="② 계산"
-            title="일조권 사선제한 시각화"
-            body="건축법 시행령 제86조 정북방향 1.5m / h·½ - 1.5m 규정을 층별로 깎고, 실제 가능 연면적과 손실률을 함께 보여줍니다."
-          />
-          <Feature
-            badge="③ 검증"
-            title="법령 근거 인용"
-            body="모든 수치 옆에 시행령 조문 번호. 법무법인 윤강 부동산법률 자문으로 강화·예외 규정도 점진 반영."
-          />
-        </div>
-      </section>
-
-      {/* ── AUTHORITY ── */}
-      <section className="border-y border-border bg-secondary/30">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-16 grid sm:grid-cols-2 gap-10 items-start">
-          <div>
-            <div className="text-[12px] text-muted-foreground font-medium mb-3">
-              왜 이 도구가 신뢰할 수 있는가
+          {/* 신청 절차 */}
+          <div
+            className="mt-4 rounded-lg p-5 sm:p-7"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          >
+            <div
+              className="text-[13px] font-semibold mb-4"
+              style={{ color: "#FFFFFF" }}
+            >
+              충전 절차
             </div>
-            <h2 className="text-2xl sm:text-3xl font-medium tracking-tight leading-snug">
+            <ol className="grid gap-4 sm:grid-cols-4">
+              <Flow
+                n={1}
+                title="계좌로 송금"
+                body={`${BANK_INFO.bank} ${BANK_INFO.account} (${BANK_INFO.holder})`}
+              />
+              <Flow
+                n={2}
+                title="신청서 작성"
+                body="입금자 성함과 전화번호 뒤 4자리를 남깁니다."
+              />
+              <Flow
+                n={3}
+                title="확인 후 지급"
+                body="입금 확인 후 3시간 안에 크레딧이 들어옵니다."
+              />
+              <Flow
+                n={4}
+                title="정회원 전환"
+                body="지급과 동시에 정회원으로 바뀝니다."
+              />
+            </ol>
+            <p
+              className="mt-5 pt-4 text-[12px] leading-relaxed"
+              style={{
+                color: "rgba(255,255,255,0.52)",
+                borderTop: "1px solid rgba(255,255,255,0.10)",
+              }}
+            >
+              유효기간은 지급 승인일로부터 {CREDIT_VALID_MONTHS}개월입니다.
+              기간이 지나면 남은 크레딧은 자동 소멸하니, 신청 후{" "}
+              {CREDIT_VALID_MONTHS}개월 안에 사용해 주세요.
+            </p>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center gap-4">
+            <Link href="/credits">
+              <button
+                className="transition-opacity hover:opacity-85"
+                style={{
+                  background: GOLD,
+                  color: NAVY,
+                  padding: "12px 26px",
+                  borderRadius: 9,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                크레딧 신청하기
+              </button>
+            </Link>
+            <Link
+              href="/pricing"
+              className="text-sm hover:underline"
+              style={{ color: "rgba(255,255,255,0.68)" }}
+            >
+              자주 묻는 질문
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 운영자 ── */}
+      <section className="border-b border-border">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-20 grid sm:grid-cols-[1fr_1.1fr] gap-10 sm:gap-14 items-start">
+          <div>
+            <h2 className="text-2xl sm:text-[30px] font-medium tracking-tight leading-snug">
               부동산공법 28년 강의,
               <br />
               &ldquo;공법의 신&rdquo; 고상철 (高相喆).
             </h2>
+            <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+              계산 결과 옆에는 언제나 근거 조문이 붙습니다. 국토계획법 시행령
+              제84·85조, 건축법 시행령 제86조를 그대로 적용하고, 조례 강화
+              규정은 지역별로 반영합니다.
+            </p>
           </div>
-          <ul className="space-y-3.5 text-sm leading-relaxed">
-            <li className="flex gap-3">
-              <span className="text-[var(--info)] mt-0.5">●</span>
-              <span>
-                <span className="font-medium">28년</span> — 부동산공법 강의
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <span className="text-[var(--info)] mt-0.5">●</span>
-              <span>
-                <span className="font-medium">인하대학교</span> 정책대학원
-                부동산학과 초빙교수
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <span className="text-[var(--info)] mt-0.5">●</span>
-              <span>
-                <span className="font-medium">법무법인 윤강</span> 부동산관련법률
-                고문 — 모든 법령 인용 자문
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <span className="text-[var(--info)] mt-0.5">●</span>
-              <span>
-                <span className="font-medium">미스터홈즈 (미스터홈즈) FC</span>{" "}
-                — 전국 가맹점 중개사 실무 검증
-              </span>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      {/* ── PRICING TEASER ── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <div className="text-[12px] text-muted-foreground font-medium mb-2">
-              요금제
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-medium tracking-tight">
-              일 3건은 무료, 무제한은 월 19,900원.
-            </h2>
-          </div>
-          <Link
-            href="/pricing"
-            className="text-sm text-[var(--info)] hover:underline hidden sm:inline"
-          >
-            전체 비교 →
-          </Link>
-        </div>
-        <div className="grid sm:grid-cols-3 gap-3 sm:gap-4">
-          <PlanCard
-            name="Free"
-            price="0원"
-            sub="일 3건 조회"
-            features={["기본 시뮬레이션", "용도지역 13개 프리셋", "일조권 사선 시각화"]}
-          />
-          <PlanCard
-            name="Pro"
-            price="월 19,900원"
-            sub="무제한 조회"
-            highlighted
-            features={[
-              "Free의 모든 기능",
-              "PDF 리포트 (미스터홈즈 브랜드)",
-              "사업성 분석 · IRR",
-              "조회 이력 저장",
-            ]}
-          />
-          <PlanCard
-            name="Business"
-            price="월 99,000원"
-            sub="팀 5명"
-            features={["Pro의 모든 기능", "팀 5인 공유", "비교분석 · API"]}
-          />
-        </div>
-        <div className="mt-4 grid sm:grid-cols-2 gap-3 sm:gap-4">
-          <SpecialPlan
-            name="미스터홈즈 가맹점"
-            price="무료"
-            body="Pro 자동 부여 — 가맹가치 강화"
-          />
-          <SpecialPlan
-            name="부동산멘토스쿨 수강생"
-            price="3개월 무료"
-            body="Pro 체험 — 수료 후 자율 결제"
-          />
+          <dl className="text-sm">
+            <Credential term="강의" desc="부동산공법 28년" />
+            <Credential
+              term="교수"
+              desc="인하대학교 정책대학원 부동산학과 초빙교수"
+            />
+            <Credential
+              term="자문"
+              desc="법무법인 윤강 부동산관련법률 고문 — 법령 인용 전건 검수"
+            />
+            <Credential
+              term="실무"
+              desc="미스터홈즈 FC 전국 가맹점 중개사 현장 검증"
+            />
+          </dl>
         </div>
       </section>
 
       {/* ── FINAL CTA ── */}
-      <section
-        className="relative overflow-hidden"
-        style={{ background: "#020425" }}
-      >
-        {/* 배경 건물 희미하게 */}
+      <section className="relative overflow-hidden" style={{ background: NAVY }}>
         <div
           aria-hidden="true"
           className="absolute inset-0"
@@ -435,24 +433,28 @@ export default function LandingPage() {
           className="absolute inset-0"
           style={{ background: "rgba(2,4,37,0.72)" }}
         />
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div>
             <h2
               className="text-2xl sm:text-3xl font-medium tracking-tight"
               style={{ color: "#FFFFFF" }}
             >
-              지번 한 줄, 지금 바로.
+              검토할 땅이 있으신가요.
             </h2>
-            <p className="mt-2 text-sm max-w-md" style={{ color: "rgba(255,255,255,0.60)" }}>
-              회원가입 없이 일 3건까지 무료로 사용해 보세요.
+            <p
+              className="mt-2 text-sm max-w-md"
+              style={{ color: "rgba(255,255,255,0.60)" }}
+            >
+              가입하면 무료 {SIGNUP_CREDITS}크레딧을 드립니다. 카드 등록은
+              필요 없습니다.
             </p>
           </div>
-          <Link href="/simulator">
+          <Link href="/signup">
             <button
               className="transition-opacity hover:opacity-85 whitespace-nowrap"
               style={{
-                background: "#FFCF0D",
-                color: "#020425",
+                background: GOLD,
+                color: NAVY,
                 padding: "14px 28px",
                 borderRadius: 9,
                 fontWeight: 700,
@@ -461,7 +463,7 @@ export default function LandingPage() {
                 cursor: "pointer",
               }}
             >
-              시뮬레이터 열기 →
+              무료 {SIGNUP_CREDITS}회로 시작하기
             </button>
           </Link>
         </div>
@@ -472,91 +474,119 @@ export default function LandingPage() {
 
 /* ── sub-components ── */
 
-function Feature({
-  badge,
+function Step({
+  no,
   title,
   body,
-  note,
+  tags,
 }: {
-  badge: string;
+  no: string;
   title: string;
   body: string;
-  note?: string;
+  tags: string[];
 }) {
   return (
-    <div className="bg-card border border-border rounded-lg p-5 sm:p-6">
-      <div className="text-[11px] text-muted-foreground font-medium">{badge}</div>
-      <div className="mt-2 text-base font-medium">{title}</div>
-      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{body}</p>
+    <div className="grid sm:grid-cols-[auto_1fr] gap-4 sm:gap-8 py-7 sm:py-9">
+      <div className="text-[13px] tabular-nums font-semibold text-[var(--info)] sm:w-10 sm:pt-1">
+        {no}
+      </div>
+      <div>
+        <h3 className="text-lg font-medium tracking-tight">{title}</h3>
+        <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-2xl">
+          {body}
+        </p>
+        <div className="mt-3.5 flex flex-wrap gap-1.5">
+          {tags.map((t) => (
+            <span
+              key={t}
+              className="text-[11px] px-2 py-0.5 rounded border border-border text-muted-foreground"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PriceTile({
+  label,
+  amount,
+  credits,
+  note,
+  highlighted,
+}: {
+  label: string;
+  amount: string;
+  credits: string;
+  note?: string;
+  highlighted?: boolean;
+}) {
+  return (
+    <div
+      className="rounded-lg p-5"
+      style={{
+        background: highlighted ? "rgba(255,207,13,0.10)" : "rgba(255,255,255,0.05)",
+        border: highlighted
+          ? `1px solid ${GOLD}`
+          : "1px solid rgba(255,255,255,0.12)",
+      }}
+    >
+      <div className="text-[12px]" style={{ color: "rgba(255,255,255,0.58)" }}>
+        {label}
+      </div>
+      <div
+        className="mt-2 text-xl font-semibold tabular-nums"
+        style={{ color: "#FFFFFF" }}
+      >
+        {amount}
+      </div>
+      <div
+        className="mt-1 text-sm font-medium tabular-nums"
+        style={{ color: highlighted ? GOLD : "rgba(255,255,255,0.80)" }}
+      >
+        {credits}
+      </div>
       {note && (
-        <div className="mt-3 text-[11px] text-[var(--info)]">{note}</div>
+        <div
+          className="mt-2.5 text-[11.5px] leading-relaxed"
+          style={{ color: "rgba(255,255,255,0.48)" }}
+        >
+          {note}
+        </div>
       )}
     </div>
   );
 }
 
-function PlanCard({
-  name,
-  price,
-  sub,
-  features,
-  highlighted,
-}: {
-  name: string;
-  price: string;
-  sub: string;
-  features: string[];
-  highlighted?: boolean;
-}) {
+function Flow({ n, title, body }: { n: number; title: string; body: string }) {
   return (
-    <div
-      className={
-        "rounded-lg p-5 sm:p-6 border " +
-        (highlighted
-          ? "border-[var(--info)] bg-[var(--info-bg)]"
-          : "border-border bg-card")
-      }
-    >
-      <div className="flex items-baseline justify-between">
-        <div className="text-sm font-medium">{name}</div>
-        {highlighted && (
-          <span className="text-[10px] text-[var(--info)] bg-card border border-[var(--info)]/40 px-2 py-0.5 rounded-full">
-            추천
-          </span>
-        )}
+    <li>
+      <div
+        className="text-[11px] tabular-nums font-semibold"
+        style={{ color: GOLD }}
+      >
+        {n}
       </div>
-      <div className="mt-3 text-2xl font-semibold tabular-nums">{price}</div>
-      <div className="text-[12px] text-muted-foreground">{sub}</div>
-      <ul className="mt-5 space-y-2 text-[13px]">
-        {features.map((f) => (
-          <li key={f} className="flex gap-2">
-            <span className="text-[var(--success)] mt-0.5">✓</span>
-            <span>{f}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+      <div className="mt-1 text-[13px] font-medium" style={{ color: "#FFFFFF" }}>
+        {title}
+      </div>
+      <div
+        className="mt-1 text-[12px] leading-relaxed"
+        style={{ color: "rgba(255,255,255,0.58)" }}
+      >
+        {body}
+      </div>
+    </li>
   );
 }
 
-function SpecialPlan({
-  name,
-  price,
-  body,
-}: {
-  name: string;
-  price: string;
-  body: string;
-}) {
+function Credential({ term, desc }: { term: string; desc: string }) {
   return (
-    <div className="bg-secondary rounded-lg p-4 sm:p-5 flex items-center justify-between gap-4">
-      <div>
-        <div className="text-sm font-medium">{name}</div>
-        <div className="text-[12px] text-muted-foreground mt-0.5">{body}</div>
-      </div>
-      <div className="text-base font-semibold text-[var(--success)] whitespace-nowrap">
-        {price}
-      </div>
+    <div className="grid grid-cols-[3.5rem_1fr] gap-4 py-3 border-b border-border last:border-0">
+      <dt className="text-[12px] text-muted-foreground pt-0.5">{term}</dt>
+      <dd className="leading-relaxed">{desc}</dd>
     </div>
   );
 }

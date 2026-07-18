@@ -18,7 +18,7 @@ export default function PrivacyPage() {
 
         <section>
           <h2 className="text-base font-semibold mb-3">제1조 (개인정보 처리 목적)</h2>
-          <p className="mb-2">미스터홈즈 건축가능 규모검토 서비스(이하 "회사")는 다음의 목적을 위하여 개인정보를 처리합니다.</p>
+          <p className="mb-2">미스터홈즈 건축가능 규모검토 서비스(이하 &ldquo;회사&rdquo;)는 다음의 목적을 위하여 개인정보를 처리합니다.</p>
           <ul className="list-disc pl-5 space-y-1" style={{ color: "var(--muted-foreground)" }}>
             <li>회원 가입 및 관리, 본인 확인</li>
             <li>서비스 제공 (지번 조회, 규모 검토 시뮬레이션)</li>
