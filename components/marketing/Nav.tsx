@@ -32,10 +32,13 @@ export async function Nav() {
       className="sticky top-0 z-40 backdrop-blur-md"
       style={{ background: "rgba(2,4,37,0.82)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
+      {/* 모바일에서는 좁은 폭에 항목이 눌려 글자가 세로로 쪼개졌다.
+          각 항목에 whitespace-nowrap·shrink-0 을 걸고, 좁으면 메뉴 줄이
+          가로로 스크롤되게 한다(잘리거나 깨지지 않도록). */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 min-h-14 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 py-2 sm:py-0">
+        <Link href="/" className="flex items-center gap-2.5 shrink-0">
           <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wider"
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wider whitespace-nowrap"
             style={{
               background: "rgba(255,207,13,0.14)",
               color: "#FFCF0D",
@@ -44,13 +47,13 @@ export async function Nav() {
           >
             SCALE REVIEW
           </span>
-          <span className="font-medium text-sm text-white/90">건축가능 규모검토</span>
+          <span className="font-medium text-sm text-white/90 whitespace-nowrap">건축가능 규모검토</span>
         </Link>
 
-        <nav className="flex items-center gap-1 sm:gap-2">
+        <nav className="flex items-center gap-1 sm:gap-2 overflow-x-auto sm:overflow-visible -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Link
             href="/simulator"
-            className="text-sm px-3 py-1.5 rounded-md transition-colors"
+            className="text-sm px-2 sm:px-3 py-1.5 rounded-md transition-colors whitespace-nowrap shrink-0"
             style={{ color: "rgba(255,255,255,0.58)" }}
           >
             시뮬레이터
@@ -59,14 +62,14 @@ export async function Nav() {
               Next 라우트가 아니라 정적 파일이므로 <Link> 프리페치 대상이 아니다. */}
           <a
             href="/building-law"
-            className="text-sm px-3 py-1.5 rounded-md transition-colors"
+            className="text-sm px-2 sm:px-3 py-1.5 rounded-md transition-colors whitespace-nowrap shrink-0"
             style={{ color: "rgba(255,255,255,0.58)" }}
           >
             건축이야기
           </a>
           <Link
             href="/pricing"
-            className="text-sm px-3 py-1.5 rounded-md transition-colors"
+            className="text-sm px-2 sm:px-3 py-1.5 rounded-md transition-colors whitespace-nowrap shrink-0"
             style={{ color: "rgba(255,255,255,0.58)" }}
           >
             가격
@@ -87,12 +90,12 @@ export async function Nav() {
                   ADMIN
                 </Link>
               )}
-              <span className="text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>
+              <span className="text-xs truncate max-w-[9rem] hidden md:inline" style={{ color: "rgba(255,255,255,0.6)" }}>
                 {user.email}
               </span>
               <form action={signOut}>
                 <button type="submit"
-                  className="text-xs px-3 py-1.5 rounded-md"
+                  className="text-xs px-3 py-1.5 rounded-md whitespace-nowrap shrink-0"
                   style={{ color: "rgba(255,255,255,0.45)" }}>
                   로그아웃
                 </button>
@@ -102,17 +105,19 @@ export async function Nav() {
             <>
               <Link
                 href="/login"
-                className="text-sm px-3 py-1.5 rounded-md transition-colors"
+                className="text-sm px-2 sm:px-3 py-1.5 rounded-md transition-colors whitespace-nowrap shrink-0"
                 style={{ color: "rgba(255,255,255,0.58)" }}
               >
                 로그인
               </Link>
-              <Link href="/signup">
+              <Link href="/signup" className="shrink-0">
                 <button
-                  className="text-sm font-bold px-4 py-1.5 rounded-md transition-opacity hover:opacity-85"
+                  className="text-sm font-bold px-3 sm:px-4 py-1.5 rounded-md transition-opacity hover:opacity-85 whitespace-nowrap"
                   style={{ background: "#FFCF0D", color: "#020425" }}
                 >
-                  지번 조회 시작
+                  {/* 좁은 화면에선 라벨을 줄여 버튼이 잘려 보이지 않게 한다 */}
+                  <span className="sm:hidden">시작하기</span>
+                  <span className="hidden sm:inline">지번 조회 시작</span>
                 </button>
               </Link>
             </>
