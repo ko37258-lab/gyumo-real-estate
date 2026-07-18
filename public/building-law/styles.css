@@ -3349,3 +3349,28 @@ input {
 .gyumo-backbar-arrow {
   color: #ffcf0d;
 }
+
+/* ── 태블릿 폭(761~980px) 내비게이션 넘침 보정 ──
+   원본 CSS는 760px 이하에서만 메뉴를 가로 스크롤로 바꾸고 980px 이상에서는
+   한 줄에 들어가는데, 그 사이 구간에 규칙이 없어 메뉴 8개가 화면 밖으로
+   삐져나가 페이지 전체에 가로 스크롤이 생겼다(768px에서 954px).
+   모바일 동작을 건드리지 않도록 이 구간만 지정한다. */
+@media (min-width: 761px) and (max-width: 980px) {
+  .site-header .header-row {
+    flex-wrap: wrap;
+  }
+  .main-nav {
+    width: 100%;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .main-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .main-nav a {
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+}
