@@ -146,11 +146,15 @@ GRANT EXECUTE ON FUNCTION public.gyumo_credit_next_expiry(UUID) TO authenticated
 GRANT EXECUTE ON FUNCTION public.gyumo_consume_credit(UUID)     TO authenticated;
 GRANT EXECUTE ON FUNCTION public.gyumo_grant_credits(UUID, INTEGER, TEXT, TIMESTAMPTZ) TO authenticated, service_role;
 
--- ── 신규 가입 시: 프로필 + 무료 3크레딧 1회 지급 ──────────────
---   (이메일·구글 OAuth 가입 모두 이 트리거를 탄다)
-CREATE OR REPLACE FUNCTION public.handle_new_user()
+-- ── 신규 가입 시: 프로필 보정 + 무료 3크레딧 1회 지급 ──────────
+--   ⚠ 이 Supabase 프로젝트는 여러 앱이 공유한다(테이블 prefix가 gyumo_ 인 이유).
+--     공용 이름인 public.handle_new_user() 를 덮어쓰면 다른 앱의 가입 처리가
+--     깨질 수 있으므로 절대 건드리지 않고, gyumo 전용 함수·트리거를 따로 단다.
+--     (PostgreSQL은 한 테이블에 트리거 여러 개를 허용하며, 이름 알파벳 순으로 실행된다.)
+CREATE OR REPLACE FUNCTION public.gyumo_handle_new_user()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
+  -- 프로필이 없을 때만 생성 (기존 트리거가 이미 만들었으면 건너뜀)
   INSERT INTO public.gyumo_profiles (id, email, full_name, role, credits)
   VALUES (
     NEW.id,
@@ -161,14 +165,28 @@ BEGIN
   )
   ON CONFLICT (id) DO NOTHING;
 
-  INSERT INTO public.gyumo_credit_batches(user_id, amount, remaining, source, expires_at)
-  VALUES (NEW.id, 3, 3, 'signup', NULL);
+  -- 가입 축하 크레딧은 1회만 (중복 실행·재가입 대비)
+  IF NOT EXISTS (
+    SELECT 1 FROM public.gyumo_credit_batches
+    WHERE user_id = NEW.id AND source = 'signup'
+  ) THEN
+    INSERT INTO public.gyumo_credit_batches(user_id, amount, remaining, source, expires_at)
+    VALUES (NEW.id, 3, 3, 'signup', NULL);
+  END IF;
+
+  UPDATE public.gyumo_profiles
+  SET credits = public.gyumo_credit_balance(NEW.id)
+  WHERE id = NEW.id;
 
   RETURN NEW;
 END;
 $$;
 
--- (트리거 자체는 schema.sql에서 이미 생성됨 — 함수만 교체)
+-- gyumo 전용 트리거 (기존 on_auth_user_created 는 그대로 둔다)
+DROP TRIGGER IF EXISTS on_auth_user_created_gyumo_credits ON auth.users;
+CREATE TRIGGER on_auth_user_created_gyumo_credits
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.gyumo_handle_new_user();
 
 -- ── 기존 회원 소급: signup 배치가 없는 회원에게 3크레딧 1회 지급 ──
 INSERT INTO public.gyumo_credit_batches(user_id, amount, remaining, source, expires_at)
