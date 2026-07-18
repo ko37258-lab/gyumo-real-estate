@@ -138,7 +138,20 @@ export default async function AccountPage() {
             </div>
             <div className="flex justify-between">
               <dt style={{ color: "var(--muted-foreground)" }}>약관 동의</dt>
-              <dd>{profile?.agreed_terms ? `동의 완료 (${profile.agreed_at ? new Date(profile.agreed_at).toLocaleDateString("ko-KR") : ""})` : "미동의"}</dd>
+              <dd>
+                {profile?.agreed_terms ? (
+                  `동의 완료 (${profile.agreed_at ? new Date(profile.agreed_at).toLocaleDateString("ko-KR") : ""})`
+                ) : (
+                  // 구글 등 소셜 가입은 가입 폼을 거치지 않아 동의 기록이 없다 → 여기서 바로 동의
+                  <Link
+                    href="/consent?next=/account"
+                    className="font-bold underline underline-offset-2"
+                    style={{ color: "#f59e0b" }}
+                  >
+                    미동의 — 지금 동의하기 →
+                  </Link>
+                )}
+              </dd>
             </div>
           </dl>
         </div>

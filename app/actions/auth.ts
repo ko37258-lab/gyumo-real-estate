@@ -63,6 +63,38 @@ export async function signIn(formData: FormData) {
   redirect(redirectTo);
 }
 
+/**
+ * 개인정보 수집·이용 동의 기록 (소셜 로그인 가입자용).
+ * 이메일 가입은 가입 폼에서 동의를 받지만, 구글 등 소셜 가입은 동의 절차가 없어
+ * 로그인 직후 /consent 화면에서 동의를 받아 여기서 저장한다.
+ */
+export async function agreeTerms(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const next = (formData.get("next") as string) || "/simulator";
+
+  if (!user) {
+    redirect(`/login?redirect=${encodeURIComponent(next)}`);
+  }
+
+  if (formData.get("privacy_agree") !== "on") {
+    redirect(
+      `/consent?next=${encodeURIComponent(next)}&error=${encodeURIComponent("개인정보 수집·이용에 동의해야 서비스를 이용할 수 있습니다.")}`,
+    );
+  }
+
+  await supabase
+    .from("gyumo_profiles")
+    .update({ agreed_terms: true, agreed_at: new Date().toISOString() })
+    .eq("id", user.id);
+
+  revalidatePath("/", "layout");
+  redirect(next);
+}
+
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
