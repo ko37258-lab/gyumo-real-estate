@@ -55,8 +55,10 @@ export async function Nav() {
           >
             시뮬레이터
           </Link>
+          {/* 건축이야기 = public/building-law/ 정적 사이트 (외부 netlify → 내부 편입).
+              Next 라우트가 아니라 정적 파일이므로 <Link> 프리페치 대상이 아니다. */}
           <a
-            href="https://mrk-building-law.netlify.app"
+            href="/building-law"
             className="text-sm px-3 py-1.5 rounded-md transition-colors"
             style={{ color: "rgba(255,255,255,0.58)" }}
           >
