@@ -99,6 +99,21 @@ export default async function SignupPage({
             />
           </div>
 
+          {/* 비밀번호를 한 번만 받으면 오타를 걸러낼 수 없다.
+              가입은 되는데 로그인이 안 되는 상황이 생기고, 사용자는 원인을 알기 어렵다. */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.65)" }}>
+              비밀번호 확인 <span style={{ color: "#FFCF0D" }}>*</span>
+            </label>
+            <input
+              type="password" name="password_confirm" required autoComplete="new-password"
+              minLength={8}
+              placeholder="위와 같은 비밀번호를 한 번 더"
+              className="w-full rounded-lg px-3.5 py-2.5 text-sm text-white outline-none"
+              style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)" }}
+            />
+          </div>
+
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.65)" }}>
               전화번호 <span style={{ color: "#FFCF0D" }}>*</span>

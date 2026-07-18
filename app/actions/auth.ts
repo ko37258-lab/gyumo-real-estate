@@ -10,6 +10,7 @@ export async function signUp(formData: FormData) {
 
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
+  const passwordConfirm = formData.get("password_confirm") as string | null;
 
   const phone = (formData.get("phone") as string | null)?.trim() || null;
   const fullName = (formData.get("full_name") as string | null)?.trim() || null;
@@ -24,6 +25,12 @@ export async function signUp(formData: FormData) {
   if (!phone) {
     redirect(`/signup?error=${encodeURIComponent("전화번호를 입력해주세요.")}`);
   }
+  // 브라우저에서도 막지만, 폼 검증은 우회될 수 있으므로 서버에서 다시 본다.
+  if (passwordConfirm !== null && password !== passwordConfirm) {
+    redirect(
+      `/signup?error=${encodeURIComponent("비밀번호가 서로 다릅니다. 다시 확인해주세요.")}`,
+    );
+  }
 
   const { data, error } = await supabase.auth.signUp({ email, password });
 
@@ -31,8 +38,17 @@ export async function signUp(formData: FormData) {
     redirect(`/signup?error=${encodeURIComponent(error.message)}`);
   }
 
+  // 이미 가입된 이메일이면 Supabase가 (계정 존재 여부를 숨기려고) 오류 대신
+  // identities 가 빈 사용자를 돌려준다. 그대로 두면 "가입됐다"고 오해하게 되고,
+  // 아래 프로필 저장도 세션이 없어 조용히 실패한다. 명시적으로 안내한다.
+  if (data.user && (data.user.identities?.length ?? 0) === 0) {
+    redirect(
+      `/signup?error=${encodeURIComponent("이미 가입된 이메일입니다. 로그인해주세요.")}`,
+    );
+  }
+
   if (data.user) {
-    await supabase
+    const { error: profileError } = await supabase
       .from("gyumo_profiles")
       .update({
         full_name: fullName,
@@ -41,6 +57,14 @@ export async function signUp(formData: FormData) {
         agreed_at: new Date().toISOString(),
       })
       .eq("id", data.user.id);
+
+    // 예전엔 결과를 확인하지 않아, 저장이 실패해도 가입이 정상으로 보였다
+    // (이름·전화번호가 빈 채로 남는 원인). 실패하면 사용자에게 알린다.
+    if (profileError) {
+      redirect(
+        `/signup?error=${encodeURIComponent("가입은 되었으나 회원정보 저장에 실패했습니다. 로그인 후 마이페이지에서 입력해주세요.")}`,
+      );
+    }
   }
 
   revalidatePath("/", "layout");
