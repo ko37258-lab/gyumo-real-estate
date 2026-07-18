@@ -1,21 +1,11 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateKST } from "@/lib/utils";
+import { ALL_ROLES, PAID_ROLES, roleColor } from "@/lib/membership";
 
 export const metadata = { title: "관리자 대시보드 | 규모검토" };
 
-const ROLE_LABEL: Record<string, string> = {
-  "일반회원": "일반회원",
-  "정회원": "정회원",
-  "미스터홈즈": "미스터홈즈",
-  "스텝": "스텝",
-};
-const ROLE_COLOR: Record<string, string> = {
-  "일반회원": "#6b7280",
-  "정회원": "#FFCF0D",
-  "미스터홈즈": "#34d399",
-  "스텝": "#a78bfa",
-};
+// 등급 목록·색은 lib/membership 한 곳에서 가져온다 (화면마다 따로 두면 어긋난다)
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -33,7 +23,7 @@ export default async function AdminPage() {
 
   const today = new Date().toISOString().slice(0, 10);
   const activeToday = profiles?.filter(p => p.daily_count > 0 && p.daily_reset === today).length ?? 0;
-  const paidCount = (roleCounts["정회원"] || 0) + (roleCounts["미스터홈즈"] || 0);
+  const paidCount = PAID_ROLES.reduce((n, r) => n + (roleCounts[r] || 0), 0);
 
   // 최근 7일 신규 가입 — 메일을 놓쳐도 화면에서 바로 보이게 한다.
   // (Date.now() 는 react-hooks/purity 에 걸려 위 today 와 같은 방식으로 만든다)
@@ -78,7 +68,7 @@ export default async function AdminPage() {
           { label: "전체 회원", value: total, sub: "명" },
           { label: "오늘 활성", value: activeToday, sub: "명 조회함" },
           { label: "정회원 이상", value: paidCount, sub: "유료 회원" },
-          { label: "미스터홈즈", value: roleCounts["미스터홈즈"] || 0, sub: "VIP 회원" },
+          { label: "미스터홈즈센터", value: roleCounts["미스터홈즈센터"] || 0, sub: "가맹점 회원" },
         ].map(c => (
           <div key={c.label} className="rounded-xl p-5 border"
             style={{ background: "var(--card)", borderColor: "var(--border)" }}>
@@ -94,10 +84,10 @@ export default async function AdminPage() {
         style={{ background: "var(--card)", borderColor: "var(--border)" }}>
         <h2 className="text-sm font-semibold mb-4">회원 등급 분포</h2>
         <div className="flex flex-wrap gap-3">
-          {Object.entries(ROLE_LABEL).map(([key, label]) => (
+          {ALL_ROLES.map((key) => (
             <div key={key} className="flex items-center gap-2 text-sm">
-              <span className="w-2 h-2 rounded-full" style={{ background: ROLE_COLOR[key] }} />
-              <span>{label}</span>
+              <span className="w-2 h-2 rounded-full" style={{ background: roleColor(key) }} />
+              <span>{key}</span>
               <span className="font-bold">{roleCounts[key] || 0}명</span>
             </div>
           ))}
@@ -135,8 +125,8 @@ export default async function AdminPage() {
                   <td className="px-4 py-3 text-xs" style={{ color: "var(--muted-foreground)" }}>{p.email}</td>
                   <td className="px-4 py-3">
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                      style={{ background: `${ROLE_COLOR[p.role] ?? "#6b7280"}22`, color: ROLE_COLOR[p.role] ?? "#6b7280" }}>
-                      {p.is_admin ? "최고관리자" : (ROLE_LABEL[p.role] ?? p.role)}
+                      style={{ background: `${roleColor(p.role)}22`, color: roleColor(p.role) }}>
+                      {p.is_admin ? "최고관리자" : p.role}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs">

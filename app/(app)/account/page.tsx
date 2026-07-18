@@ -1,30 +1,12 @@
 import { redirect } from "next/navigation";
+import { roleColor, roleDesc } from "@/lib/membership";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
 import Link from "next/link";
 
 export const metadata = { title: "마이페이지 | 규모검토" };
 
-const ROLE_LABEL: Record<string, string> = {
-  "일반회원": "일반회원",
-  "정회원": "정회원",
-  "미스터홈즈": "미스터홈즈",
-  "스텝": "스텝",
-};
-
-const ROLE_COLOR: Record<string, string> = {
-  "일반회원": "#6b7280",
-  "정회원": "#FFCF0D",
-  "미스터홈즈": "#34d399",
-  "스텝": "#a78bfa",
-};
-
-const ROLE_DESC: Record<string, string> = {
-  "일반회원": "기본 기능 제공 (일 3건 조회)",
-  "정회원": "무제한 조회 · PDF 리포트 · 사업성 분석",
-  "미스터홈즈": "정회원 혜택 + 미스터홈즈 FC 전용",
-  "스텝": "내부 스텝 전용 · 관리자 기능 포함",
-};
+// 등급 라벨·색·설명은 lib/membership 한 곳에서 가져온다
 
 export default async function AccountPage() {
   const supabase = await createClient();
@@ -39,7 +21,7 @@ export default async function AccountPage() {
     .single();
 
   const role = profile?.role ?? "일반회원";
-  const roleColor = ROLE_COLOR[role] ?? "#6b7280";
+  const badgeColor = roleColor(role);
 
   // 크레딧 잔액·임박 만료일 (1회 조회 = 1크레딧)
   const { data: balanceRaw } = await supabase.rpc("gyumo_credit_balance", {
@@ -76,13 +58,13 @@ export default async function AccountPage() {
               <div className="text-sm" style={{ color: "var(--muted-foreground)" }}>{user.email}</div>
             </div>
             <span className="text-xs font-bold px-3 py-1.5 rounded-full"
-              style={{ background: `${roleColor}22`, color: roleColor, border: `1px solid ${roleColor}44` }}>
-              {ROLE_LABEL[role] ?? role}
+              style={{ background: `${badgeColor}22`, color: badgeColor, border: `1px solid ${badgeColor}44` }}>
+              {role}
               {profile?.is_admin && " · 최고관리자"}
             </span>
           </div>
           <div className="text-sm p-3 rounded-lg" style={{ background: "var(--secondary)" }}>
-            {ROLE_DESC[role]}
+            {roleDesc(role)}
           </div>
         </div>
 
@@ -100,7 +82,7 @@ export default async function AccountPage() {
                 <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                   지번 조회 1건당 1크레딧
                 </span>
-                <span className="text-2xl font-bold" style={{ color: roleColor }}>
+                <span className="text-2xl font-bold" style={{ color: badgeColor }}>
                   {credits.toLocaleString("ko-KR")}
                   <span className="text-sm font-medium ml-1">크레딧</span>
                 </span>
