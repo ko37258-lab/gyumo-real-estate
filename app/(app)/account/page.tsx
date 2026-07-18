@@ -41,9 +41,15 @@ export default async function AccountPage() {
   const role = profile?.role ?? "일반회원";
   const roleColor = ROLE_COLOR[role] ?? "#6b7280";
 
-  const today = new Date().toISOString().slice(0, 10);
-  const usedToday = profile?.daily_reset === today ? (profile?.daily_count ?? 0) : 0;
-  const isUnlimited = role !== "일반회원";
+  // 크레딧 잔액·임박 만료일 (1회 조회 = 1크레딧)
+  const { data: balanceRaw } = await supabase.rpc("gyumo_credit_balance", {
+    p_user: user.id,
+  });
+  const { data: nextExpiry } = await supabase.rpc("gyumo_credit_next_expiry", {
+    p_user: user.id,
+  });
+  const credits = Number(balanceRaw) || 0;
+  const isUnlimited = Boolean(profile?.is_admin) || role === "스텝";
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
@@ -83,26 +89,40 @@ export default async function AccountPage() {
         {/* 오늘 사용 현황 */}
         <div className="rounded-2xl border p-6"
           style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-          <h2 className="font-semibold mb-4">오늘 사용 현황</h2>
+          <h2 className="font-semibold mb-4">보유 크레딧</h2>
           {isUnlimited ? (
             <div className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-              무제한 조회 가능 · 오늘 {usedToday}건 사용
+              무제한 조회 가능 (관리자·스텝)
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span>지번 조회</span>
-                <span className="font-bold">{usedToday} / 3건</span>
+            <div className="space-y-3">
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                  지번 조회 1건당 1크레딧
+                </span>
+                <span className="text-2xl font-bold" style={{ color: roleColor }}>
+                  {credits.toLocaleString("ko-KR")}
+                  <span className="text-sm font-medium ml-1">크레딧</span>
+                </span>
               </div>
-              <div className="w-full rounded-full h-2" style={{ background: "var(--secondary)" }}>
-                <div className="h-2 rounded-full transition-all"
-                  style={{ width: `${Math.min(100, (usedToday / 3) * 100)}%`, background: roleColor }} />
-              </div>
-              {usedToday >= 3 && (
-                <p className="text-xs mt-2" style={{ color: "#f87171" }}>
-                  오늘 조회 한도에 도달했습니다. 내일 초기화됩니다.
+              {nextExpiry && (
+                <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                  가장 가까운 만료일:{" "}
+                  {new Date(nextExpiry as string).toLocaleDateString("ko-KR")} (승인 후 2개월)
                 </p>
               )}
+              {credits === 0 && (
+                <p className="text-xs" style={{ color: "#f87171" }}>
+                  크레딧이 모두 소진됐습니다. 정회원 신청으로 충전해주세요.
+                </p>
+              )}
+              <Link
+                href="/credits"
+                className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-bold transition-opacity hover:opacity-85"
+                style={{ background: "#993C1D", color: "#fff" }}
+              >
+                크레딧 충전 · 정회원 신청 →
+              </Link>
             </div>
           )}
         </div>

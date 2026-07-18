@@ -232,6 +232,7 @@ export function LandLookup({
   const deepLinkRan = useRef(false);
   const [usage, setUsage] = useState<{
     isLoggedIn: boolean; used: number; limit: number; remaining: number; allowed: boolean; role: string;
+    credits?: number; unlimited?: boolean; nextExpiry?: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -252,9 +253,9 @@ export function LandLookup({
       return;
     }
 
-    // 한도 체크 (클라이언트 사전 검사)
+    // 크레딧 체크 (클라이언트 사전 검사)
     if (usage !== null && usage.isLoggedIn && !usage.allowed) {
-      setError(`오늘 사용 한도(${usage.limit}회)를 모두 사용하셨습니다. 내일 다시 이용하거나 등급을 업그레이드하세요.`);
+      setError("크레딧이 부족합니다. 정회원 신청으로 크레딧을 충전해주세요.");
       return;
     }
 
@@ -269,10 +270,9 @@ export function LandLookup({
     if (usage?.isLoggedIn) {
       const incRes = await fetch("/api/usage", { method: "POST" });
       if (incRes.status === 429) {
-        const data = await incRes.json().catch(() => ({})) as { limit?: number };
-        setError(`오늘 사용 한도(${data.limit ?? usage.limit}회)를 모두 사용하셨습니다.`);
+        setError("크레딧이 부족합니다. 정회원 신청으로 크레딧을 충전해주세요.");
         setLoading(false);
-        setUsage((prev) => prev ? { ...prev, allowed: false, remaining: 0 } : prev);
+        setUsage((prev) => prev ? { ...prev, allowed: false, remaining: 0, credits: 0 } : prev);
         return;
       }
       const updated = await incRes.json().catch(() => null) as typeof usage | null;
@@ -730,13 +730,21 @@ export function LandLookup({
   const zoneShown = result?.zone ?? null;
   const matchedZoneCode = findZoneCodeByName(zoneShown);
 
+  // 크레딧 배지 — 1회 조회 = 1크레딧 소모
   const usageBadge = usage?.isLoggedIn
-    ? usage.remaining === 0
-      ? { text: `오늘 ${usage.used}/${usage.limit}회 사용`, color: "text-red-500" }
-      : { text: `오늘 ${usage.used}/${usage.limit}회 사용`, color: "text-muted-foreground" }
+    ? usage.unlimited
+      ? { text: "무제한 (관리자)", color: "text-muted-foreground" }
+      : (usage.credits ?? 0) === 0
+        ? { text: "크레딧 0개", color: "text-red-500" }
+        : {
+            text: `크레딧 ${(usage.credits ?? 0).toLocaleString("ko-KR")}개`,
+            color: (usage.credits ?? 0) <= 3 ? "text-amber-500" : "text-muted-foreground",
+          }
     : usage !== null
       ? { text: "로그인 후 이용", color: "text-amber-500" }
       : null;
+  const needsCredits =
+    Boolean(usage?.isLoggedIn) && !usage?.unlimited && (usage?.credits ?? 0) === 0;
 
   return (
     <div>
@@ -760,8 +768,37 @@ export function LandLookup({
           {usageBadge && (
             <span className={`text-[10px] ${usageBadge.color}`}>{usageBadge.text}</span>
           )}
+          {usage?.isLoggedIn && !usage.unlimited && (
+            <a
+              href="/credits"
+              className="text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors"
+              style={{ borderColor: "#993C1D", color: "#993C1D" }}
+            >
+              + 충전
+            </a>
+          )}
         </span>
       </div>
+
+      {/* 크레딧 소진 안내 */}
+      {needsCredits && (
+        <div className="mt-2 px-3 py-2.5 rounded-md text-[12px] flex items-center justify-between gap-2 border"
+          style={{ background: "rgba(153,60,29,0.06)", borderColor: "rgba(153,60,29,0.35)" }}>
+          <span>
+            <b style={{ color: "#993C1D" }}>크레딧이 모두 소진됐습니다.</b>{" "}
+            <span className="text-muted-foreground">
+              정회원 신청으로 충전하면 계속 조회할 수 있습니다.
+            </span>
+          </span>
+          <a
+            href="/credits"
+            className="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-md"
+            style={{ background: "#993C1D", color: "#fff" }}
+          >
+            정회원 신청 →
+          </a>
+        </div>
+      )}
       <div className="flex gap-2">
         <Input
           value={address}

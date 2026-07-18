@@ -41,6 +41,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin/users" className="px-3 py-1.5 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                 회원 관리
               </Link>
+              <Link href="/admin/credits" className="px-3 py-1.5 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+                크레딧 신청
+              </Link>
             </nav>
             <div className="flex items-center gap-2 pl-3 border-l border-white/10">
               <span className="text-xs text-white/40">{profile.full_name || profile.email}</span>

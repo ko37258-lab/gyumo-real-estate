@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signUp } from "@/app/actions/auth";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 
 export default async function SignupPage({
   searchParams,
@@ -42,6 +43,23 @@ export default async function SignupPage({
             {decodeURIComponent(params.success)}
           </div>
         )}
+
+        <div
+          className="rounded-lg px-3.5 py-2.5 mb-4 text-[11.5px] leading-relaxed"
+          style={{ background: "rgba(255,207,13,0.10)", border: "1px solid rgba(255,207,13,0.25)", color: "rgba(255,255,255,0.75)" }}
+        >
+          🎁 가입하면 <b style={{ color: "#FFCF0D" }}>무료 3크레딧</b>이 지급됩니다 (조회 3건). 소진 후에는 정회원 신청으로 크레딧을 충전할 수 있습니다.
+        </div>
+
+        <GoogleButton next="/simulator" />
+
+        <div className="flex items-center gap-3 my-5">
+          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.1)" }} />
+          <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.35)" }}>
+            또는 이메일로 가입
+          </span>
+          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.1)" }} />
+        </div>
 
         <form action={signUp} className="space-y-4">
           <div>

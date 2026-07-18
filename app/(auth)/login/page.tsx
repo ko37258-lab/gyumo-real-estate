@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signIn } from "@/app/actions/auth";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 
 export default async function LoginPage({
   searchParams,
@@ -44,6 +45,16 @@ export default async function LoginPage({
             {decodeURIComponent(params.success)}
           </div>
         )}
+
+        <GoogleButton next={params.redirect || "/simulator"} />
+
+        <div className="flex items-center gap-3 my-5">
+          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.1)" }} />
+          <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.35)" }}>
+            또는 이메일로
+          </span>
+          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.1)" }} />
+        </div>
 
         <form action={signIn} className="space-y-4">
           <input type="hidden" name="redirect" value={params.redirect || "/simulator"} />

@@ -252,6 +252,17 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-17 (17)** — **크레딧 과금 시스템 + 구글 로그인 + 정회원 신청·승인** (운영자 요청).
+  - **정책 확정**: 1회 조회 = 1크레딧 / 10회 신청 1만원 → 12크레딧 / 30회 신청 2.5만원 → **36크레딧**(운영자 확정, 원문 "3크레딧"은 오타) / 유효기간 **승인(지급) 후 2개월** / 가입 시 **무료 3크레딧 1회**(이후 활동 보고 관리자 지급). 기존 "일 3건 리셋" 모델 폐기.
+  - **DB `supabase/schema_credits.sql`**(멱등, 추가 마이그레이션): `gyumo_credit_batches`(배치별 만료), `gyumo_credit_requests`(입금 신청), profiles에 `credits`·`region` 추가. RPC — `gyumo_credit_balance`/`gyumo_credit_next_expiry`/`gyumo_consume_credit`(만료 임박 배치 우선 원자적 차감)/`gyumo_grant_credits`. `handle_new_user` 트리거 교체(프로필 + 가입 3크레딧, 이메일·구글 공통) + 기존 회원 소급 3크레딧.
+  - **구글 로그인**: `components/auth/GoogleButton.tsx`(signInWithOAuth → `/auth/callback`) — 로그인·가입 페이지 상단에 배치, 가입 페이지에 무료 3크레딧 안내 배너.
+  - **`/api/usage` 크레딧 기반 재작성**: 비로그인 allowed=false, 관리자·스텝 무제한(차감 없음), 그 외 잔액 기반. 응답에 `credits`·`nextExpiry`·`unlimited` 추가(기존 필드 호환 유지).
+  - **신청 흐름**: `/credits` 페이지(잔액 → 안내 4문구 원문 → 요금제 선택 → 입금 계좌 → 입금자 성함·전화 뒤4자리 + 정회원 정보(회사·관심지역) → 신청, 내 신청 내역) + `/api/credits`(pending 중복 방지, service role insert).
+  - **관리자 승인**: `/admin/credits` + `/api/admin/credits` — 승인 시 크레딧 지급(승인+2개월 만료) + 일반회원 → **정회원 자동 승격**, 반려 지원. 관리자 네비에 "크레딧 신청" 추가.
+  - **UI 연동**: LandLookup 배지 "크레딧 N개"(3개 이하 주황·0개 빨강) + [+ 충전] + 소진 시 정회원 신청 CTA, 마이페이지 크레딧 잔액·만료일·충전 버튼.
+  - 검증: tsc 0 / eslint 0 / `next build` 0 오류(신규 라우트 4종 포함).
+  - ⚠ **운영자 조치 3건**: ① Supabase SQL Editor에서 `supabase/schema_credits.sql` 실행 ② Supabase → Authentication → Providers → **Google 활성화** + 리디렉션 URL에 `https://gyumo.vercel.app/auth/callback` 등록 ③ `lib/credits.ts`의 `BANK_INFO`를 실제 계좌로 교체(또는 `NEXT_PUBLIC_BANK_NAME`/`_ACCOUNT`/`_HOLDER` 환경변수 설정).
+
 - **2026-07-17 (16)** — **㎡↔평 표시 단위 토글 + 원 단위 가독성** (운영자 피드백).
   - `store/unit.ts`(persist `gyumo_area_unit`) + ① 지번 조회 헤더에 [⇄ ㎡ 기준/평 기준] 토글 칩 — 플렉시티 [⇄ 평] 대응.
   - 단위 연동 표시: 기본정보 면적(순서 스왑)·합필 합계/행·공시지가(원/㎡↔원/평 환산)·추정가 보드 서브·토지 실거래 행(면적·단가·헤더)·신축 시세(중앙값·괄호에 반대 단위 병기)·실거래 사례 행·프로젝트 이력.

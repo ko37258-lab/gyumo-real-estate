@@ -1,80 +1,131 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getDailyLimit } from "@/lib/membership";
+
+// 크레딧 기반 사용량 API.
+//   · 비로그인: 로그인 필요 (allowed=false)
+//   · 관리자/스텝: 무제한 (크레딧 차감 없음)
+//   · 일반/정회원: 유효 크레딧 잔액으로 조회 (1건 = 1크레딧)
+//
+// 응답 필드는 기존 LandLookup 호환을 위해 used/limit/remaining/allowed 유지 +
+// credits(잔액)·nextExpiry(임박 만료일) 추가.
+
+async function loadProfile(userId: string) {
+  const supabase = await createClient();
+  const { data: profile } = await supabase
+    .from("gyumo_profiles")
+    .select("role, is_admin")
+    .eq("id", userId)
+    .single();
+  return profile;
+}
 
 export async function GET() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ isLoggedIn: false, used: 0, limit: 3, remaining: 3, allowed: true, role: "일반회원" });
+    return NextResponse.json({
+      isLoggedIn: false,
+      credits: 0,
+      used: 0,
+      limit: 0,
+      remaining: 0,
+      allowed: false,
+      role: "일반회원",
+      nextExpiry: null,
+    });
   }
 
-  const { data: profile } = await supabase
-    .from("gyumo_profiles")
-    .select("daily_count, daily_reset, role, is_admin")
-    .eq("id", user.id)
-    .single();
+  const profile = await loadProfile(user.id);
+  const isStaff = Boolean(profile?.is_admin) || profile?.role === "스텝";
+  const role = profile?.role ?? "일반회원";
 
-  if (!profile) {
-    return NextResponse.json({ isLoggedIn: true, used: 0, limit: 3, remaining: 3, allowed: true, role: "일반회원" });
+  if (isStaff) {
+    return NextResponse.json({
+      isLoggedIn: true,
+      credits: 9999,
+      used: 0,
+      limit: 9999,
+      remaining: 9999,
+      allowed: true,
+      unlimited: true,
+      role,
+      nextExpiry: null,
+    });
   }
 
-  const today = new Date().toISOString().split("T")[0];
-  const isNewDay = profile.daily_reset !== today;
-  const used = isNewDay ? 0 : (profile.daily_count ?? 0);
-  const limit = getDailyLimit(profile.role, profile.is_admin);
+  const { data: balance } = await supabase.rpc("gyumo_credit_balance", {
+    p_user: user.id,
+  });
+  const { data: nextExpiry } = await supabase.rpc("gyumo_credit_next_expiry", {
+    p_user: user.id,
+  });
+  const credits = Number(balance) || 0;
 
   return NextResponse.json({
     isLoggedIn: true,
-    used,
-    limit,
-    remaining: Math.max(0, limit - used),
-    allowed: used < limit,
-    role: profile.role ?? "일반회원",
+    credits,
+    used: 0,
+    limit: credits,
+    remaining: credits,
+    allowed: credits > 0,
+    role,
+    nextExpiry: nextExpiry ?? null,
   });
 }
 
 export async function POST() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user) {
     return NextResponse.json({ error: "로그인이 필요합니다" }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
-    .from("gyumo_profiles")
-    .select("daily_count, daily_reset, role, is_admin")
-    .eq("id", user.id)
-    .single();
+  const profile = await loadProfile(user.id);
+  const isStaff = Boolean(profile?.is_admin) || profile?.role === "스텝";
+  const role = profile?.role ?? "일반회원";
 
-  if (!profile) {
-    return NextResponse.json({ error: "프로필이 없습니다" }, { status: 404 });
+  // 관리자·스텝: 무제한 (차감 없음)
+  if (isStaff) {
+    return NextResponse.json({
+      credits: 9999,
+      remaining: 9999,
+      allowed: true,
+      unlimited: true,
+      role,
+    });
   }
 
-  const today = new Date().toISOString().split("T")[0];
-  const isNewDay = profile.daily_reset !== today;
-  const used = isNewDay ? 0 : (profile.daily_count ?? 0);
-  const limit = getDailyLimit(profile.role, profile.is_admin);
-
-  if (used >= limit) {
+  // 1크레딧 차감 (원자적, 만료 임박 배치 우선). 잔액 없으면 -1.
+  const { data: after, error } = await supabase.rpc("gyumo_consume_credit", {
+    p_user: user.id,
+  });
+  if (error) {
     return NextResponse.json(
-      { error: "일일 사용 한도 초과", used, limit, remaining: 0, allowed: false },
+      { error: "크레딧 차감 실패 — 잠시 후 다시 시도해주세요." },
+      { status: 500 },
+    );
+  }
+
+  const remaining = Number(after);
+  if (remaining < 0) {
+    return NextResponse.json(
+      { error: "크레딧이 부족합니다", credits: 0, remaining: 0, allowed: false },
       { status: 429 },
     );
   }
 
-  const newCount = used + 1;
-  await supabase
-    .from("gyumo_profiles")
-    .update({ daily_count: newCount, daily_reset: today })
-    .eq("id", user.id);
-
   return NextResponse.json({
-    used: newCount,
-    limit,
-    remaining: Math.max(0, limit - newCount),
-    allowed: newCount < limit,
+    credits: remaining,
+    used: 0,
+    limit: remaining,
+    remaining,
+    allowed: remaining > 0,
+    role,
   });
 }
