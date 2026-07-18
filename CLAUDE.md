@@ -252,6 +252,14 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-07-18 (3)** — **크레딧 E2E 검증 완료 + 미동의 상시 차단 + 오픈 리다이렉트 취약점 수정**.
+  - **크레딧 E2E는 이미 통과**(운영자가 선행 테스트): `ko3725858@gmail.com` — 신청(30회·25,000원·김경민/4321) 06:04 → 승인 06:06 → **36크레딧 지급**, 만료 2026-09-18(승인 **+2개월** 정확), **일반회원 → 정회원 자동 승격**, 조회 1건 차감 시 **가입분(무기한 3) 아닌 구매분(36→35)에서 먼저 차감**(만료 임박 우선 설계대로). 신청→승인→지급→승격→차감 전 구간 정상.
+  - **🐛 미동의 원인**: 동의 검사가 `/auth/callback` **한 곳뿐** → ① 이메일 로그인은 미검사 ② 구글도 한 번 건너뛰면 재노출 없음. 실제로 회원 7명 중 **6명 agreed_terms=false**. **수정**: `proxy.ts`에 상시 게이트 — 로그인 사용자가 `GATED_PREFIXES`(/simulator·/credits·/account·/settings·/admin) 접근 시 미동의면 `/consent?next=`로. 마케팅 경로(/, /pricing, /building-law)·/consent·/login·/api는 게이트 밖(무한 루프 없음). 프로필 조회 실패는 **fail-open**(장애가 서비스 잠금으로 번지지 않게).
+  - **🔒 오픈 리다이렉트 (신규 발견)**: `next`·`redirect` 쿼리를 검증 없이 `redirect()`에 전달 → `?next=https://악성사이트`로 **로그인 직후 외부 피싱 유도 가능**했음. `lib/auth/safe-next.ts` 신규(`/`로 시작 + `//` 아닌 내부 경로만 허용) → 콜백·signIn·agreeTerms·consent 페이지 4곳 적용. **프로덕션 검증**: `https://evil…`·`//evil…`·`/%2f%2fevil…` 3종 전부 `/login?redirect=%2Fsimulator`로 무력화, 정상 경로 `/account`는 그대로 보존.
+  - 동의 화면 문구를 소셜·이메일 양쪽에 맞게 수정(기존 이메일 회원도 이 화면을 보게 되므로 "구글 계정 제공분" 한정 표현 제거).
+  - 검증: tsc 0 / eslint 0 / build 33 라우트 / 프로덕션 비로그인 회귀 없음(/, /pricing, /building-law, /simulator, /credits, /login 전부 200 · /consent만 로그인 유도 307).
+  - ⚠ **로컬 .env.local은 Supabase placeholder라 로그인 상태 검증 불가** — 미동의 계정 로그인 시 동의 화면 노출은 운영자 확인 필요.
+
 - **2026-07-18 (2)** — **건축이야기(MR.K의 건축규제 이해하기)를 gyumo 내부로 편입** (운영자 요청: "별도 사이트로 하지 말고 gyumo 안에서 돌게").
   - **원본 분석**(mrk-building-law.netlify.app): `index.html`(18KB)+`script.js`(78KB)+`styles.css`(61KB)+`ordinance-data.js`(2MB, `window.ORDINANCE_DATA`) + 이미지 1장. **순수 HTML/CSS/바닐라JS — 프레임워크·빌드도구 없음, fetch/API/폼 전송 0건, 링크 전부 내부 앵커.** 자체 헤더·내비 + 테마 4종(토스·클로드·스트라이프·다크)·글씨체 4종 전환기 보유.
   - **방식 선택**: ① **정적 클론(채택)** — `public/building-law/`에 그대로 + 리라이트. 원본 100% 보존·변환 리스크 0·CDN 정적 서빙(함수 비용 0). ② iframe — 이중 스크롤 + 앵커(`#top` 등) 전면 의존이라 깨짐, 헤더 2중. ③ React 이식 — 자체 테마 4종이 gyumo 테마 5종과 충돌, 사실상 재설계라 실익 없음.
