@@ -35,9 +35,42 @@ export default async function AdminPage() {
   const activeToday = profiles?.filter(p => p.daily_count > 0 && p.daily_reset === today).length ?? 0;
   const paidCount = (roleCounts["정회원"] || 0) + (roleCounts["미스터홈즈"] || 0);
 
+  // 최근 7일 신규 가입 — 메일을 놓쳐도 화면에서 바로 보이게 한다.
+  // (Date.now() 는 react-hooks/purity 에 걸려 위 today 와 같은 방식으로 만든다)
+  const weekAgoDate = new Date();
+  weekAgoDate.setDate(weekAgoDate.getDate() - 7);
+  const weekAgo = weekAgoDate.toISOString();
+  const recentSignups = (profiles ?? []).filter((p) => p.created_at >= weekAgo);
+
   return (
     <div>
       <h1 className="text-xl font-semibold mb-6">대시보드</h1>
+
+      {recentSignups.length > 0 && (
+        <div
+          className="rounded-xl border p-4 mb-6 flex flex-wrap items-center gap-x-3 gap-y-2"
+          style={{ background: "rgba(255,207,13,0.10)", borderColor: "rgba(255,207,13,0.45)" }}
+        >
+          <span
+            className="text-xs font-bold px-2.5 py-1 rounded-full"
+            style={{ background: "#FFCF0D", color: "#020425" }}
+          >
+            새 가입 {recentSignups.length}명
+          </span>
+          <span className="text-sm">
+            최근 7일 —{" "}
+            {recentSignups.slice(0, 4).map((p) => p.full_name || p.email).join(", ")}
+            {recentSignups.length > 4 && ` 외 ${recentSignups.length - 4}명`}
+          </span>
+          <Link
+            href="/admin/users"
+            className="text-xs font-semibold ml-auto hover:underline"
+            style={{ color: "var(--info)" }}
+          >
+            회원 관리 →
+          </Link>
+        </div>
+      )}
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

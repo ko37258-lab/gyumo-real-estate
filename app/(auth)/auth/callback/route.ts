@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/safe-next";
+import { notifyNewSignup } from "@/lib/notify/new-signup";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -18,6 +19,9 @@ export async function GET(request: Request) {
           data: { user },
         } = await supabase.auth.getUser();
         if (user) {
+          // 구글 가입도 관리자 알림 대상. 이미 보낸 계정은 내부에서 걸러진다.
+          await notifyNewSignup(user.id);
+
           const { data: profile } = await supabase
             .from("gyumo_profiles")
             .select("agreed_terms")

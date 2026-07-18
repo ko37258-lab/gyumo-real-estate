@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/safe-next";
+import { notifyNewSignup } from "@/lib/notify/new-signup";
 
 export async function signUp(formData: FormData) {
   const supabase = await createClient();
@@ -65,6 +66,9 @@ export async function signUp(formData: FormData) {
         `/signup?error=${encodeURIComponent("가입은 되었으나 회원정보 저장에 실패했습니다. 로그인 후 마이페이지에서 입력해주세요.")}`,
       );
     }
+
+    // 관리자 알림 — 실패해도 가입은 그대로 진행된다(내부에서 예외를 삼킴).
+    await notifyNewSignup(data.user.id);
   }
 
   revalidatePath("/", "layout");
