@@ -23,7 +23,8 @@ export interface CreditPlan {
 
 export const CREDIT_PLANS: CreditPlan[] = [
   { id: "10", label: "10회 신청", priceWon: 10000, credits: 12, note: "2크레딧 보너스" },
-  { id: "30", label: "30회 신청", priceWon: 25000, credits: 36, note: "6크레딧 보너스 · 가장 이득" },
+  // 10회 플랜 3개(3만원·36크레딧)와 같은 크레딧을 2.5만원에 — 차액 5,000원이 할인.
+  { id: "30", label: "30회 신청", priceWon: 25000, credits: 36, note: "6크레딧 보너스 및 5,000원 할인" },
 ];
 
 export function getPlan(id: string): CreditPlan | undefined {
