@@ -56,8 +56,40 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // 개인정보 수집·이용 미동의자는 서비스 이용 전 동의 화면으로.
+  //
+  // 콜백(/auth/callback)에서도 검사하지만 그건 구글 로그인 순간 한 번뿐이라,
+  // ① 이메일 로그인은 아예 안 걸리고 ② 한 번 건너뛰면 다시 뜨지 않는다.
+  // 실제로 기존 회원 6명이 미동의로 남아 있어 여기서 상시 차단한다.
+  // 마케팅 페이지(/, /pricing, /building-law)는 열어 두고 실제 도구만 막는다.
+  if (user && GATED_PREFIXES.some((p) => pathname.startsWith(p))) {
+    const { data: profile } = await supabase
+      .from("gyumo_profiles")
+      .select("agreed_terms")
+      .eq("id", user.id)
+      .single();
+
+    // 조회 실패(profile null)는 통과 — 장애 시 서비스가 잠기지 않도록.
+    if (profile && profile.agreed_terms === false) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/consent";
+      url.search = "";
+      url.searchParams.set("next", pathname);
+      return NextResponse.redirect(url);
+    }
+  }
+
   return supabaseResponse;
 }
+
+/** 동의해야 쓸 수 있는 경로 (/consent 자체와 로그인·API는 제외해야 무한 루프가 없다) */
+const GATED_PREFIXES = [
+  "/simulator",
+  "/credits",
+  "/account",
+  "/settings",
+  "/admin",
+];
 
 export const config = {
   matcher: [

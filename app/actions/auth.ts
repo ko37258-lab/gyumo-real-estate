@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/auth/safe-next";
 
 export async function signUp(formData: FormData) {
   const supabase = await createClient();
@@ -51,7 +52,7 @@ export async function signIn(formData: FormData) {
 
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
-  const redirectTo = formData.get("redirect") as string || "/";
+  const redirectTo = safeNext(formData.get("redirect"), "/");
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -74,7 +75,7 @@ export async function agreeTerms(formData: FormData) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const next = (formData.get("next") as string) || "/simulator";
+  const next = safeNext(formData.get("next"));
 
   if (!user) {
     redirect(`/login?redirect=${encodeURIComponent(next)}`);

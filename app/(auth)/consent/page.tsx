@@ -2,12 +2,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { agreeTerms, signOut } from "@/app/actions/auth";
+import { safeNext } from "@/lib/auth/safe-next";
 
 export const metadata = { title: "개인정보 수집·이용 동의 | 규모검토" };
 
 /**
- * 소셜(구글) 로그인 가입자 동의 화면.
- * 이메일 가입은 가입 폼에서 동의를 받으므로 이 화면을 거치지 않는다.
+ * 개인정보 수집·이용 동의 화면.
+ *
+ * 두 경로로 들어온다.
+ *  ① 구글 등 소셜 가입 — 가입 폼을 거치지 않아 동의 기록이 없는 경우
+ *  ② 동의 기능 도입 전에 가입한 기존 회원 — proxy.ts 게이트에 걸려서
+ * 그래서 문구는 소셜·이메일 양쪽에 맞게 쓴다.
  */
 export default async function ConsentPage({
   searchParams,
@@ -15,7 +20,7 @@ export default async function ConsentPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const params = await searchParams;
-  const next = params.next || "/simulator";
+  const next = safeNext(params.next);
 
   const supabase = await createClient();
   const {
@@ -68,7 +73,7 @@ export default async function ConsentPage({
           className="rounded-lg px-4 py-3.5 mb-5 text-[12px] leading-relaxed space-y-1.5"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)" }}
         >
-          <p>· <b style={{ color: "rgba(255,255,255,0.85)" }}>수집 항목</b>: 이름, 이메일, 프로필 정보 (구글 계정 제공분)</p>
+          <p>· <b style={{ color: "rgba(255,255,255,0.85)" }}>수집 항목</b>: 이름, 이메일, 연락처 (구글 로그인은 구글 계정이 제공하는 프로필 정보)</p>
           <p>· <b style={{ color: "rgba(255,255,255,0.85)" }}>수집 목적</b>: 회원 식별, 서비스 제공, 등급·크레딧 관리, 고객 안내</p>
           <p>· <b style={{ color: "rgba(255,255,255,0.85)" }}>보유 기간</b>: 회원 탈퇴 시까지 (관계 법령에 따른 보존 기간 별도)</p>
           <p>· 동의를 거부할 권리가 있으며, 거부 시 서비스 이용이 제한됩니다.</p>
