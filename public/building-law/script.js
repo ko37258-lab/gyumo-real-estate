@@ -351,7 +351,12 @@ function cleanOrdinanceSnippet(raw) {
   t = t.replace(/[─-╿]+/g, " ");
   // ② URL + 인코딩 파일명 + 확장자 꼬리표
   t = t.replace(/https?:\/\/\S+/g, " ");
-  t = t.replace(/(?:%[0-9A-Fa-f]{2}){2,}/g, " ");
+  // URL이 공백으로 끊겨 남은 꼬리(Download.do?gubun=…)와 쿼리 파라미터
+  t = t.replace(/\S*\.(?:do|jsp|php|asp|aspx)\?\S*/gi, " ");
+  t = t.replace(/\b(?:gubun|flSeq|flNm|fileSn|fileId|atchFileId|seq)\s*=\s*\S*/gi, " ");
+  t = t.replace(/(?:%[0-9A-Fa-f]{2})+/g, " "); // 연속·단일 퍼센트 인코딩 모두
+  t = t.replace(/\+\s*\d*\s*[[\]<>]+\s*\+?/g, " "); // +20]+ · +<2026.4.10.>+ 인코딩 잔재
+  t = t.replace(/\s\+\s/g, " ");
   t = t.replace(/\b(?:hwp|hwpx|pdf|docx?|xlsx?)\b/gi, " ");
   // ③ 법제처 메타 — 전화번호·8자리 시행일·6자리 이상 ID·부서코드
   t = t.replace(/\b0\d{1,2}-\d{3,4}-\d{4}\b/g, " ");
