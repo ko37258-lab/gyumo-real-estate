@@ -336,6 +336,41 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+/**
+ * 조례 원문 스니펫 정제 — 법제처 자동 수집 원문에 섞인 노이즈 제거.
+ *  ① HWP 표 괘선(│ ─ └ ┘ ┴ ┬ ├ ┤ ┌ ┐ 등 U+2500~257F)
+ *  ② 첨부파일 다운로드 URL·퍼센트 인코딩 파일명
+ *  ③ 법제처 API 메타(조례ID·시행일자 숫자열·전화번호·부서코드·hwp)
+ *  ④ 항·호 기호(①⑴가.) 앞에서 줄바꿈해 조문처럼 읽히게
+ */
+function cleanOrdinanceSnippet(raw) {
+  if (!raw) return "";
+  let t = String(raw);
+
+  // ① 표 괘선 → 공백 (연속은 한 번에)
+  t = t.replace(/[─-╿]+/g, " ");
+  // ② URL + 인코딩 파일명 + 확장자 꼬리표
+  t = t.replace(/https?:\/\/\S+/g, " ");
+  t = t.replace(/(?:%[0-9A-Fa-f]{2}){2,}/g, " ");
+  t = t.replace(/\b(?:hwp|hwpx|pdf|docx?|xlsx?)\b/gi, " ");
+  // ③ 법제처 메타 — 전화번호·8자리 시행일·6자리 이상 ID·부서코드
+  t = t.replace(/\b0\d{1,2}-\d{3,4}-\d{4}\b/g, " ");
+  t = t.replace(/\b(?:19|20)\d{6}\b/g, " ");
+  t = t.replace(/\b\d{6,10}\b/g, " ");
+  t = t.replace(/\b[A-Z]\d{4}\b/g, " ");
+  // ④ 항·호 기호 앞 줄바꿈 (조문 가독성)
+  t = t.replace(/\s*(?=[①-⑳])/g, "\n");
+  t = t.replace(/\s*(?=⑴|⑵|⑶|⑷|⑸|⑹|⑺|⑻|⑼|⑽)/g, "\n");
+  t = t.replace(/\s*(제\s?\d+조(?:의\s?\d+)?)/g, "\n$1");
+  // 공백·줄바꿈 정리
+  t = t.replace(/[ \t ]{2,}/g, " ");
+  t = t.replace(/\n{2,}/g, "\n");
+  t = t.replace(/^\s+|\s+$/g, "");
+  // 앞이 잘려 시작하는 문장이면 말줄임 표시
+  if (t && /^[가-힣]/.test(t) && !/^[제①-⑳「【]/.test(t)) t = "… " + t;
+  return t;
+}
+
 function getGroupColor(no) {
   const group = facilityGroups.find((item) => item.no === Number(no));
   return group ? group.color : "#6F614F";
@@ -656,7 +691,7 @@ function renderOrdinanceReport(record) {
     ? record.sourceNotes.map((note) => `
       <div class="note-item">
         <strong>${escapeHtml(note.topic || "근거")}${note.status ? ` · ${escapeHtml(note.status)}` : ""}</strong>
-        <p>${escapeHtml(note.snippet || "근거 문구 확인필요")}</p>
+        <p>${escapeHtml(cleanOrdinanceSnippet(note.snippet) || "근거 문구 확인필요")}</p>
       </div>
     `).join("")
     : `<div class="note-item"><strong>근거 조문</strong><p>원문 조회 후 근거 메모가 표시됩니다.</p></div>`;

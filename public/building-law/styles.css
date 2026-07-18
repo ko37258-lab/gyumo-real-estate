@@ -2026,6 +2026,10 @@ input {
   color: var(--fg-muted);
   font-size: 13.5px;
   line-height: 1.65;
+  /* 조문 정제 결과의 줄바꿈 반영 + 긴 문자열이 카드를 밀지 않게 */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ordinance-empty {
