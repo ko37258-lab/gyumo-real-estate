@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useHistoryStore } from "@/store/history";
 import { useUnitStore } from "@/store/unit";
 import { formatAreaShortBy } from "@/lib/utils/area";
@@ -8,24 +8,37 @@ import { formatAreaShortBy } from "@/lib/utils/area";
 /**
  * 📁 내 프로젝트 이력 — 지번 조회 성공 시 자동 기록된 물건 목록.
  * 최근순/지번순 정렬, 클릭 시 딥링크(?address=)로 재조회 (조회 1회 차감).
+ *
+ * ⚠ 로그인 계정 본인의 기록만 표시한다. LocalStorage는 브라우저 단위라
+ *   계정 필터가 없으면 공용 PC에서 다른 회원의 조회 물건이 노출된다.
  */
 export function ProjectHistory() {
-  const records = useHistoryStore((s) => s.records);
+  const allRecords = useHistoryStore((s) => s.records);
   const remove = useHistoryStore((s) => s.remove);
   const clearAll = useHistoryStore((s) => s.clearAll);
   const [sortByJibun, setSortByJibun] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const unit = useUnitStore((s) => s.unit);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  if (records.length === 0) return null;
+  useEffect(() => {
+    fetch("/api/usage")
+      .then((r) => r.json())
+      .then((j) => setUserId(j.userId ?? null))
+      .catch(() => null);
+  }, []);
+
+  // 내 계정 기록만
+  const records = userId ? allRecords.filter((r) => r.userId === userId) : [];
+
+  if (!userId || records.length === 0) return null;
 
   const sorted = sortByJibun
     ? [...records].sort((a, b) => a.address.localeCompare(b.address, "ko"))
     : records; // 기본 최근순 (store가 최신 앞으로 유지)
   const shown = expanded ? sorted : sorted.slice(0, 5);
 
-  const eok = (v?: number) =>
-    v && v > 0 ? `${(v / 1e8).toFixed(1)}억` : null;
+  const eok = (v?: number) => (v && v > 0 ? `${(v / 1e8).toFixed(1)}억` : null);
 
   return (
     <div className="rounded-md border border-border bg-card p-2.5">
@@ -49,7 +62,9 @@ export function ProjectHistory() {
           <button
             type="button"
             onClick={() => {
-              if (window.confirm("프로젝트 이력을 모두 삭제할까요?")) clearAll();
+              if (window.confirm("내 프로젝트 이력을 모두 삭제할까요?")) {
+                clearAll(userId);
+              }
             }}
             className="text-[10px] px-2 py-0.5 rounded-full border border-border text-muted-foreground hover:text-foreground"
           >
@@ -86,7 +101,7 @@ export function ProjectHistory() {
             <button
               type="button"
               aria-label={`${r.address} 이력 삭제`}
-              onClick={() => remove(r.pnu)}
+              onClick={() => remove(userId, r.pnu)}
               className="shrink-0 text-[11px] px-1.5 text-muted-foreground hover:text-destructive"
             >
               ✕
@@ -106,8 +121,8 @@ export function ProjectHistory() {
         </button>
       )}
       <div className="mt-1 text-[9px] text-muted-foreground/80">
-        ※ 이 브라우저에만 저장됩니다. 항목 클릭 시 재조회되며 조회 1회가
-        차감됩니다.
+        ※ 내 계정 기록만 이 브라우저에 저장됩니다. 항목 클릭 시 재조회되며 조회
+        1회가 차감됩니다.
       </div>
     </div>
   );

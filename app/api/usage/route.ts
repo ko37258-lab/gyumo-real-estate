@@ -28,6 +28,7 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({
       isLoggedIn: false,
+      userId: null,
       credits: 0,
       used: 0,
       limit: 0,
@@ -45,6 +46,7 @@ export async function GET() {
   if (isStaff) {
     return NextResponse.json({
       isLoggedIn: true,
+      userId: user.id,
       credits: 9999,
       used: 0,
       limit: 9999,
@@ -66,6 +68,7 @@ export async function GET() {
 
   return NextResponse.json({
     isLoggedIn: true,
+    userId: user.id,
     credits,
     used: 0,
     limit: credits,

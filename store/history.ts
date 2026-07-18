@@ -5,9 +5,15 @@ import { persist } from "zustand/middleware";
 
 /**
  * 📁 내 프로젝트 이력 — 지번 조회 성공 시 자동 기록 (LocalStorage 영속).
- * 같은 PNU 재조회 시 최신 정보로 갱신 + 맨 앞으로. 최대 100건 유지.
+ *
+ * ⚠ 계정별 분리 필수: LocalStorage는 브라우저 단위라, 계정 구분 없이 저장하면
+ *   공용 PC에서 앞 사람이 조회한 물건이 다음 로그인 사용자에게 노출된다.
+ *   따라서 각 기록에 userId를 남기고, 화면에서는 현재 로그인 계정 것만 보여준다.
+ *   (userId가 없는 과거 기록은 소유자를 알 수 없으므로 표시하지 않는다.)
  */
 export type ProjectRecord = {
+  /** 소유 계정 (Supabase auth user id) */
+  userId: string;
   pnu: string;
   address: string;
   fetchedAt: string; // ISO
@@ -23,8 +29,10 @@ export type ProjectRecord = {
 type HistoryState = {
   records: ProjectRecord[];
   add: (r: ProjectRecord) => void;
-  remove: (pnu: string) => void;
-  clearAll: () => void;
+  /** 같은 계정의 같은 필지만 삭제 */
+  remove: (userId: string, pnu: string) => void;
+  /** 현재 계정 기록만 전체 삭제 */
+  clearAll: (userId: string) => void;
 };
 
 export const useHistoryStore = create<HistoryState>()(
@@ -33,12 +41,23 @@ export const useHistoryStore = create<HistoryState>()(
       records: [],
       add: (r) =>
         set((s) => ({
-          records: [r, ...s.records.filter((x) => x.pnu !== r.pnu)].slice(0, 100),
+          records: [
+            r,
+            // 같은 계정 + 같은 필지만 중복 제거 (다른 계정 기록은 보존)
+            ...s.records.filter(
+              (x) => !(x.userId === r.userId && x.pnu === r.pnu),
+            ),
+          ].slice(0, 300),
         })),
-      remove: (pnu) =>
-        set((s) => ({ records: s.records.filter((x) => x.pnu !== pnu) })),
-      clearAll: () => set({ records: [] }),
+      remove: (userId, pnu) =>
+        set((s) => ({
+          records: s.records.filter(
+            (x) => !(x.userId === userId && x.pnu === pnu),
+          ),
+        })),
+      clearAll: (userId) =>
+        set((s) => ({ records: s.records.filter((x) => x.userId !== userId) })),
     }),
-    { name: "gyumo_project_history" },
+    { name: "gyumo_project_history", version: 2 },
   ),
 );

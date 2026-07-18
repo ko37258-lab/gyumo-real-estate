@@ -233,6 +233,8 @@ export function LandLookup({
   const [usage, setUsage] = useState<{
     isLoggedIn: boolean; used: number; limit: number; remaining: number; allowed: boolean; role: string;
     credits?: number; unlimited?: boolean; nextExpiry?: string | null;
+    /** 이력 계정별 분리용 */
+    userId?: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -588,8 +590,10 @@ export function LandLookup({
             : undefined,
       });
 
-      // 📁 프로젝트 이력 자동 기록 (LocalStorage — 같은 PNU는 최신으로 갱신)
-      useHistoryStore.getState().add({
+      // 📁 프로젝트 이력 자동 기록 (LocalStorage · 계정별 분리 — 같은 PNU는 최신으로 갱신)
+      if (usage?.userId) {
+        useHistoryStore.getState().add({
+        userId: usage.userId,
         pnu: geo.pnu,
         address: geo.refined,
         fetchedAt: new Date().toISOString(),
@@ -600,10 +604,11 @@ export function LandLookup({
           landTrades && landTrades.sampleCount > 0
             ? landTrades.estimatedPrice
             : undefined,
-        jigaTotal:
-          landTrades?.jigaTotal ||
-          (effectivePrice && areaSqm > 0 ? effectivePrice * areaSqm : undefined),
-      });
+          jigaTotal:
+            landTrades?.jigaTotal ||
+            (effectivePrice && areaSqm > 0 ? effectivePrice * areaSqm : undefined),
+        });
+      }
 
       if (zoneCode && areaSqm > 0) {
         applyLotInfo({
