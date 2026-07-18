@@ -64,17 +64,25 @@ export function UserTable({
     });
   };
 
-  const saveOne = async (id: string) => {
+  /**
+   * 등급 토글 — 누르는 즉시 저장한다.
+   * 화면은 먼저 바꿔 두고(낙관적 갱신), 실패하면 원래 등급으로 되돌린다.
+   * 저장 버튼을 따로 누르게 하면 바꿔놓고 저장을 잊는 일이 생긴다.
+   */
+  const setRole = async (id: string, nextRole: string, prevRole: string) => {
+    if (nextRole === prevRole) return;
+    setRowRoles((prev) => ({ ...prev, [id]: nextRole }));
     setSavingId(id);
     try {
       const res = await fetch("/api/admin/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, role: rowRoles[id] }),
+        body: JSON.stringify({ id, role: nextRole }),
       });
       if (!res.ok) throw new Error();
       startTransition(() => router.refresh());
     } catch {
+      setRowRoles((prev) => ({ ...prev, [id]: prevRole }));
       alert("등급 변경에 실패했습니다.");
     } finally {
       setSavingId(null);
@@ -214,37 +222,41 @@ export function UserTable({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                          style={{
-                            background: `${ROLE_COLOR[rowRoles[p.id] ?? p.role] ?? "#6b7280"}22`,
-                            color: ROLE_COLOR[rowRoles[p.id] ?? p.role] ?? "#6b7280",
-                          }}
-                        >
-                          {rowRoles[p.id] ?? p.role}
-                        </span>
-                        <select
-                          value={rowRoles[p.id] ?? p.role}
-                          onChange={(e) =>
-                            setRowRoles((prev) => ({ ...prev, [p.id]: e.target.value }))
-                          }
-                          className="rounded px-2 py-1 text-xs border outline-none"
-                          style={{ background: "var(--secondary)", borderColor: "var(--border)" }}
-                        >
-                          {ALL_ROLES.map((r) => (
-                            <option key={r} value={r}>{r}</option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => saveOne(p.id)}
-                          disabled={savingId === p.id || isPending}
-                          className="text-xs px-2 py-1 rounded disabled:opacity-40"
-                          style={{ background: "var(--secondary)", border: "1px solid var(--border)" }}
-                        >
-                          {savingId === p.id ? "..." : "저장"}
-                        </button>
+                      {/* 등급 토글 — 누른 등급이 곧바로 적용된다 (별도 저장 없음) */}
+                      <div
+                        role="group"
+                        aria-label={`${p.email} 등급`}
+                        className="inline-flex flex-wrap gap-1 p-1 rounded-lg"
+                        style={{ background: "var(--secondary)", border: "1px solid var(--border)", opacity: savingId === p.id ? 0.55 : 1 }}
+                      >
+                        {ALL_ROLES.map((r) => {
+                          const current = rowRoles[p.id] ?? p.role;
+                          const active = current === r;
+                          const color = ROLE_COLOR[r] ?? "#6b7280";
+                          return (
+                            <button
+                              key={r}
+                              type="button"
+                              aria-pressed={active}
+                              disabled={savingId === p.id || isPending}
+                              onClick={() => setRole(p.id, r, current)}
+                              className="text-[11px] font-semibold px-2 py-1 rounded-md transition-colors disabled:cursor-not-allowed"
+                              style={
+                                active
+                                  ? { background: `${color}26`, color, border: `1px solid ${color}` }
+                                  : { background: "transparent", color: "var(--muted-foreground)", border: "1px solid transparent" }
+                              }
+                            >
+                              {r}
+                            </button>
+                          );
+                        })}
                       </div>
+                      {savingId === p.id && (
+                        <div className="text-[10px] mt-1" style={{ color: "var(--muted-foreground)" }}>
+                          저장 중...
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-sm font-medium ${used >= (typeof limit === "number" ? limit : 9999) ? "text-red-400" : ""}`}>
