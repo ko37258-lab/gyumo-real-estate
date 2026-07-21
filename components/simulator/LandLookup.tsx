@@ -43,10 +43,10 @@ import {
   RISK_LABEL,
 } from "@/lib/jimok";
 
-// /api/landarea 응답 — 건축물대장(building) 또는 VWorld 토지특성(vworld).
+// /api/landarea 응답 — 건축물대장(building) / VWorld 토지특성(vworld) / 지적도 폴리곤 근사(cadastral).
 type LandArea = {
   area: number | null; // 대지면적 ㎡
-  source: "building" | "vworld" | null;
+  source: "building" | "vworld" | "cadastral" | null;
   bcRat?: number;
   vlRat?: number;
   mainUse?: string;
@@ -684,7 +684,9 @@ export function LandLookup({
       ? "건축물대장"
       : resolvedArea > 0 && bld?.source === "vworld"
         ? "토지특성정보"
-        : null;
+        : resolvedArea > 0 && bld?.source === "cadastral"
+          ? "지적도 근사"
+          : null;
 
   // 도로 판정
   let roadVerdict: {

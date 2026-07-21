@@ -14,9 +14,15 @@
 //     사용자에게 "잠시 후 다시" 안내(200평 기본값으로 조용히 떨어지지 않게).
 //   - PNU별 결과 24시간 캐싱 → 동일 주소 재조회 시 API 호출 없음(트래픽·장애 보호).
 import { NextResponse } from "next/server";
-import { fetchVworldLandChar, fetchVworldLandUseAttr } from "@/lib/vworld-data";
+import {
+  fetchVworldLandChar,
+  fetchVworldLandUseAttr,
+  fetchVworldParcelPolygon,
+} from "@/lib/vworld-data";
+import { buildParcelShape } from "@/lib/geo/parcel";
+import { normalizeJimok } from "@/lib/jimok";
 
-type AreaSource = "building" | "vworld";
+type AreaSource = "building" | "vworld" | "cadastral";
 
 interface AreaResult {
   area: number | null; // 대지면적 ㎡
@@ -186,6 +192,34 @@ async function fromVworldLandChar(pnu: string): Promise<SourceOutcome> {
   };
 }
 
+/**
+ * 연속지적도 폴리곤 → 근사 면적 + 지목(지번 접미).
+ * NED 토지특성에 아직 없는 필지(행정구역 개편 직후·신규 분할 등)의 최후 폴백 —
+ * 2026.7 인천 영종구·제물포구 신설로 NED가 새 PNU를 모르는 사례 실측(운북동 1257-78).
+ * 폴리곤 shoelace 면적이라 등록 면적과 소폭 다를 수 있음(근사 표기 필수).
+ */
+async function fromCadastralPolygon(pnu: string): Promise<SourceOutcome> {
+  let poly;
+  try {
+    poly = await fetchVworldParcelPolygon(pnu);
+  } catch {
+    return { status: "transient" };
+  }
+  if (!poly?.ring || poly.ring.length < 3) return { status: "empty" };
+  const areaSqm = buildParcelShape(poly.ring).areaSqm;
+  if (!areaSqm || areaSqm <= 0) return { status: "empty" };
+  // jibun 예: "1257-78 대" — 끝의 한글이 지목 부호
+  const suffix = poly.jibun.match(/([가-힣]+)\s*$/)?.[1];
+  return {
+    status: "ok",
+    data: {
+      area: Math.round(areaSqm * 10) / 10,
+      source: "cadastral",
+      jimok: suffix ? normalizeJimok(suffix) : undefined,
+    },
+  };
+}
+
 /** 소스를 재시도 백오프와 함께 호출. transient면 최대 2회 추가 재시도. */
 async function trySourceWithRetry(
   fn: () => Promise<SourceOutcome>,
@@ -243,14 +277,25 @@ export async function GET(request: Request) {
     // 면적: 건축물대장 우선 → NED 폴백.
     const bArea = b?.area && b.area > 0 ? b.area : 0;
     const vArea = v?.area && v.area > 0 ? v.area : 0;
-    const area = bArea || vArea || null;
-    const areaSource: AreaSource | null = bArea
+    let area = bArea || vArea || null;
+    let areaSource: AreaSource | null = bArea
       ? "building"
       : vArea
         ? "vworld"
         : null;
 
-    if (b || v) {
+    // 최후 폴백: 두 소스 다 면적이 없으면 연속지적도 폴리곤 근사 면적.
+    let cad: AreaResult | null = null;
+    if (!area) {
+      const cadOut = await trySourceWithRetry(() => fromCadastralPolygon(pnu));
+      if (cadOut.status === "ok") {
+        cad = cadOut.data;
+        area = cad.area;
+        areaSource = "cadastral";
+      }
+    }
+
+    if (b || v || cad) {
       const merged: AreaResult = {
         area,
         source: areaSource,
@@ -266,7 +311,7 @@ export async function GET(request: Request) {
         // NED 토지특성 (용도지역·공시지가·지목 + 도로접면·형상·지세·이용상황)
         price: v?.price,
         priceYear: v?.priceYear,
-        jimok: v?.jimok,
+        jimok: v?.jimok ?? cad?.jimok,
         zone: v?.zone,
         roadSide: v?.roadSide,
         landShape: v?.landShape,
@@ -276,6 +321,13 @@ export async function GET(request: Request) {
         useAttrs: useAttrs ?? undefined,
       };
       cache.set(pnu, { at: Date.now(), data: merged });
+      if (area && areaSource === "cadastral") {
+        return NextResponse.json({
+          ...merged,
+          message:
+            "지적도 폴리곤 기반 근사 면적 — 토지대장 등록 면적과 다를 수 있습니다.",
+        });
+      }
       if (area) return NextResponse.json(merged);
       // 면적만 없는 경우(나대지) — 나머지 정보라도 반환.
       return NextResponse.json({
