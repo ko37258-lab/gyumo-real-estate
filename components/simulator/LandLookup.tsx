@@ -238,7 +238,7 @@ export function LandLookup({
   } | null>(null);
 
   useEffect(() => {
-    fetch("/api/usage")
+    fetch("/api/usage", { cache: "no-store" })
       .then((r) => r.json())
       .then(setUsage)
       .catch(() => null);

@@ -34,11 +34,15 @@ export async function GET() {
     .order("created_at", { ascending: false })
     .limit(20);
 
-  return NextResponse.json({
-    credits: Number(balance) || 0,
-    nextExpiry: nextExpiry ?? null,
-    requests: requests ?? [],
-  });
+  // 승인 직후 회원이 자기 잔액·신청 상태를 옛것으로 보지 않도록 캐시 금지
+  return NextResponse.json(
+    {
+      credits: Number(balance) || 0,
+      nextExpiry: nextExpiry ?? null,
+      requests: requests ?? [],
+    },
+    { headers: { "Cache-Control": "no-store, max-age=0" } },
+  );
 }
 
 // POST — 크레딧 구매/정회원 신청 생성 (입금 확인 대기)

@@ -41,7 +41,10 @@ export async function GET(request: Request) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data ?? []);
+  // 승인 직후 목록이 옛 상태로 캐시되지 않도록 (관리자 화면의 '대기' 잔존 방지)
+  return NextResponse.json(data ?? [], {
+    headers: { "Cache-Control": "no-store, max-age=0" },
+  });
 }
 
 // PATCH — 승인/반려. { id, action: 'approve'|'reject', note? }

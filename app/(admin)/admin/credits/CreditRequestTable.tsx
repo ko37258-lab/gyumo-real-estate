@@ -34,8 +34,10 @@ export function CreditRequestTable() {
   const [err, setErr] = useState<string | null>(null);
 
   // 프로미스 체인 형태 유지 — effect 내 동기 setState 회피 (react-hooks/set-state-in-effect)
+  // cache:"no-store" — 승인 직후 다시 불러올 때 브라우저가 캐시된 옛 목록(방금
+  // 승인한 건이 아직 '대기')을 돌려주던 문제 방지. 이게 "로그아웃해야 갱신"의 원인.
   const load = (status: "pending" | "all") =>
-    fetch(`/api/admin/credits?status=${status}`)
+    fetch(`/api/admin/credits?status=${status}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setRows(Array.isArray(d) ? d : []))
       .catch(() => setErr("목록을 불러오지 못했습니다."))
@@ -60,6 +62,19 @@ export function CreditRequestTable() {
         setErr(j.error ?? "처리 실패");
         return;
       }
+      // 서버 반영 완료 — 화면에서도 즉시 바꾼다(낙관적 갱신).
+      // '확인 대기' 탭이면 처리된 건은 목록에서 빠지고, '전체' 탭이면 상태만 바뀐다.
+      const newStatus = action === "approve" ? "approved" : "rejected";
+      setRows((prev) =>
+        tab === "pending"
+          ? prev.filter((row) => row.id !== id)
+          : prev.map((row) =>
+              row.id === id
+                ? { ...row, status: newStatus, processed_at: new Date().toISOString() }
+                : row,
+            ),
+      );
+      // 서버 최신값으로 재동기화(캐시 없이)
       load(tab);
     });
   };

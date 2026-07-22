@@ -22,7 +22,7 @@ export function ProjectHistory() {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/usage")
+    fetch("/api/usage", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => setUserId(j.userId ?? null))
       .catch(() => null);

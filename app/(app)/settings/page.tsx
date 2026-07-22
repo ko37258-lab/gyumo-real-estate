@@ -27,7 +27,7 @@ export default function SettingsPage() {
   const [canBrand, setCanBrand] = useState(false);
 
   useEffect(() => {
-    fetch("/api/usage")
+    fetch("/api/usage", { cache: "no-store" })
       .then((r) => r.json())
       .then((d: { role?: string; isLoggedIn?: boolean }) => {
         setCanBrand(canEditBrandSettings(d.role, false));

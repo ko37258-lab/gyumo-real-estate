@@ -19,6 +19,10 @@ async function loadProfile(userId: string) {
   return profile;
 }
 
+// 크레딧 잔액·등급은 관리자 승인으로 바뀌므로 절대 캐시하지 않는다
+// (승인 즉시 배지·잔액이 반영되도록).
+const NO_STORE = { headers: { "Cache-Control": "no-store, max-age=0" } };
+
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -26,17 +30,20 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({
-      isLoggedIn: false,
-      userId: null,
-      credits: 0,
-      used: 0,
-      limit: 0,
-      remaining: 0,
-      allowed: false,
-      role: "일반회원",
-      nextExpiry: null,
-    });
+    return NextResponse.json(
+      {
+        isLoggedIn: false,
+        userId: null,
+        credits: 0,
+        used: 0,
+        limit: 0,
+        remaining: 0,
+        allowed: false,
+        role: "일반회원",
+        nextExpiry: null,
+      },
+      NO_STORE,
+    );
   }
 
   const profile = await loadProfile(user.id);
@@ -44,18 +51,21 @@ export async function GET() {
   const role = profile?.role ?? "일반회원";
 
   if (isStaff) {
-    return NextResponse.json({
-      isLoggedIn: true,
-      userId: user.id,
-      credits: 9999,
-      used: 0,
-      limit: 9999,
-      remaining: 9999,
-      allowed: true,
-      unlimited: true,
-      role,
-      nextExpiry: null,
-    });
+    return NextResponse.json(
+      {
+        isLoggedIn: true,
+        userId: user.id,
+        credits: 9999,
+        used: 0,
+        limit: 9999,
+        remaining: 9999,
+        allowed: true,
+        unlimited: true,
+        role,
+        nextExpiry: null,
+      },
+      NO_STORE,
+    );
   }
 
   const { data: balance } = await supabase.rpc("gyumo_credit_balance", {
@@ -66,17 +76,20 @@ export async function GET() {
   });
   const credits = Number(balance) || 0;
 
-  return NextResponse.json({
-    isLoggedIn: true,
-    userId: user.id,
-    credits,
-    used: 0,
-    limit: credits,
-    remaining: credits,
-    allowed: credits > 0,
-    role,
-    nextExpiry: nextExpiry ?? null,
-  });
+  return NextResponse.json(
+    {
+      isLoggedIn: true,
+      userId: user.id,
+      credits,
+      used: 0,
+      limit: credits,
+      remaining: credits,
+      allowed: credits > 0,
+      role,
+      nextExpiry: nextExpiry ?? null,
+    },
+    NO_STORE,
+  );
 }
 
 export async function POST() {

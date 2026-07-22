@@ -43,7 +43,7 @@ export default function CreditsPage() {
 
   // 프로미스 체인 형태 유지 — effect 내 동기 setState 회피 (react-hooks/set-state-in-effect)
   const load = () =>
-    fetch("/api/credits")
+    fetch("/api/credits", { cache: "no-store" })
       .then(async (res) => {
         if (res.status === 401) {
           setLoggedOut(true);
