@@ -21,7 +21,7 @@ function SheetBackdrop({
     <DialogPrimitive.Backdrop
       data-slot="sheet-backdrop"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50",
+        "fixed inset-0 z-[1400] bg-black/50",
         "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
         "transition-opacity duration-200",
         className,
@@ -52,7 +52,7 @@ function SheetContent({
       <DialogPrimitive.Popup
         data-slot="sheet-content"
         className={cn(
-          "fixed z-50 flex flex-col gap-0 bg-card text-card-foreground shadow-xl outline-none",
+          "fixed z-[1401] flex flex-col gap-0 bg-card text-card-foreground shadow-xl outline-none",
           "transition-transform duration-300 ease-out",
           sideClasses[side],
           className,
