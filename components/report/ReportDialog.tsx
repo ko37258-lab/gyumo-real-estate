@@ -36,7 +36,8 @@ import {
   type AIProvider,
 } from "@/lib/ai/keys";
 import { buildReportInputs } from "@/lib/report/buildInput";
-import { warmUpPdfFonts } from "@/lib/pdf/warmup";
+import { warmUpPdfWorker, generatePdfInWorker } from "@/lib/pdf/pdfWorkerClient";
+import { getBrandConfig } from "@/lib/branding/storage";
 import { useSimulatorStore } from "@/store/simulator";
 import { useLandInfoStore } from "@/store/landinfo";
 import { useUsePricesStore } from "@/store/useprices";
@@ -127,7 +128,7 @@ export function ReportDialog() {
   // "생성" 버튼을 누르기까지 사용자가 슬라이더를 조작하는 시간이 곧 워밍업 시간이 되어,
   // 실제 PDF 생성 시점엔 이미 캐시가 준비돼 있다(첫 렌더가 오래 걸리는 근본 원인 제거).
   useEffect(() => {
-    warmUpPdfFonts();
+    warmUpPdfWorker();
   }, []);
 
   /** 체크 해제된 섹션을 입력에서 제거 — ReportDocument·AI 프롬프트가 자동 생략 */
@@ -228,6 +229,24 @@ export function ReportDialog() {
   }
 
   /**
+   * PDF Blob 생성 — 워커 스레드에서 우선 시도(탭이 멈추지 않음). 워커 생성·통신이
+   * 어떤 이유로든 실패하면(구형 브라우저·CSP 등) 기존 메인스레드 방식으로 폴백해
+   * 기능 자체는 항상 동작하도록 한다.
+   */
+  async function buildPdfBlob(): Promise<Blob> {
+    if (!input) throw new Error("입력 데이터 없음");
+    try {
+      return await generatePdfInWorker(input, analysis, getBrandConfig());
+    } catch (workerErr) {
+      console.warn("[PDF] 워커 생성 실패 — 메인스레드로 폴백:", workerErr);
+      const { pdf } = await import("@react-pdf/renderer");
+      return await pdf(
+        <ReportDocument input={input} analysis={analysis} />,
+      ).toBlob();
+    }
+  }
+
+  /**
    * 수동 blob 다운로드 — PDFDownloadLink는 React 트리에 PDF 생성 컨텍스트를 영구 유지해서
    * 시뮬레이터 페이지가 멈추는 원인. 이벤트 콜백 안에서 즉시 생성·즉시 해제하는 패턴.
    */
@@ -237,10 +256,7 @@ export function ReportDialog() {
     let blob: Blob | null = null;
     let url: string | null = null;
     try {
-      const { pdf } = await import("@react-pdf/renderer");
-      blob = await pdf(
-        <ReportDocument input={input} analysis={analysis} />,
-      ).toBlob();
+      blob = await buildPdfBlob();
       url = URL.createObjectURL(blob);
 
       const a = document.createElement("a");
@@ -275,10 +291,7 @@ export function ReportDialog() {
     let blob: Blob | null = null;
     let url: string | null = null;
     try {
-      const { pdf } = await import("@react-pdf/renderer");
-      blob = await pdf(
-        <ReportDocument input={input} analysis={analysis} />,
-      ).toBlob();
+      blob = await buildPdfBlob();
       url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       setPdfStatus("idle");
@@ -361,11 +374,11 @@ export function ReportDialog() {
             <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-[11.5px] text-amber-900 leading-relaxed">
               <Loader2Icon className="size-3.5 mt-0.5 shrink-0 animate-spin" />
               <span>
-                PDF를 만드는 중입니다. 수록 항목이 많으면 <b>1~2분</b> 정도 걸릴 수 있어요.
-                브라우저에 <b>&ldquo;응답 없음&rdquo;</b> 창이 여러 번 떠도 멈춘 게 아니니
-                그때마다 <b>[대기]</b>를 눌러 계속 기다려 주세요. 이 창을 닫거나 페이지를 벗어나면
-                처음부터 다시 만들어야 해요. 급하시면 위에서 필요 없는 항목의 체크를 해제하면
-                더 빨라져요.
+                PDF를 만드는 중입니다. 수록 항목이 많으면 <b>1~2분</b> 정도 걸릴 수 있지만
+                뒤에서 계산하는 동안 <b>이 화면은 계속 정상적으로 쓰실 수 있어요</b>
+                (다른 탭·창은 이동하지 말아 주세요 — 창을 닫으면 처음부터 다시 만들어야 해요).
+                드물게 브라우저에 <b>&ldquo;응답 없음&rdquo;</b> 창이 뜨면 <b>[대기]</b>를
+                눌러 주세요. 급하시면 위에서 필요 없는 항목의 체크를 해제하면 더 빨라져요.
               </span>
             </div>
           )}
