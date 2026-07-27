@@ -36,6 +36,7 @@ import {
   type AIProvider,
 } from "@/lib/ai/keys";
 import { buildReportInputs } from "@/lib/report/buildInput";
+import { warmUpPdfFonts } from "@/lib/pdf/warmup";
 import { useSimulatorStore } from "@/store/simulator";
 import { useLandInfoStore } from "@/store/landinfo";
 import { useUsePricesStore } from "@/store/useprices";
@@ -121,6 +122,13 @@ export function ReportDialog() {
   const usePricesAvailable = useUsePricesStore((s) => Boolean(s.data));
   const profitAvailable = useProfitStore((s) => s.touched);
   const marketAvailable = useMarketStore((s) => Boolean(s.data));
+
+  // 시뮬레이터 페이지 진입 시점(=보고서 버튼이 화면에 뜬 시점)에 미리 폰트를 데워둔다.
+  // "생성" 버튼을 누르기까지 사용자가 슬라이더를 조작하는 시간이 곧 워밍업 시간이 되어,
+  // 실제 PDF 생성 시점엔 이미 캐시가 준비돼 있다(첫 렌더가 오래 걸리는 근본 원인 제거).
+  useEffect(() => {
+    warmUpPdfFonts();
+  }, []);
 
   /** 체크 해제된 섹션을 입력에서 제거 — ReportDocument·AI 프롬프트가 자동 생략 */
   const applySections = (built: ReportInputs): ReportInputs => ({
@@ -348,7 +356,19 @@ export function ReportDialog() {
           />
         </div>
 
-        <DialogFooter className="border-t border-border pt-3">
+        <DialogFooter className="border-t border-border pt-3 flex-col items-stretch gap-2">
+          {status === "ready" && input && pdfStatus === "generating" && (
+            <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-[11.5px] text-amber-900 leading-relaxed">
+              <Loader2Icon className="size-3.5 mt-0.5 shrink-0 animate-spin" />
+              <span>
+                PDF를 만드는 중입니다. 수록 항목이 많으면 <b>1~2분</b> 정도 걸릴 수 있어요.
+                브라우저에 <b>&ldquo;응답 없음&rdquo;</b> 창이 여러 번 떠도 멈춘 게 아니니
+                그때마다 <b>[대기]</b>를 눌러 계속 기다려 주세요. 이 창을 닫거나 페이지를 벗어나면
+                처음부터 다시 만들어야 해요. 급하시면 위에서 필요 없는 항목의 체크를 해제하면
+                더 빨라져요.
+              </span>
+            </div>
+          )}
           {status === "ready" && input ? (
             <div className="grid grid-cols-3 gap-2 w-full">
               <Button

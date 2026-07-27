@@ -472,11 +472,27 @@ function Scene({
   );
 }
 
-/** Canvas 마운트 시 toDataURL 캡쳐 함수를 simulator store에 등록, 언마운트 시 해제. */
+/** Canvas 마운트 시 toDataURL 캡쳐 함수를 simulator store에 등록, 언마운트 시 해제.
+ *  dpr=2라 원본 캔버스가 크고(뷰포트 최대 ~1920px), 이를 무손실 PNG로 그대로
+ *  PDF에 박으면 용량이 수 MB로 커져 react-pdf 인코딩·임베드가 오래 걸린다
+ *  (PDF 생성 중 "페이지 응답 없음" 원인 중 하나). PDF에는 큰 해상도가 필요 없으므로
+ *  최대 900px 폭으로 축소 + JPEG(품질 0.85)로 낮춰 용량·인코딩 시간을 크게 줄인다. */
 function CaptureRegistrar() {
   const { gl } = useThree();
   useEffect(() => {
-    const fn = () => gl.domElement.toDataURL("image/png");
+    const fn = () => {
+      const src = gl.domElement;
+      const MAX_W = 900;
+      const scale = Math.min(1, MAX_W / src.width);
+      if (scale >= 1) return src.toDataURL("image/jpeg", 0.85);
+      const out = document.createElement("canvas");
+      out.width = Math.round(src.width * scale);
+      out.height = Math.round(src.height * scale);
+      const ctx = out.getContext("2d");
+      if (!ctx) return src.toDataURL("image/jpeg", 0.85);
+      ctx.drawImage(src, 0, 0, out.width, out.height);
+      return out.toDataURL("image/jpeg", 0.85);
+    };
     useSimulatorStore.getState().setCapture3D(fn);
     return () => {
       useSimulatorStore.getState().setCapture3D(null);
