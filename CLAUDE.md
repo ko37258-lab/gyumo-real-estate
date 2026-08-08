@@ -258,6 +258,13 @@ TOSS_SECRET_KEY=
   - 검증: 프로덕션 — 운북동 1257-78 `{area:1350.5, source:"cadastral", jimok:"대"}` + land-trades 추정가 **7.29억**(같은 법정동·건축지목 49건) 계산 확인. tsc 0 / build ✓.
   - ⚠ NED가 영종구·제물포구 PNU를 갱신하면 자동으로 NED 우선으로 복귀(폴백은 면적 없을 때만). 공시지가는 여전히 미제공 — 배수(ratioToJiga)만 생략됨.
 
+- **2026-08-08** — **조회 이력 서버 저장(기기 간 유지) + 내 자료 CSV 다운로드** (운영자 요청: "자기가 실행했던 자료를 다운받고, 나중에 또 들어왔을 때 저장되게").
+  - **서버 저장 전환**: 기존 이력은 LocalStorage 뿐(브라우저 단위) → `gyumo_history` DB가 정본. `/api/history` GET/POST/DELETE — 세션 쿠키 + RLS(own_*), 서버 키 미사용. 같은 필지 재조회는 `(user_id,pnu)` 유니크 인덱스 위 upsert(행 증식 없음, created_at 갱신으로 최근순 반영).
+  - **다운로드**: `/api/history/export` — 본인 이력 CSV(조회일·주소·PNU·용도지역·면적㎡/평·지목·추정가·공시지가, BOM). ProjectHistory 헤더에 [📥 자료 다운로드].
+  - **이중 기록**: LandLookup 조회 성공 시 로컬(즉시 표시) + 서버 POST(fire-and-forget). ProjectHistory 는 서버+로컬 병합(pnu 최신 우선), **예전 브라우저 저장분 최초 1회 자동 이관**(upsert 라 재실행 무해). 삭제는 서버+로컬 동시.
+  - **DB 마이그레이션 `gyumo_history_server_sync`**: own delete/update 정책 추가(기존 read/insert 뿐 — 본인 삭제 불가였음) + 유니크·최근순 인덱스.
+  - 검증: tsc 0 / eslint 0 / build 0. 로그인 흐름(이력 표시·이관·다운로드)은 프로덕션 운영자 확인 필요.
+
 - **2026-07-19** — **크레딧 신청 즉시 알림 + 구매자 분류 + 구글 가입자 프로필 완성 보너스(+3크레딧)**.
   - **신청 즉시 인지**: `/api/credits` POST 성공 시 관리자 메일(`lib/notify/credit-request.ts`, 입금자·플랜·금액·[승인하러 가기] 버튼) + 관리자 대시보드 최상단 초록 배너 "입금 확인 대기 N건"(pending 신청, admin RLS로 조회).
   - **구매자 별도 관리**: 구매자 = `gyumo_credit_batches.source='purchase'` 보유자. 회원명단에 💳 구매자 배지 + 분류 select(전체/구매자/구글 전체/구글·정보 확인/구글·정보 미입력), 관리자 CSV·구글시트 CSV에 가입경로·크레딧구매 열 추가.
