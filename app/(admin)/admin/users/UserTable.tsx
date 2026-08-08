@@ -13,6 +13,7 @@ type Profile = {
   role: string;
   is_admin: boolean;
   credits: number | null;
+  signup_provider: string | null;
   agreed_terms: boolean | null;
   agreed_at: string | null;
   created_at: string;
@@ -30,11 +31,15 @@ const ROLE_COLOR: Record<string, string> = {
 export function UserTable({
   profiles,
   isSuperAdmin,
+  buyerIds,
 }: {
   profiles: Profile[];
   isSuperAdmin: boolean;
+  /** purchase 크레딧을 받은 적 있는 회원 id — 💳 구매자 배지 표시용 */
+  buyerIds: string[];
 }) {
   const router = useRouter();
+  const buyers = new Set(buyerIds);
   const [isPending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkRole, setBulkRole] = useState<string>(ALL_ROLES[0]);
@@ -208,12 +213,34 @@ export function UserTable({
                       {p.phone && (
                         <div className="text-xs" style={{ color: "var(--muted-foreground)" }}>{p.phone}</div>
                       )}
-                      {p.is_admin && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 inline-block"
-                          style={{ background: "rgba(255,207,13,0.15)", color: "#FFCF0D" }}>
-                          최고관리자
-                        </span>
-                      )}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {p.is_admin && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                            style={{ background: "rgba(255,207,13,0.15)", color: "#FFCF0D" }}>
+                            최고관리자
+                          </span>
+                        )}
+                        {buyers.has(p.id) && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                            style={{ background: "rgba(255,207,13,0.15)", color: "#eab308", border: "1px solid rgba(234,179,8,0.35)" }}>
+                            💳 구매자
+                          </span>
+                        )}
+                        {/* 구글 가입은 이름이 자동으로 오므로, 직접 입력 여부는 전화번호로 판별 */}
+                        {p.signup_provider === "google" && (
+                          (p.phone ?? "").trim() !== "" ? (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                              style={{ background: "rgba(52,211,153,0.14)", color: "#34d399", border: "1px solid rgba(52,211,153,0.35)" }}>
+                              구글 · 정보 확인
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                              style={{ background: "rgba(245,158,11,0.14)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.35)" }}>
+                              구글 · 정보 미입력
+                            </span>
+                          )
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {/* 등급 토글 — 누른 등급이 곧바로 적용된다 (별도 저장 없음) */}

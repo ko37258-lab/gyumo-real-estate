@@ -15,6 +15,13 @@ export default async function AdminPage() {
     .select("id, email, full_name, role, credits, is_admin, agreed_terms, created_at")
     .order("created_at", { ascending: false });
 
+  // 입금 확인 대기 중인 크레딧 신청 — 대시보드에 즉시 노출 (admin RLS 정책으로 조회)
+  const { data: pendingReqs } = await supabase
+    .from("gyumo_credit_requests")
+    .select("id, depositor_name, amount_won, created_at")
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+
   const total = profiles?.length ?? 0;
   const roleCounts = profiles?.reduce((acc, p) => {
     acc[p.role] = (acc[p.role] || 0) + 1;
@@ -36,6 +43,35 @@ export default async function AdminPage() {
   return (
     <div>
       <h1 className="text-xl font-semibold mb-6">대시보드</h1>
+
+      {/* 입금 확인 대기 — 놓치면 안 되는 항목이라 최상단 초록 배너 */}
+      {(pendingReqs?.length ?? 0) > 0 && (
+        <div
+          className="rounded-xl border p-4 mb-4 flex flex-wrap items-center gap-x-3 gap-y-2"
+          style={{ background: "rgba(34,197,94,0.10)", borderColor: "rgba(34,197,94,0.45)" }}
+        >
+          <span
+            className="text-xs font-bold px-2.5 py-1 rounded-full"
+            style={{ background: "#22c55e", color: "#fff" }}
+          >
+            입금 확인 대기 {pendingReqs!.length}건
+          </span>
+          <span className="text-sm">
+            {pendingReqs!
+              .slice(0, 3)
+              .map((r) => `${r.depositor_name} ${(r.amount_won / 10000).toLocaleString()}만원`)
+              .join(", ")}
+            {pendingReqs!.length > 3 && ` 외 ${pendingReqs!.length - 3}건`}
+          </span>
+          <Link
+            href="/admin/credits"
+            className="text-xs font-bold ml-auto px-3 py-1.5 rounded-lg"
+            style={{ background: "#22c55e", color: "#fff" }}
+          >
+            승인하러 가기 →
+          </Link>
+        </div>
+      )}
 
       {recentSignups.length > 0 && (
         <div

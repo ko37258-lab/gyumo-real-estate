@@ -30,12 +30,19 @@ export default async function ConsentPage({
 
   const { data: profile } = await supabase
     .from("gyumo_profiles")
-    .select("agreed_terms, full_name")
+    .select("agreed_terms, full_name, phone")
     .eq("id", user.id)
     .single();
 
   // 이미 동의했으면 통과
   if (profile?.agreed_terms) redirect(next);
+
+  // 구글 가입자는 이름·전화가 비어 있다 — 여기서 받으면 3크레딧 보너스 안내
+  const isGoogle =
+    (user.app_metadata as { provider?: string } | null)?.provider === "google";
+  const infoMissing =
+    !(profile?.full_name ?? "").trim() || !(profile?.phone ?? "").trim();
+  const showProfileFields = isGoogle && infoMissing;
 
   return (
     <div style={{ width: "100%", maxWidth: 460 }}>
@@ -81,6 +88,29 @@ export default async function ConsentPage({
 
         <form action={agreeTerms} className="space-y-4">
           <input type="hidden" name="next" value={next} />
+
+          {showProfileFields && (
+            <div
+              className="rounded-lg px-4 py-3.5 space-y-2.5"
+              style={{ background: "rgba(255,207,13,0.08)", border: "1px solid rgba(255,207,13,0.35)" }}
+            >
+              <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.8)" }}>
+                <b style={{ color: "#FFCF0D" }}>이름·전화번호를 입력하시면 무료 크레딧 3개를
+                추가로 드립니다</b> (선택 · 1회). 지금 건너뛰어도 마이페이지에서 입력할 수 있습니다.
+              </p>
+              <input
+                name="full_name" placeholder="이름"
+                className="w-full rounded-lg px-3.5 py-2.5 text-sm text-white outline-none"
+                style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)" }}
+              />
+              <input
+                name="phone" placeholder="전화번호 (010-0000-0000)"
+                pattern="[0-9\-]{9,13}" inputMode="tel"
+                className="w-full rounded-lg px-3.5 py-2.5 text-sm text-white outline-none"
+                style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)" }}
+              />
+            </div>
+          )}
 
           <label
             className="flex items-start gap-2.5 cursor-pointer rounded-lg px-3.5 py-3"

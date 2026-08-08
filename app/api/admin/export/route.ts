@@ -28,12 +28,19 @@ export async function GET() {
   const admin = getServiceClient();
   const { data } = await admin
     .from("gyumo_profiles")
-    .select("email, full_name, phone, role, is_admin, credits, agreed_terms, agreed_at, created_at")
+    .select("id, email, full_name, phone, role, is_admin, credits, signup_provider, agreed_terms, agreed_at, created_at")
     .order("created_at", { ascending: false });
 
   const today = new Date().toISOString().split("T")[0]; // 파일명용
   // 일 3건 리셋 모델 폐기 — 오늘사용/한도 대신 크레딧 잔액을 내보낸다
-  const headers = ["이메일", "이름", "전화번호", "등급", "크레딧", "개인정보동의", "동의일시", "가입일"];
+  const headers = ["이메일", "이름", "전화번호", "등급", "크레딧", "가입경로", "크레딧구매", "개인정보동의", "동의일시", "가입일"];
+
+  // 크레딧 구매자 표시 — purchase 배치 보유 여부
+  const { data: purchases } = await admin
+    .from("gyumo_credit_batches")
+    .select("user_id")
+    .eq("source", "purchase");
+  const buyerIds = new Set((purchases ?? []).map((b) => b.user_id as string));
 
   const rows = (data ?? []).map((u) => [
     u.email,
@@ -41,6 +48,8 @@ export async function GET() {
     u.phone ?? "",
     u.role,
     u.is_admin ? "무제한" : (u.credits ?? 0),
+    u.signup_provider === "google" ? "구글" : "이메일",
+    buyerIds.has(u.id) ? "구매자" : "",
     u.agreed_terms ? "동의" : "미동의",
     u.agreed_at ? new Date(u.agreed_at).toLocaleString("ko-KR") : "",
     new Date(u.created_at).toLocaleDateString("ko-KR"),

@@ -4,6 +4,7 @@
 //   (환경변수 NEXT_PUBLIC_BANK_* 가 있으면 그 값을 우선 사용합니다.)
 
 export const SIGNUP_CREDITS = 3; // 가입 시 무료 지급 (1회)
+export const PROFILE_BONUS_CREDITS = 3; // 구글 가입자가 이름·전화 입력 시 (1회)
 export const CREDIT_VALID_MONTHS = 2; // 승인(지급) 후 유효기간
 export const CREDIT_PER_LOOKUP = 1; // 조회 1건당 소모 크레딧
 

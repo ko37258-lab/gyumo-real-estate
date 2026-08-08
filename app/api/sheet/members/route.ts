@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await admin
     .from("gyumo_profiles")
-    .select("email, full_name, phone, role, is_admin, credits, agreed_terms, created_at")
+    .select("id, email, full_name, phone, role, is_admin, credits, signup_provider, agreed_terms, created_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -50,8 +50,14 @@ export async function GET(request: Request) {
 
   const header = [
     "가입일", "이메일", "이름", "전화번호", "등급",
-    "관리자", "크레딧", "개인정보동의",
+    "관리자", "크레딧", "가입경로", "크레딧구매", "개인정보동의",
   ];
+
+  const { data: purchases } = await admin
+    .from("gyumo_credit_batches")
+    .select("user_id")
+    .eq("source", "purchase");
+  const buyerIds = new Set((purchases ?? []).map((b) => b.user_id as string));
 
   const rows = (data ?? []).map((u) => [
     new Date(u.created_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }),
@@ -61,6 +67,8 @@ export async function GET(request: Request) {
     u.role,
     u.is_admin ? "Y" : "",
     u.credits ?? 0,
+    u.signup_provider === "google" ? "구글" : "이메일",
+    buyerIds.has(u.id) ? "구매자" : "",
     u.agreed_terms ? "동의" : "미동의",
   ]);
 

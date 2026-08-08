@@ -2,13 +2,20 @@ import { redirect } from "next/navigation";
 import { roleColor, roleDesc } from "@/lib/membership";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
+import { saveProfileInfoForm } from "@/app/actions/profile";
+import { PROFILE_BONUS_CREDITS } from "@/lib/credits";
 import Link from "next/link";
 
 export const metadata = { title: "마이페이지 | 규모검토" };
 
 // 등급 라벨·색·설명은 lib/membership 한 곳에서 가져온다
 
-export default async function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ profile?: string; bonus?: string; profile_error?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -32,6 +39,10 @@ export default async function AccountPage() {
   });
   const credits = Number(balanceRaw) || 0;
   const isUnlimited = Boolean(profile?.is_admin) || role === "스텝";
+
+  // 구글 가입자는 가입 폼을 거치지 않아 이름·전화가 비어 있다 — 채우면 3크레딧.
+  const isGoogle = (user.app_metadata as { provider?: string } | null)?.provider === "google";
+  const infoMissing = !(profile?.full_name ?? "").trim() || !(profile?.phone ?? "").trim();
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
@@ -67,6 +78,58 @@ export default async function AccountPage() {
             {roleDesc(role)}
           </div>
         </div>
+
+        {/* 저장 결과 안내 */}
+        {sp.profile === "saved" && (
+          <div className="rounded-xl px-4 py-3 text-sm font-medium"
+            style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.4)", color: "#16a34a" }}>
+            {sp.bonus
+              ? `회원정보가 저장되었습니다. 감사의 뜻으로 크레딧 ${sp.bonus}개를 추가로 드렸습니다!`
+              : "회원정보가 저장되었습니다."}
+          </div>
+        )}
+        {sp.profile_error && (
+          <div className="rounded-xl px-4 py-3 text-sm"
+            style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.35)", color: "#dc2626" }}>
+            {sp.profile_error}
+          </div>
+        )}
+
+        {/* 이름·전화번호 미입력 — 입력 유도 (구글 가입자는 3크레딧 보너스) */}
+        {infoMissing && (
+          <div className="rounded-2xl border p-6"
+            style={{
+              background: "var(--card)",
+              borderColor: isGoogle ? "rgba(255,207,13,0.55)" : "var(--border)",
+            }}>
+            <h2 className="font-semibold mb-1">이름·전화번호를 알려주세요</h2>
+            <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+              {isGoogle
+                ? `입력해 주시면 감사의 뜻으로 무료 크레딧 ${PROFILE_BONUS_CREDITS}개를 추가로 드립니다 (1회).`
+                : "크레딧 신청·문의 확인에 사용됩니다."}
+            </p>
+            <form action={saveProfileInfoForm} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+              <input
+                name="full_name" required placeholder="이름"
+                defaultValue={profile?.full_name ?? ""}
+                className="rounded-lg px-3.5 py-2.5 text-sm border outline-none"
+                style={{ background: "var(--secondary)", borderColor: "var(--border)" }}
+              />
+              <input
+                name="phone" required placeholder="전화번호 (010-0000-0000)"
+                pattern="[0-9\-]{9,13}" inputMode="tel"
+                defaultValue={profile?.phone ?? ""}
+                className="rounded-lg px-3.5 py-2.5 text-sm border outline-none"
+                style={{ background: "var(--secondary)", borderColor: "var(--border)" }}
+              />
+              <button type="submit"
+                className="rounded-lg px-5 py-2.5 text-sm font-bold transition-opacity hover:opacity-85"
+                style={{ background: "#FFCF0D", color: "#020425" }}>
+                저장{isGoogle ? ` (+${PROFILE_BONUS_CREDITS}크레딧)` : ""}
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* 오늘 사용 현황 */}
         <div className="rounded-2xl border p-6"

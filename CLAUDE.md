@@ -258,6 +258,15 @@ TOSS_SECRET_KEY=
   - 검증: 프로덕션 — 운북동 1257-78 `{area:1350.5, source:"cadastral", jimok:"대"}` + land-trades 추정가 **7.29억**(같은 법정동·건축지목 49건) 계산 확인. tsc 0 / build ✓.
   - ⚠ NED가 영종구·제물포구 PNU를 갱신하면 자동으로 NED 우선으로 복귀(폴백은 면적 없을 때만). 공시지가는 여전히 미제공 — 배수(ratioToJiga)만 생략됨.
 
+- **2026-07-19** — **크레딧 신청 즉시 알림 + 구매자 분류 + 구글 가입자 프로필 완성 보너스(+3크레딧)**.
+  - **신청 즉시 인지**: `/api/credits` POST 성공 시 관리자 메일(`lib/notify/credit-request.ts`, 입금자·플랜·금액·[승인하러 가기] 버튼) + 관리자 대시보드 최상단 초록 배너 "입금 확인 대기 N건"(pending 신청, admin RLS로 조회).
+  - **구매자 별도 관리**: 구매자 = `gyumo_credit_batches.source='purchase'` 보유자. 회원명단에 💳 구매자 배지 + 분류 select(전체/구매자/구글 전체/구글·정보 확인/구글·정보 미입력), 관리자 CSV·구글시트 CSV에 가입경로·크레딧구매 열 추가.
+  - **구글 가입자 보너스**: `app/actions/profile.ts` `saveProfileInfo` — 이름·전화 저장 + 구글 가입자에 한해 1회 3크레딧(source `profile_bonus`, 무기한). 이중 지급 방어 2중(존재 확인 + DB 유니크 인덱스 `gyumo_credit_batches_once_per_source`, 23505는 기지급 처리). 지급 RPC가 service_role 전용이라 서버 키로 호출. 노출 지점: ① `/consent`(구글·전화 미입력 시 선택 입력란+안내) ② `/account`(미입력 시 입력 카드, 저장 결과 배너).
+  - **⚠ 핵심 발견**: 구글 가입자 16명 **전원 이름 자동 보유** — 가입 트리거가 구글 프로필 이름을 가져옴. 따라서 "본인 확인" 판별은 이름이 아니라 **전화번호 입력 여부**(우리 폼으로만 채워짐)로 함. 분류 라벨도 "정보 확인(전화 입력)"으로.
+  - **DB 마이그레이션 `gyumo_signup_provider_and_bonus_guard`**: `gyumo_profiles.signup_provider` 추가 + auth.users에서 백필(구글16/이메일35/미기록0) + `gyumo_handle_new_user` 트리거가 provider 기록하도록 갱신 + 1회성 보너스 유니크 인덱스.
+  - 검증: tsc 0 / eslint 0 / build 0 / DB 스모크(백필·인덱스·구매자 2명 집계). 로그인 필요 화면(관리자 배지·보너스 흐름)은 프로덕션에서 운영자 확인 필요.
+  - ⚠ 참고: `"use server"` 파일은 async 함수만 export 가능 — 상수는 `lib/credits.ts`로(PROFILE_BONUS_CREDITS).
+
 - **2026-07-18 (4)** — **등급 토글 + 등급 저장 버그 수정 + 가입 알림·시트 연동 + 반응형 깨짐 수정**.
   - **🐛 VIP·미스터홈즈센터·멘토스쿨 등급 저장 실패**: DB CHECK 제약(`일반회원/정회원/미스터홈즈/스텝`)과 앱 `ALL_ROLES`(`일반회원/정회원/VIP/미스터홈즈센터/멘토스쿨/스텝`)가 어긋나 3개 등급이 거부됨(정회원·스텝만 성공). **크레딧 승인과의 충돌 아님** — 승인은 `role='일반회원'`일 때만 정회원으로 승격. 마이그레이션 `gyumo_align_role_check_with_app`로 제약을 앱 목록과 일치(사용 0건 `미스터홈즈`는 `미스터홈즈센터`로 이관 후 제거). **재발 방지**: 관리자 대시보드·마이페이지·회원표가 각자 들고 있던 등급 표(셋 다 구버전 4개)를 제거하고 `lib/membership.ts`의 `ROLE_META`·`PAID_ROLES`·`roleColor()`·`roleDesc()` 단일 출처로 통합. 대시보드 "정회원 이상" 집계가 VIP·멘토스쿨·미스터홈즈센터를 누락하던 것도 수정.
   - **등급 토글**: 배지+드롭다운+[저장] 3단계 → 6등급 세그먼트 토글, 클릭 즉시 저장(낙관적 갱신, 실패 시 이전 등급 복구).

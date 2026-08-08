@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getPlan } from "@/lib/credits";
+import { notifyCreditRequest } from "@/lib/notify/credit-request";
 
 function serviceClient() {
   return createServiceClient(
@@ -121,6 +122,18 @@ export async function POST(request: Request) {
       .update({ ...(company ? { company } : {}), ...(region ? { region } : {}) })
       .eq("id", user.id);
   }
+
+  // 관리자에게 즉시 알림 — 실패해도 신청은 이미 접수됨 (내부에서 예외 삼킴)
+  await notifyCreditRequest({
+    email: user.email ?? null,
+    planLabel: plan.label,
+    amountWon: plan.priceWon,
+    credits: plan.credits,
+    depositorName,
+    phoneLast4,
+    company,
+    region,
+  });
 
   return NextResponse.json({ ok: true });
 }

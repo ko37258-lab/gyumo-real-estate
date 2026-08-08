@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/safe-next";
 import { notifyNewSignup } from "@/lib/notify/new-signup";
+import { saveProfileInfo } from "@/app/actions/profile";
 
 export async function signUp(formData: FormData) {
   const supabase = await createClient();
@@ -119,6 +120,19 @@ export async function agreeTerms(formData: FormData) {
     .from("gyumo_profiles")
     .update({ agreed_terms: true, agreed_at: new Date().toISOString() })
     .eq("id", user.id);
+
+  // 동의 화면에서 이름·전화를 같이 입력한 경우(구글 가입자 3크레딧 보너스).
+  // 선택 입력이므로 값이 이상해도 동의 자체는 막지 않는다 — 조용히 건너뛰고
+  // 마이페이지에서 다시 입력하게 둔다.
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  if (fullName && phone) {
+    try {
+      await saveProfileInfo({ fullName, phone });
+    } catch (e) {
+      console.error("[consent] 프로필 저장 실패(동의는 완료됨)", e);
+    }
+  }
 
   revalidatePath("/", "layout");
   redirect(next);
