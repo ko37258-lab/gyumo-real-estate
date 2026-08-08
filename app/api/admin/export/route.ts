@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { getDailyLimit } from "@/lib/membership";
+
 
 function getServiceClient() {
   return createAdminClient(
@@ -28,26 +28,23 @@ export async function GET() {
   const admin = getServiceClient();
   const { data } = await admin
     .from("gyumo_profiles")
-    .select("email, full_name, phone, role, is_admin, daily_count, daily_reset, agreed_terms, agreed_at, created_at")
+    .select("email, full_name, phone, role, is_admin, credits, agreed_terms, agreed_at, created_at")
     .order("created_at", { ascending: false });
 
-  const today = new Date().toISOString().split("T")[0];
-  const headers = ["이메일", "이름", "전화번호", "등급", "오늘사용", "한도", "개인정보동의", "동의일시", "가입일"];
+  const today = new Date().toISOString().split("T")[0]; // 파일명용
+  // 일 3건 리셋 모델 폐기 — 오늘사용/한도 대신 크레딧 잔액을 내보낸다
+  const headers = ["이메일", "이름", "전화번호", "등급", "크레딧", "개인정보동의", "동의일시", "가입일"];
 
-  const rows = (data ?? []).map((u) => {
-    const isToday = u.daily_reset === today;
-    return [
-      u.email,
-      u.full_name ?? "",
-      u.phone ?? "",
-      u.role,
-      isToday ? u.daily_count : 0,
-      u.is_admin ? "무제한" : getDailyLimit(u.role, false),
-      u.agreed_terms ? "동의" : "미동의",
-      u.agreed_at ? new Date(u.agreed_at).toLocaleString("ko-KR") : "",
-      new Date(u.created_at).toLocaleDateString("ko-KR"),
-    ];
-  });
+  const rows = (data ?? []).map((u) => [
+    u.email,
+    u.full_name ?? "",
+    u.phone ?? "",
+    u.role,
+    u.is_admin ? "무제한" : (u.credits ?? 0),
+    u.agreed_terms ? "동의" : "미동의",
+    u.agreed_at ? new Date(u.agreed_at).toLocaleString("ko-KR") : "",
+    new Date(u.created_at).toLocaleDateString("ko-KR"),
+  ]);
 
   const csv = [headers, ...rows]
     .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))

@@ -78,34 +78,53 @@ export function MarketInsight() {
   const pnu = lotInfo?.pnu;
   const lawdCd = pnu?.slice(0, 5);
 
-  useEffect(() => {
-    if (!lawdCd) {
-      setData(null);
-      setMarket(null, null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetch(`/api/market?lawdCd=${lawdCd}&months=6`)
+  // effect 본문의 동기 setState는 lint(react-hooks/set-state-in-effect)가 막으므로
+  // 로더를 컴포넌트 스코프 함수로 분리 (CreditRequestTable과 같은 패턴).
+  // 취소는 AbortController — 지번이 바뀌면 이전 요청 응답을 버린다.
+  const loadMarket = (cd: string, signal: AbortSignal) => {
+    // 시작 상태 전환까지 마이크로태스크 체인 안에서 — effect 호출 경로의
+    // 동기 setState를 규칙이 함수 내부까지 추적해 잡기 때문.
+    Promise.resolve()
+      .then(() => {
+        if (signal.aborted) throw new DOMException("aborted", "AbortError");
+        setLoading(true);
+        setError(null);
+        return fetch(`/api/market?lawdCd=${cd}&months=6`, { signal });
+      })
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "조회 실패");
         return r.json() as Promise<MarketData>;
       })
       .then((d) => {
-        if (cancelled) return;
+        if (signal.aborted) return;
         setData(d);
         setMarket(d, lotInfo?.address ?? null);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "조회 실패");
+        if (!signal.aborted) setError(e instanceof Error ? e.message : "조회 실패");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!signal.aborted) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+  };
+
+  useEffect(() => {
+    if (!lawdCd) {
+      // 조회 대상이 사라졌을 때의 초기화 — 마이크로태스크로 한 틱 미뤄
+      // 동기 setState를 피한다 (cancelled 가드로 언마운트 안전).
+      let cancelled = false;
+      Promise.resolve().then(() => {
+        if (cancelled) return;
+        setData(null);
+        setMarket(null, null);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const ac = new AbortController();
+    loadMarket(lawdCd, ac.signal);
+    return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lawdCd]);
 

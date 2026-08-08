@@ -12,7 +12,7 @@ export default async function AdminPage() {
 
   const { data: profiles } = await supabase
     .from("gyumo_profiles")
-    .select("id, email, full_name, role, daily_count, daily_reset, is_admin, agreed_terms, created_at")
+    .select("id, email, full_name, role, credits, is_admin, agreed_terms, created_at")
     .order("created_at", { ascending: false });
 
   const total = profiles?.length ?? 0;
@@ -21,8 +21,9 @@ export default async function AdminPage() {
     return acc;
   }, {} as Record<string, number>) ?? {};
 
-  const today = new Date().toISOString().slice(0, 10);
-  const activeToday = profiles?.filter(p => p.daily_count > 0 && p.daily_reset === today).length ?? 0;
+  // 일 3건 리셋 모델 폐기로 daily_count 는 죽은 데이터 — 관리자가 조치할 수 있는
+  // "개인정보 미동의" 수로 교체 (미동의자는 로그인 시 동의 게이트에 걸린다).
+  const notAgreed = profiles?.filter(p => !p.agreed_terms).length ?? 0;
   const paidCount = PAID_ROLES.reduce((n, r) => n + (roleCounts[r] || 0), 0);
 
   // 최근 7일 신규 가입 — 메일을 놓쳐도 화면에서 바로 보이게 한다.
@@ -66,7 +67,7 @@ export default async function AdminPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {[
           { label: "전체 회원", value: total, sub: "명" },
-          { label: "오늘 활성", value: activeToday, sub: "명 조회함" },
+          { label: "개인정보 미동의", value: notAgreed, sub: "명 (로그인 시 동의 안내)" },
           { label: "정회원 이상", value: paidCount, sub: "유료 회원" },
           { label: "미스터홈즈센터", value: roleCounts["미스터홈즈센터"] || 0, sub: "가맹점 회원" },
         ].map(c => (
@@ -111,7 +112,7 @@ export default async function AdminPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--secondary)" }}>
-                {["이름", "이메일", "등급", "오늘 사용", "가입일"].map(h => (
+                {["이름", "이메일", "등급", "크레딧", "가입일"].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-medium"
                     style={{ color: "var(--muted-foreground)" }}>{h}</th>
                 ))}
@@ -129,8 +130,8 @@ export default async function AdminPage() {
                       {p.is_admin ? "최고관리자" : p.role}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs">
-                    {p.daily_reset === today ? `${p.daily_count}건` : "0건"}
+                  <td className="px-4 py-3 text-xs tabular-nums">
+                    {p.is_admin ? "∞" : `${p.credits ?? 0}개`}
                   </td>
                   <td className="px-4 py-3 text-xs" style={{ color: "var(--muted-foreground)" }}>
                     {formatDateKST(p.created_at)}

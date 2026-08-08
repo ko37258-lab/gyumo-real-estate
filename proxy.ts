@@ -7,6 +7,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
+  // ⚡ 성능: API·정적 사이트 요청은 인증 로직을 아예 타지 않는다.
+  // 아래 getUser() 는 Supabase 서버 왕복이라, 지도 타일(/api/tile — 드래그 한 번에
+  // 수십 장)·데이터 API·건축이야기 2MB 파일까지 매 요청 수십~수백 ms 를 얹고 있었다.
+  // API 라우트는 각자 createClient 로 자체 인증하므로 미들웨어 검사가 불필요하고,
+  // 페이지 네비게이션(그 외 경로)에는 세션 쿠키 갱신을 위해 기존 로직을 유지한다.
+  {
+    const p = request.nextUrl.pathname;
+    if (p.startsWith("/api/") || p.startsWith("/building-law")) {
+      return NextResponse.next({ request });
+    }
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

@@ -63,36 +63,50 @@ export async function PATCH(request: Request) {
   }
 
   const admin = getServiceClient();
-  const { data: req, error: reqErr } = await admin
+
+  // "먼저 도장 찍고 처리" — pending 인 행만 원자적으로 상태 전환해 선점한다.
+  // 예전엔 SELECT 로 pending 확인 후 지급 → 마지막에 상태 변경이라,
+  // ① 두 관리자가 동시에 승인하면 둘 다 pending 으로 읽어 이중 지급
+  // ② 지급 후 상태 변경이 실패하면 pending 으로 남아 재클릭 시 또 지급
+  // 두 구멍이 있었다. (가입 알림 notifyNewSignup 과 같은 선점 패턴.)
+  const nextStatus = action === "approve" ? "approved" : "rejected";
+  const { data: req, error: claimErr } = await admin
     .from("gyumo_credit_requests")
-    .select("*")
+    .update({
+      status: nextStatus,
+      processed_by: userId,
+      processed_at: new Date().toISOString(),
+      note: note ?? null,
+    })
     .eq("id", id)
-    .single();
-  if (reqErr || !req) {
-    return NextResponse.json({ error: "신청을 찾을 수 없습니다." }, { status: 404 });
+    .eq("status", "pending")
+    .select("*")
+    .maybeSingle();
+
+  if (claimErr) {
+    return NextResponse.json({ error: claimErr.message }, { status: 500 });
   }
-  if (req.status !== "pending") {
+  if (!req) {
+    // 없는 id 이거나 이미 다른 관리자가 처리한 건
     return NextResponse.json(
-      { error: `이미 처리된 신청입니다 (${req.status}).` },
+      { error: "이미 처리되었거나 존재하지 않는 신청입니다." },
       { status: 409 },
     );
   }
 
   if (action === "reject") {
-    await admin
-      .from("gyumo_credit_requests")
-      .update({
-        status: "rejected",
-        processed_by: userId,
-        processed_at: new Date().toISOString(),
-        note: note ?? null,
-      })
-      .eq("id", id);
     return NextResponse.json({ ok: true, action: "rejected" });
   }
 
   // 승인: 크레딧 지급(승인 후 2개월 만료) + 정회원 승격
+  const rollback = () =>
+    admin
+      .from("gyumo_credit_requests")
+      .update({ status: "pending", processed_by: null, processed_at: null })
+      .eq("id", id);
+
   if (!req.user_id) {
+    await rollback();
     return NextResponse.json(
       { error: "신청자 계정이 없습니다 (탈퇴 등)." },
       { status: 400 },
@@ -112,6 +126,8 @@ export async function PATCH(request: Request) {
     },
   );
   if (grantErr) {
+    // 지급 실패 — 선점을 되돌려 재시도 가능하게 (지급 없이 approved 로 남는 것 방지)
+    await rollback();
     return NextResponse.json({ error: grantErr.message }, { status: 500 });
   }
 
@@ -127,16 +143,6 @@ export async function PATCH(request: Request) {
       .update({ role: "정회원" })
       .eq("id", req.user_id);
   }
-
-  await admin
-    .from("gyumo_credit_requests")
-    .update({
-      status: "approved",
-      processed_by: userId,
-      processed_at: new Date().toISOString(),
-      note: note ?? null,
-    })
-    .eq("id", id);
 
   return NextResponse.json({
     ok: true,

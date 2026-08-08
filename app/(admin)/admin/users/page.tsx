@@ -23,13 +23,12 @@ export default async function UsersPage({
 
   let query = supabase
     .from("gyumo_profiles")
-    .select("id, email, full_name, phone, role, daily_count, daily_reset, is_admin, agreed_terms, agreed_at, created_at")
+    .select("id, email, full_name, phone, role, credits, is_admin, agreed_terms, agreed_at, created_at")
     .order("created_at", { ascending: false });
 
   if (params.role && params.role !== "all") query = query.eq("role", params.role);
 
   const { data: profiles } = await query;
-  const today = new Date().toISOString().slice(0, 10);
 
   const filtered = params.q
     ? (profiles ?? []).filter((p) =>
@@ -74,7 +73,7 @@ export default async function UsersPage({
         총 {filtered.length}명
       </div>
 
-      <UserTable profiles={filtered} isSuperAdmin={isSuperAdmin} today={today} />
+      <UserTable profiles={filtered} isSuperAdmin={isSuperAdmin} />
     </div>
   );
 }

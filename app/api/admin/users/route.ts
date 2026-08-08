@@ -31,7 +31,7 @@ export async function GET() {
   const admin = getServiceClient();
   const { data, error } = await admin
     .from("gyumo_profiles")
-    .select("id, email, full_name, phone, role, is_admin, daily_count, daily_reset, created_at")
+    .select("id, email, full_name, phone, role, is_admin, credits, created_at")
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

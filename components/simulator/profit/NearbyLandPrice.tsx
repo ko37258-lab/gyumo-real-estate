@@ -74,28 +74,41 @@ export function NearbyLandPrice() {
     ? Math.round((publicPricePerSqm * 3.3058) / 10000)
     : null;
 
-  useEffect(() => {
-    if (!pnu) {
-      setData(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setData(null);
-    fetch(`/api/nearby-landprice?pnu=${encodeURIComponent(pnu)}`)
+  // effect 본문 동기 setState 회피 — 로더를 컴포넌트 스코프로 분리 (MarketInsight와 동일 패턴)
+  const loadNearby = (p: string, signal: AbortSignal) => {
+    // 시작 상태 전환까지 마이크로태스크 체인 안에서 (MarketInsight와 동일 이유)
+    Promise.resolve()
+      .then(() => {
+        if (signal.aborted) throw new DOMException("aborted", "AbortError");
+        setLoading(true);
+        setData(null);
+        return fetch(`/api/nearby-landprice?pnu=${encodeURIComponent(p)}`, { signal });
+      })
       .then((r) => r.json())
       .then((d: NearbyData) => {
-        if (!cancelled) setData(d);
+        if (!signal.aborted) setData(d);
       })
       .catch(() => {
-        if (!cancelled) setData({ count: 0, stats: null, items: [], message: "조회 실패" });
+        if (!signal.aborted) setData({ count: 0, stats: null, items: [], message: "조회 실패" });
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!signal.aborted) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+  };
+
+  useEffect(() => {
+    if (!pnu) {
+      let cancelled = false;
+      Promise.resolve().then(() => {
+        if (!cancelled) setData(null);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const ac = new AbortController();
+    loadNearby(pnu, ac.signal);
+    return () => ac.abort();
   }, [pnu]);
 
   if (!pnu && !officialPy) {

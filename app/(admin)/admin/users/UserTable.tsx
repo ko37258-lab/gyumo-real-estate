@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ALL_ROLES, getDailyLimit } from "@/lib/membership";
+import { ALL_ROLES } from "@/lib/membership";
 import { formatDateKST } from "@/lib/utils";
 
 type Profile = {
@@ -12,8 +12,7 @@ type Profile = {
   phone: string | null;
   role: string;
   is_admin: boolean;
-  daily_count: number;
-  daily_reset: string | null;
+  credits: number | null;
   agreed_terms: boolean | null;
   agreed_at: string | null;
   created_at: string;
@@ -31,11 +30,9 @@ const ROLE_COLOR: Record<string, string> = {
 export function UserTable({
   profiles,
   isSuperAdmin,
-  today,
 }: {
   profiles: Profile[];
   isSuperAdmin: boolean;
-  today: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -174,7 +171,7 @@ export function UserTable({
                     style={{ accentColor: "#FFCF0D" }}
                   />
                 </th>
-                {["이름/이메일/전화", "등급 변경", "오늘 사용", "개인정보 동의", isSuperAdmin ? "최고관리자" : null, "가입일", "액션"]
+                {["이름/이메일/전화", "등급 변경", "크레딧", "개인정보 동의", isSuperAdmin ? "최고관리자" : null, "가입일", "액션"]
                   .filter(Boolean)
                   .map((h) => (
                     <th key={h!} className="text-left px-4 py-3 text-xs font-medium"
@@ -186,9 +183,6 @@ export function UserTable({
             </thead>
             <tbody>
               {profiles.map((p) => {
-                const isToday = p.daily_reset === today;
-                const used = isToday ? p.daily_count : 0;
-                const limit = p.is_admin ? "∞" : getDailyLimit(p.role, false);
                 const isChecked = selected.has(p.id);
                 return (
                   <tr
@@ -259,8 +253,9 @@ export function UserTable({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-sm font-medium ${used >= (typeof limit === "number" ? limit : 9999) ? "text-red-400" : ""}`}>
-                        {used} / {limit}
+                      {/* 크레딧 잔액 — 일 3건 리셋 모델 폐기 후 daily_count 는 죽은 데이터라 교체 */}
+                      <span className={`text-sm font-semibold tabular-nums ${!p.is_admin && (p.credits ?? 0) === 0 ? "text-red-400" : ""}`}>
+                        {p.is_admin ? "∞" : (p.credits ?? 0)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
