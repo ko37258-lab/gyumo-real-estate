@@ -590,24 +590,30 @@ export function LandLookup({
             : undefined,
       });
 
-      // 📁 프로젝트 이력 자동 기록 (LocalStorage · 계정별 분리 — 같은 PNU는 최신으로 갱신)
+      // 📁 프로젝트 이력 자동 기록 — LocalStorage(즉시 표시용) + 서버 DB(기기 간 유지).
+      // 서버 기록이 실패해도 조회 결과에는 영향이 없어야 하므로 fire-and-forget.
       if (usage?.userId) {
-        useHistoryStore.getState().add({
-        userId: usage.userId,
-        pnu: geo.pnu,
-        address: geo.refined,
-        fetchedAt: new Date().toISOString(),
-        areaSqm,
-        zone: zoneName ?? undefined,
-        jimok: landAreaRes?.jimok,
-        estimatedPrice:
-          landTrades && landTrades.sampleCount > 0
-            ? landTrades.estimatedPrice
-            : undefined,
+        const record = {
+          pnu: geo.pnu,
+          address: geo.refined,
+          fetchedAt: new Date().toISOString(),
+          areaSqm,
+          zone: zoneName ?? undefined,
+          jimok: landAreaRes?.jimok,
+          estimatedPrice:
+            landTrades && landTrades.sampleCount > 0
+              ? landTrades.estimatedPrice
+              : undefined,
           jigaTotal:
             landTrades?.jigaTotal ||
             (effectivePrice && areaSqm > 0 ? effectivePrice * areaSqm : undefined),
-        });
+        };
+        useHistoryStore.getState().add({ userId: usage.userId, ...record });
+        void fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ record }),
+        }).catch(() => {});
       }
 
       if (zoneCode && areaSqm > 0) {
