@@ -28,12 +28,14 @@ const INITIAL: CostInputs = {
   farmCap: 50000,
   farmDiscount: 0,
 
-  // 대체산림자원조성비 — 기본 off
+  // 대체산림자원조성비 — 기본 off. 단가는 2026년 산림청 고시(제2026-16호) 기준:
+  // 준보전산지 8,340원/㎡ · 보전산지 +30% · 산지전용제한지역 +100%(시행령 배율),
+  // 공시지가 가산은 1000분의 1(0.1%) · 상한 8,340원/㎡.
   forestEnabled: false,
   forestArea: 660,
-  forestBase: 10000,
+  forestBase: 8340,
   forestPrice: 80000,
-  forestPublicRate: 1,
+  forestPublicRate: 0.1,
   forestAddRate: 0,
   forestDiscount: 0,
 

@@ -262,12 +262,14 @@ export function ControlPanel() {
           id="sun-switch"
           checked={sunOn}
           onCheckedChange={setSunOn}
-          disabled={!z.residential}
+          disabled={!z.sunlight}
         />
         <span className="text-[11px] text-muted-foreground/80 flex-1">
-          {z.residential
-            ? "주거지역(전용/일반) · 정북방향 (시행령 86조, 2023.9.12 개정 10m 기준)"
-            : "상업·공업지역 · 일조권 사선제한 비적용"}
+          {z.sunlight
+            ? "전용·일반주거지역 · 정북방향 (시행령 86조 1항, 2023.9.12 개정 10m 기준)"
+            : z.code === "junju"
+              ? "준주거지역 · 정북 일조권 미적용 (86조 1항은 전용·일반주거만 — 공동주택 채광기준은 별도)"
+              : "전용·일반주거지역 외 · 정북 일조권 사선제한 비적용"}
         </span>
         <SunlightLearnSheet />
       </div>

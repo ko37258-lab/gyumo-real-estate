@@ -60,6 +60,10 @@ export interface CostResult {
 
 const manwon = (v: number) => v * 10000;
 
+/** 대체산림자원조성비 공시지가 가산 상한 (원/㎡) — 산림청 고시 제2026-16호(2026.1.30).
+ *  가산 = 개별공시지가의 1000분의 1, 이 상한을 넘지 못한다. */
+export const FOREST_SURCHARGE_CAP = 8340;
+
 export function calculateCost(i: CostInputs): CostResult {
   const totalArea = i.abovePyeong + i.basementPyeong;
   const aboveCost = manwon(i.abovePyeong * i.aboveUnit);
@@ -75,9 +79,14 @@ export function calculateCost(i: CostInputs): CostResult {
     ? i.farmArea * farmUnit * (1 - i.farmDiscount / 100)
     : 0;
 
+  // 고시 공식: 단위금액 = 산지별 산출금액 + min(공시지가 × 반영률, 상한)
+  // 보전산지 가산(배율)은 산지별 산출금액에만 적용 — 공시지가 가산에는 미적용.
+  const forestSurcharge = Math.min(
+    (i.forestPrice * i.forestPublicRate) / 100,
+    FOREST_SURCHARGE_CAP,
+  );
   const forestUnit =
-    (i.forestBase + (i.forestPrice * i.forestPublicRate) / 100) *
-    (1 + i.forestAddRate / 100);
+    i.forestBase * (1 + i.forestAddRate / 100) + forestSurcharge;
   const forestCost = i.forestEnabled
     ? i.forestArea * forestUnit * (1 - i.forestDiscount / 100)
     : 0;

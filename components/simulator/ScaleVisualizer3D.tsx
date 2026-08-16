@@ -163,7 +163,7 @@ function Scene({
   const schematicEfficiencyPct = useSimulatorStore((s) => s.schematicEfficiencyPct);
 
   const z = ZONES[zone];
-  const sunOn = sunOnRaw && z.residential;
+  const sunOn = sunOnRaw && z.sunlight;
 
   const lotSqm = lotPyToSqm(lotPy);
   const bldArea = buildingFootprintSqm(lotSqm, covPct);

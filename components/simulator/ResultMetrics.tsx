@@ -91,7 +91,7 @@ export function ResultMetrics() {
     bldAreaSqm: bldArea,
     floors,
     northDepthM: northDepth,
-    sunlightOn: sunOn && z.residential,
+    sunlightOn: sunOn && z.sunlight,
   });
   const loss = sunlightLossPct(gfa, actualGfa);
 
@@ -157,7 +157,7 @@ export function ResultMetrics() {
         sub={
           gp.isReducingFloor1
             ? `일조권+필로티 차감 (1층 주차 ${fmt(gp.groundParkingArea, 0)}㎡ 제외)`
-            : sunOn && z.residential
+            : sunOn && z.sunlight
               ? `일조권 손실 ${loss.toFixed(1)}%`
               : "일조권 미적용"
         }

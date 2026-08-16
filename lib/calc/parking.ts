@@ -29,9 +29,20 @@ export type ParkingCalcInput =
 
 export type ParkingCalcResult = {
   spaces: number;
-  /** 소수점 올리기 전 원시값(소수점 1자리) — 사용자 디버깅·검증용 */
+  /** 반올림 전 원시값 — 사용자 디버깅·검증용 */
   rawSpaces: number;
 };
+
+/**
+ * 시행령 별표1 비고 제6호의 법정 끝수 처리:
+ *  - 소수점 이하가 0.5 이상이면 1로 본다 (= 0.5 반올림, 무조건 올림 아님)
+ *  - 산정한 총주차대수가 1대 미만이면 0대로 본다
+ * (제5호 시설물 — 공동주택·다가구·오피스텔의 주택건설기준 산정에는 미적용)
+ */
+export function legalRoundSpaces(raw: number): number {
+  if (raw < 1) return 0;
+  return Math.floor(raw) + (raw % 1 >= 0.5 ? 1 : 0);
+}
 
 /** 단독주택 누진식. baseStart 이하 0대, firstUpTo 이하 firstSpaces 대, 초과분 addPerArea㎡당 +1대. */
 export function calcProgressive(
@@ -46,7 +57,7 @@ export function calcProgressive(
   }
   const extra = totalAreaSqm - spec.firstUpTo;
   const raw = spec.firstSpaces + extra / spec.addPerArea;
-  return { spaces: Math.ceil(raw), rawSpaces: raw };
+  return { spaces: legalRoundSpaces(raw), rawSpaces: raw };
 }
 
 /** 면적 기준. N㎡당 1대 → 면적/N 절상. */
@@ -58,10 +69,12 @@ export function calcArea(
     return { spaces: 0, rawSpaces: 0 };
   }
   const raw = totalAreaSqm / areaPerSpace;
-  return { spaces: Math.ceil(raw), rawSpaces: raw };
+  // 예전 코드는 무조건 올림(ceil)이라 예: 업무 1,010㎡(raw 10.1)를 11대로 과대 산정했다.
+  return { spaces: legalRoundSpaces(raw), rawSpaces: raw };
 }
 
-/** 공동주택 구간별 세대당. 각 구간 세대수 × 세대당 비율의 가중합 → 절상. */
+/** 공동주택 구간별 세대당. 각 구간 세대수 × 세대당 비율의 가중합 → 절상.
+ *  (별표1 비고 6호의 0.5 반올림은 제5호 시설물에 적용되지 않음 — 주택건설기준 관행상 올림 유지) */
 export function calcTieredHousehold(
   tiers: AreaTier[],
   households: number[],

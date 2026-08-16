@@ -37,7 +37,9 @@ export const USE_GROUP_OF: Record<ParkingUsageCode, UseGroup> = {
   운동문화: "civic",
   종교: "civic",
   숙박: "lodging",
-  공장창고: "industrial",
+  위락: "lodging",  // 위락(유흥·무도)은 숙박·문화 계열 리본창 스타일로
+  공장: "industrial",
+  창고: "industrial",
 };
 
 /** 건물 위에 표시할 짧은 용도 라벨 */
@@ -56,7 +58,9 @@ export const USE_SHORT_LABEL: Record<ParkingUsageCode, string> = {
   운동문화: "운동·문화",
   숙박: "숙박시설",
   종교: "종교시설",
-  공장창고: "공장·창고",
+  위락: "위락시설",
+  공장: "공장",
+  창고: "창고",
 };
 
 export type UseGroupStyle = {

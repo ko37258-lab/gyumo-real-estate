@@ -58,8 +58,9 @@ export function FarmlandLearnSheet() {
                 신고를 받은 자가 부담.
               </li>
               <li>
-                · <b>농지법 시행령 제53조</b> — ㎡당 부과기준액 산정 방식
-                (공시지가 × 30%, 상한 50,000원/㎡ 등).
+                · <b>농지법 시행령 제53조</b> — ㎡당 부과기준액 산정 방식.
+                현행: <b>농업진흥지역 안 30% · 밖 20%</b> (개별공시지가 기준),
+                상한 50,000원/㎡.
               </li>
               <li>
                 · <b>한국농어촌공사</b>가 위탁 징수. 부담금 납부확인이 있어야
@@ -99,16 +100,18 @@ export function FarmlandLearnSheet() {
           <Section
             num={3}
             title="계산 공식 + 예시"
-            summary="㎡당 부과기준액 = min(공시지가×30%, 50,000원)."
+            summary="㎡당 부과기준액 = min(공시지가 × 30%(진흥지역 안)·20%(밖), 50,000원)."
           >
             <div className="px-3 py-2 rounded bg-secondary font-mono text-[12px] leading-relaxed">
               부담금 = 전용면적(㎡) × 부과기준액 × (1 − 감면율)
               <br />
-              부과기준액 = MIN(개별공시지가 × 30%, ㎡당 50,000원)
+              부과기준액 = MIN(개별공시지가 × 적용률, ㎡당 50,000원)
+              <br />
+              적용률 = 농업진흥지역 안 30% · 밖 20% (시행령 53조 1항)
             </div>
             <p className="mt-3 font-medium">예시</p>
             <div className="mt-1 px-3 py-2 rounded bg-card border border-border font-mono text-[12px] leading-relaxed">
-              전용면적 660㎡ · 공시지가 150,000원/㎡ · 감면 0%
+              전용면적 660㎡ · 공시지가 150,000원/㎡ · 진흥지역 안 · 감면 0%
               <br />
               → 부과기준액 = MIN(150,000 × 30%, 50,000)
               <br />
@@ -120,17 +123,17 @@ export function FarmlandLearnSheet() {
           <Section
             num={4}
             title="단가·요율 (현행 기준)"
-            summary="공시지가의 30%, ㎡당 상한 50,000원."
+            summary="진흥지역 안 30% · 밖 20%, ㎡당 상한 50,000원."
           >
             <ul className="space-y-1.5">
               <li>
-                · <b>적용률</b>: 개별공시지가의 30%
+                · <b>적용률</b>: 농업진흥지역 <b>안 30% · 밖 20%</b> (개별공시지가 기준)
               </li>
               <li>
                 · <b>㎡당 상한</b>: 50,000원 (시행령 별표 2 기준)
               </li>
               <li>
-                · <b>농업진흥지역</b>: 상한 동일. 단 감면 대상이 다름
+                · <b>진흥지역 안/밖 차등</b>은 최근 개정 — 예전 자료의 &ldquo;일률 30%&rdquo;와 다름
               </li>
               <li>
                 · <b>일반 농지</b>: 상한 50,000원 적용이 일반적

@@ -70,13 +70,22 @@ export type Zone = {
   farMin: number;
   /** 초기 슬라이더 기본값 — 일반적으로 floorRatioMax */
   defFar: number;
-  /** category === 'residential' — 일조권 사선 적용 여부 */
+  /** category === 'residential' — 주거 카테고리 여부 (가설계 등) */
   residential: boolean;
+  /** 정북 일조권 사선 적용 여부 — 건축법 시행령 제86조 제1항은
+   *  "전용주거지역이나 일반주거지역에서"만 적용. 준주거는 미적용
+   *  (공동주택 채광 기준 86조 3항은 별도 — 본 시뮬레이터 범위 밖). */
+  sunlight: boolean;
 };
 
 /** 내부 헬퍼 — backward-compat 필드 자동 채움. */
+const SUNLIGHT_ZONES: ReadonlySet<string> = new Set([
+  // 시행령 86조 1항 적용 대상 — 전용·일반주거지역만 (준주거 제외)
+  "1jeon", "2jeon", "1il", "2il", "3il",
+]);
+
 function zone(
-  z: Omit<Zone, "maxCov" | "farMax" | "farMin" | "defFar" | "residential">,
+  z: Omit<Zone, "maxCov" | "farMax" | "farMin" | "defFar" | "residential" | "sunlight">,
 ): Zone {
   return {
     ...z,
@@ -85,6 +94,7 @@ function zone(
     farMin: 50,
     defFar: z.floorRatioMax,
     residential: z.category === "residential",
+    sunlight: SUNLIGHT_ZONES.has(z.code),
   };
 }
 

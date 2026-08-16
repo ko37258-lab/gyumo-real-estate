@@ -23,7 +23,9 @@ export type ParkingUsageCode =
   | "운동문화"
   | "숙박"
   | "종교"
-  | "공장창고";
+  | "위락"
+  | "공장"
+  | "창고";
 
 export type ParkingMode = "area" | "progressive" | "tieredHousehold";
 
@@ -147,12 +149,22 @@ export const PARKING_STANDARDS: Record<ParkingUsageCode, ParkingStandard> = {
   다가구: {
     code: "다가구",
     label: "다가구주택",
-    unitLabel: "시설면적(㎡)당",
-    mode: "area",
-    decreeAreaPerSpace: 100,
-    seoulAreaPerSpace: 100,
-    legalBasis: "주차장법 시행령 별표1",
-    note: "다가구주택은 단독주택 형태지만 부설주차장 산정에서는 시설면적 100㎡당 1대 기준이 일반적.",
+    unitLabel: "전용면적 구간별 세대(가구)당",
+    mode: "tieredHousehold",
+    decreeTiers: [
+      { upTo: 60, ratio: 0.7 },
+      { upTo: 85, ratio: 1.0 },
+      { upTo: 135, ratio: 1.0 },
+      { upTo: null, ratio: 1.5 },
+    ],
+    seoulTiers: [
+      { upTo: 60, ratio: 0.8 },
+      { upTo: 85, ratio: 1.0 },
+      { upTo: 135, ratio: 1.2 },
+      { upTo: null, ratio: 1.5 },
+    ],
+    legalBasis: "주차장법 시행령 별표1 제5호 → 주택건설기준 규정 제27조",
+    note: "별표1 제5호: 다가구주택은 주택건설기준 제27조 산정을 따르고, 전용면적은 공동주택 방식으로 산정. 구간 비율은 면적기준(특별시 85㎡ 이하 75㎡당 1대·초과 65㎡당 1대)과 세대당 최소기준을 근사한 값.",
   },
 
   도시형생활주택: {
@@ -226,7 +238,7 @@ export const PARKING_STANDARDS: Record<ParkingUsageCode, ParkingStandard> = {
     decreeAreaPerSpace: 150,
     seoulAreaPerSpace: 100,
     legalBasis: "주차장법 시행령 별표1 제2호",
-    note: "일반 사무실·금융업소 등. 서울 도심부는 100㎡당 1대 강화가 일반적.",
+    note: "일반 사무실·금융업소 등. 서울 조례는 100㎡당 1대 (단, 공공업무시설은 200㎡당 1대 예외).",
   },
 
   의료: {
@@ -251,6 +263,17 @@ export const PARKING_STANDARDS: Record<ParkingUsageCode, ParkingStandard> = {
     note: "공연장·관람장·체육관 등. 골프장·옥외수영장은 별도(홀·정원 기준).",
   },
 
+  위락: {
+    code: "위락",
+    label: "위락시설",
+    unitLabel: "시설면적(㎡)당",
+    mode: "area",
+    decreeAreaPerSpace: 100,
+    seoulAreaPerSpace: 67,
+    legalBasis: "주차장법 시행령 별표1 제1호",
+    note: "유흥주점·단란주점·무도장 등. 전 용도 중 가장 강한 기준.",
+  },
+
   숙박: {
     code: "숙박",
     label: "숙박시설",
@@ -272,15 +295,26 @@ export const PARKING_STANDARDS: Record<ParkingUsageCode, ParkingStandard> = {
     legalBasis: "주차장법 시행령 별표1 제2호",
   },
 
-  공장창고: {
-    code: "공장창고",
-    label: "공장·창고시설",
+  공장: {
+    code: "공장",
+    label: "공장 (수련·발전시설 포함)",
+    unitLabel: "시설면적(㎡)당",
+    mode: "area",
+    decreeAreaPerSpace: 350,
+    seoulAreaPerSpace: 233,
+    legalBasis: "주차장법 시행령 별표1 제7호",
+    note: "수련시설·공장(아파트형 제외)·발전시설. 예전 코드는 창고와 묶어 400㎡당으로 계산했으나 시행령은 350㎡당.",
+  },
+
+  창고: {
+    code: "창고",
+    label: "창고시설",
     unitLabel: "시설면적(㎡)당",
     mode: "area",
     decreeAreaPerSpace: 400,
-    seoulAreaPerSpace: 350,
-    legalBasis: "주차장법 시행령 별표1 제4호",
-    note: "공장(아파트형 제외)·창고. 데이터센터·발전시설 등은 별도.",
+    seoulAreaPerSpace: 267,
+    legalBasis: "주차장법 시행령 별표1 제8호",
+    note: "창고·하역장. 데이터센터·학생용 기숙사도 시행령은 같은 400㎡당(별표1 제9·10호).",
   },
 };
 

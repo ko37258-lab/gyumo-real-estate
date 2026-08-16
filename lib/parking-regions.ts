@@ -17,11 +17,15 @@ import type { ParkingUsageCode } from "./parking-standards";
 import { PARKING_STANDARDS } from "./parking-standards";
 
 export type OrdinanceClassValues = {
-  /** 시행령 150㎡ 그룹 (판매·업무·의료·운동문화·종교) 조례값 — ㎡당 1대 */
+  /** 시행령 100㎡ 그룹 (위락시설) 조례값 — ㎡당 1대 */
+  class100?: number | null;
+  /** 시행령 150㎡ 그룹 (판매·업무·의료·운동문화·종교) 조례값 */
   class150?: number | null;
   /** 시행령 200㎡ 그룹 (근린1·근린2·숙박) 조례값 */
   class200?: number | null;
-  /** 시행령 400㎡ 그룹 (공장·창고) 조례값 */
+  /** 시행령 350㎡ 그룹 (수련·공장·발전) 조례값 */
+  class350?: number | null;
+  /** 시행령 400㎡ 그룹 (창고) 조례값 */
   class400?: number | null;
 };
 
@@ -46,7 +50,9 @@ const USAGE_CLASS: Partial<Record<ParkingUsageCode, keyof OrdinanceClassValues>>
   근린1: "class200",
   근린2: "class200",
   숙박: "class200",
-  공장창고: "class400",
+  위락: "class100",
+  공장: "class350",
+  창고: "class400",
 };
 
 /**
@@ -58,53 +64,53 @@ export const REGION_ORDINANCES: RegionOrdinance[] = [
     prefix: "11",
     regionName: "서울특별시",
     ordinanceName: "서울특별시 주차장 설치 및 관리 조례",
-    values: { class150: 100, class200: 134, class400: 350 },
+    values: { class100: 67, class150: 100, class200: 134, class350: 233, class400: 267 },
     verified: true,
-    source: "서울특별시 주차장 설치 및 관리 조례 별표2",
+    source:
+      "서울특별시 주차장 설치 및 관리 조례(2026.7.13) 제20조 별표2 — 위락 67·문화집회 등 100·근린/숙박 134·수련/공장 233·창고 267 (자치구 안내 원문 대조)",
   },
   {
     prefix: "26",
     regionName: "부산광역시",
     ordinanceName: "부산광역시 주차장 설치 및 관리 조례",
-    values: { class150: 100, class200: 134, class400: 350 },
+    values: { class150: 100, class200: 134, class350: null, class400: null },
     verified: true,
-    source: "law.go.kr 자치법규 원문 별표 (부산광역시 주차장 설치 및 관리 조례)",
+    source:
+      "law.go.kr 자치법규 원문 별표 (부산광역시 주차장 설치 및 관리 조례) — 공장·창고 세분값은 원문 재확인 전까지 시행령(350/400) 폴백",
   },
   {
     prefix: "28",
     regionName: "인천광역시",
     ordinanceName: "인천광역시 주차장 설치 및 관리 조례",
-    values: { class150: 100, class200: 134, class400: 350 },
+    values: { class150: 100, class200: 134, class350: null, class400: null },
     verified: true,
     source:
-      "law.go.kr 자치법규정보시스템(elis.go.kr) 원문 [별표 2] 부설주차장의 설치대상시설물 종류 및 설치기준 HWP 직접 파싱 (도시지역·지구단위계획구역 기준; 관리지역은 150/200/350㎡로 시행령과 동일)",
+      "elis.go.kr 원문 [별표 2] (도시지역·지구단위계획구역 기준) — 공장·창고 세분값은 원문 재확인 전까지 시행령(350/400) 폴백",
   },
   {
     prefix: "27",
     regionName: "대구광역시",
     ordinanceName: "대구광역시 주차장 설치 및 관리 조례",
-    values: { class150: 100, class200: 150, class400: 350 },
+    values: { class150: 100, class200: 150, class350: null, class400: null },
     verified: true,
     source:
-      "대구광역시의회 조례 개정안 원문(의안 5582호, 별표2 확정 전문) + law.go.kr HWP 원문 [별표 2]",
+      "대구광역시의회 조례 개정안 원문(의안 5582호) — 공장·창고 세분값은 원문 재확인 전까지 시행령(350/400) 폴백",
   },
   {
     prefix: "31",
     regionName: "울산광역시",
     ordinanceName: "울산광역시 주차장 설치 및 관리 조례",
-    values: { class150: 100, class200: 134, class400: 266 },
+    values: { class150: 100, class200: 134, class350: 350, class400: 266 },
     verified: true,
-    source:
-      "law.go.kr 자치법규 원문 [별표 6] (공장 350㎡/창고 266㎡ — 창고 기준 채택)",
+    source: "law.go.kr 자치법규 원문 [별표 6] (공장 350㎡ · 창고 266㎡)",
   },
   {
     prefix: "36",
     regionName: "세종특별자치시",
     ordinanceName: "세종특별자치시 주차장 설치 및 관리 조례",
-    values: { class150: 134, class200: 150, class400: 300 },
+    values: { class150: 134, class200: 150, class350: 300, class400: 400 },
     verified: true,
-    source:
-      "law.go.kr 자치법규 원문 [별표 2] (공장 300㎡/창고 400㎡ — 공장 기준 채택)",
+    source: "law.go.kr 자치법규 원문 [별표 2] (공장 300㎡ · 창고 400㎡)",
   },
 ];
 

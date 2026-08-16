@@ -105,7 +105,7 @@ export function ForestLearnSheet() {
             </div>
             <p className="mt-3 font-medium">예시</p>
             <div className="mt-1 px-3 py-2 rounded bg-card border border-border font-mono text-[12px] leading-relaxed">
-              660㎡ · 기본 10,000원 · 공시지가 80,000원 × 1% · 보전산지 0%
+              660㎡ · 준보전 8,340원 · 공시지가 80,000원 × 0.1% · 가산 0%
               <br />→ ㎡당 = (10,000 + 800) × 1.0 = 10,800원
               <br />→ 부담금 = 660 × 10,800 = 7,128,000원 ≈ 713만원
             </div>
@@ -114,7 +114,7 @@ export function ForestLearnSheet() {
           <Section
             num={4}
             title="단가·요율 (매년 1월 변동)"
-            summary="기본 약 10,000원/㎡, 보전산지 30% 가산."
+            summary="2026년 고시: 준보전 8,340 · 보전 10,840 · 전용제한 16,680원/㎡."
           >
             <ul className="space-y-1.5">
               <li>
@@ -122,10 +122,11 @@ export function ForestLearnSheet() {
                 매년 1월 1일 갱신.
               </li>
               <li>
-                · <b>공시지가 반영률</b> — 1% (시행령 별표 4)
+                · <b>공시지가 반영률</b> — 1000분의 1(0.1%) · 가산 상한 8,340원/㎡
+                (2026년 산림청 고시 제2026-16호)
               </li>
               <li>
-                · <b>보전산지 가산율</b> — 30% (보전산지는 일반산지 대비 30%
+                · <b>보전산지 가산율</b> — 30% (시행령 배율: 보전산지는 준보전 대비 30%
                 가산)
               </li>
               <li>
@@ -180,7 +181,7 @@ export function ForestLearnSheet() {
             <ul className="space-y-1.5">
               <li>
                 · <b>보전산지 vs 준보전산지</b> — 산지정보시스템에서 먼저 확인.
-                보전산지는 30% 가산 → 사업비 영향 큼
+                보전산지 +30% · 전용제한지역 +100% → 사업비 영향 큼
               </li>
               <li>
                 · <b>1월 고시 변동</b> — 매년 1월 1일 기본 단위금액 갱신.

@@ -242,7 +242,7 @@ export function ScaleVisualizer() {
   const parcelShape = useSimulatorStore((s) => s.parcelShape);
 
   const z = ZONES[zone];
-  const sunOn = sunOnRaw && z.residential;
+  const sunOn = sunOnRaw && z.sunlight;
 
   // 건축물 용도별 시각화 스타일 (색·외곽선·창문·입면·아이콘)
   const useStyle = getUseStyle(parkingUsage);

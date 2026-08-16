@@ -45,6 +45,29 @@ export function FarmlandFee() {
         inputMax={10000000}
         inputWidthClass="w-28"
       />
+      {/* 현행 시행령 53조 1항 — 농업진흥지역 안 30% / 밖 20% 차등 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground min-w-[78px]">농지 구분</span>
+        {[
+          { label: "농업진흥지역 안 (30%)", rate: 30 },
+          { label: "진흥지역 밖 (20%)", rate: 20 },
+        ].map((o) => (
+          <button
+            key={o.rate}
+            type="button"
+            disabled={disabled}
+            onClick={() => s.set("farmRate", o.rate)}
+            className="text-[11px] px-2.5 py-1 rounded-full border transition-colors disabled:opacity-40"
+            style={
+              s.farmRate === o.rate
+                ? { background: "#d97757", color: "#fff", borderColor: "#d97757" }
+                : { borderColor: "var(--border)", color: "var(--muted-foreground)" }
+            }
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
       <SliderInputPair
         label="적용률"
         value={s.farmRate}
@@ -56,6 +79,7 @@ export function FarmlandFee() {
         disabled={disabled}
         inputMin={0}
         inputMax={100}
+        hint="시행령 53조 1항: 농업진흥지역 안 30% · 밖 20% (개별공시지가 기준, ㎡당 상한 5만원)"
       />
       <SliderInputPair
         label="㎡당 상한"

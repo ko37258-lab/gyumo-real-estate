@@ -44,9 +44,9 @@ export function buildReportInputs(): ReportInputs {
     bldAreaSqm: bldArea,
     floors,
     northDepthM: northDepth,
-    sunlightOn: sim.sunOn && z.residential,
+    sunlightOn: sim.sunOn && z.sunlight,
   });
-  const lossPct = sim.sunOn && z.residential
+  const lossPct = sim.sunOn && z.sunlight
     ? sunlightLossPct(legalGfa, actualGfa)
     : 0;
 

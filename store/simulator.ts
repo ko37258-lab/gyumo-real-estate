@@ -130,7 +130,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   covPct: ZONES["2il"].maxCov,
   farPct: ZONES["2il"].defFar,
   roadM: 6,
-  sunOn: ZONES["2il"].residential,
+  sunOn: ZONES["2il"].sunlight,
   isCBD: false,
   ...initialParking,
   capture3D: null,
@@ -154,7 +154,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
       covPct: z.maxCov,
       farPct: Math.min(z.defFar, z.farMax),
       roadM: info.roadM,
-      sunOn: z.residential,
+      sunOn: z.sunlight,
       parkingLawdCd: lawdCd,
     };
     // 지자체 조례 기준으로 주차 원단위 자동 갱신 (area 모드 용도만)
@@ -175,7 +175,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
         farPct >= z.farMin && farPct <= z.farMax
           ? farPct
           : Math.min(z.defFar, z.farMax),
-      sunOn: z.residential,
+      sunOn: z.sunlight,
     });
   },
 
