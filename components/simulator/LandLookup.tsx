@@ -26,6 +26,7 @@ import {
   formatManPerShortBy,
 } from "@/lib/utils/area";
 import { UsePricesDialog } from "@/components/simulator/UsePricesDialog";
+import { RegulationChecklist } from "@/components/simulator/RegulationChecklist";
 import {
   fetchZoneByCoord,
   fetchNearbyRoads,
@@ -958,6 +959,15 @@ export function LandLookup({
 
       {result && (
         <div className="mt-2.5 space-y-2 text-[12px]">
+          {/* 🧾 이 땅의 걸림돌 — 새 API 호출 없이 이미 조회된 데이터만으로 즉시 판정 */}
+          <RegulationChecklist
+            jimok={jimokName ?? undefined}
+            useAttrs={bld?.useAttrs}
+            areaSqm={resolvedArea}
+            publicPricePerSqm={bld?.price}
+            zoneCode={matchedZoneCode ?? undefined}
+          />
+
           {/* 기본 정보 */}
           <div className="px-3 py-2 rounded-md bg-[var(--info-bg)] text-[var(--info)]">
             <div className="font-semibold">📍 {result.refinedAddress}</div>
