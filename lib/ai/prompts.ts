@@ -62,7 +62,8 @@ export function buildUserPrompt(input: ReportInputs): string {
 [규모 검토]
 - 대지면적: ${formatArea(s.landAreaSqm)}
 - 용도지역: ${s.zoneName} (${s.zoneCode})
-- 건폐율: ${s.coverRatio}% · 용적률: ${s.floorRatio}%
+- 건폐율: ${s.coverRatio}% · 용적률: ${s.floorRatio}%${s.ordinanceSource ? `
+- 상한 근거: ${s.ordinanceSource}` : ""}
 - 전면도로: ${s.roadWidth}m
 - 1층 법정 건축면적: ${formatArea(s.buildingArea)}${s.groundParkingArea > 0 ? `
 - 1층 지상주차 점유: ${formatArea(s.groundParkingArea)} (${s.groundSpaces}대 × ${s.parkingUnitArea}㎡, ${s.pilotiMode ? "필로티 구조" : "벽체식"})` : ""}

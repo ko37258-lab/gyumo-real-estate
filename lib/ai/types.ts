@@ -87,6 +87,8 @@ export interface ReportInputs {
     zoneName: string;
     coverRatio: number;
     floorRatio: number;
+    /** 건폐율·용적률 근거 — 지자체 조례 자동 적용 시 그 출처, 아니면 시행령 상한임을 명시 */
+    ordinanceSource?: string;
     roadWidth: number;
     buildingArea: number;
     legalFloorArea: number;

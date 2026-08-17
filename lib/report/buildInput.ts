@@ -205,6 +205,11 @@ export function buildReportInputs(): ReportInputs {
       zoneName: z.name,
       coverRatio: sim.covPct,
       floorRatio: sim.farPct,
+      ordinanceSource: sim.ordinance
+        ? sim.ordinance.hasPreciseSource
+          ? `${sim.ordinance.regionName} 도시계획조례 (${sim.ordinance.source})`
+          : `${sim.ordinance.regionName} 도시계획조례 (수치 검증 완료, 조문 링크 미확보)`
+        : "국토계획법 시행령 제84·85조 상한 기준 (해당 지자체 조례 미확인)",
       roadWidth: sim.roadM,
       buildingArea: bldArea,
       legalFloorArea: legalGfa,

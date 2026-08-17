@@ -750,6 +750,11 @@ function ScalePage({
           ["전면도로", `${s.roadWidth}m`],
         ]}
       />
+      {s.ordinanceSource && (
+        <PdfText style={[styles.smallText, { marginTop: 4, color: "#6b7280" }]}>
+          ⚖ 상한 근거 — {s.ordinanceSource}
+        </PdfText>
+      )}
 
       <PdfText style={[styles.h3, { marginTop: 14 }]}>(b) 산정 결과</PdfText>
       <TwoColTable

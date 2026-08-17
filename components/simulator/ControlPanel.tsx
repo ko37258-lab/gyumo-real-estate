@@ -40,10 +40,15 @@ export function ControlPanel() {
   const setRoadM = useSimulatorStore((s) => s.setRoadM);
   const setSunOn = useSimulatorStore((s) => s.setSunOn);
   const setIsCBD = useSimulatorStore((s) => s.setIsCBD);
+  const ordinance = useSimulatorStore((s) => s.ordinance);
+  const parkingLawdCd = useSimulatorStore((s) => s.parkingLawdCd);
 
   const z = ZONES[zone];
-  const effectiveFarMax = getEffectiveFloorRatioMax(z, isCBD);
-  const cbdAvailable = !!z.floorRatioCBD;
+  // 지자체 조례 상한이 확인된 경우(서울 외 지역) 그 값을 최우선으로 쓴다.
+  // 서울은 ordinance가 항상 null이라 zones.ts의 서울도심 특례(CBD)가 그대로 산다.
+  const maxCov = ordinance?.coverRatioMax ?? z.maxCov;
+  const effectiveFarMax = ordinance?.floorRatioMax ?? getEffectiveFloorRatioMax(z, isCBD);
+  const cbdAvailable = !ordinance && !!z.floorRatioCBD;
   const useStyle = getUseStyle(parkingUsage);
 
   return (
@@ -154,27 +159,27 @@ export function ControlPanel() {
         max={100}
         step={1}
         unit="%"
-        markers={[{ position: z.maxCov, label: `법정 ${z.maxCov}%` }]}
+        markers={[{ position: maxCov, label: `법정 ${maxCov}%` }]}
         shadeAboveMarker
         hint={
-          covPct > z.maxCov ? (
+          covPct > maxCov ? (
             <span className="text-destructive">
-              ⚠ 법정 한도 {z.maxCov}% 초과 — 인허가 불가 (시뮬레이션 전용)
+              ⚠ 법정 한도 {maxCov}% 초과 — 인허가 불가 (시뮬레이션 전용)
             </span>
           ) : (
-            `법정 최대 ${z.maxCov}% (1층 ${(lotPy * z.maxCov / 100).toFixed(0)}평)`
+            `법정 최대 ${maxCov}% (1층 ${(lotPy * maxCov / 100).toFixed(0)}평)`
           )
         }
         inputMin={0}
         inputMax={100}
       />
-      {covPct < z.maxCov * 0.8 && (
+      {covPct < maxCov * 0.8 && (
         <RegulationHint
           current={covPct}
-          maxLegal={z.maxCov}
+          maxLegal={maxCov}
           currentFloor1Pyeong={(lotPy * covPct) / 100}
-          maxFloor1Pyeong={(lotPy * z.maxCov) / 100}
-          onApplyMax={() => setCovPct(z.maxCov)}
+          maxFloor1Pyeong={(lotPy * maxCov) / 100}
+          onApplyMax={() => setCovPct(maxCov)}
           unit="평 (1층 건축면적)"
         />
       )}
@@ -237,6 +242,50 @@ export function ControlPanel() {
             사대문 안(종로·중구) 특례 — 용적률 {z.floorRatioCBD}% 적용
           </span>
         </div>
+      )}
+
+      {/* 지자체 조례 자동 적용 안내 — 서울 외 지역이 조례 DB에 있으면 그 값을,
+          없으면 국토계획법 시행령 상한(정직한 폴백)임을 밝힌다. */}
+      {ordinance ? (
+        <div className="flex items-start gap-2 rounded-md bg-[var(--info-bg)] border border-[var(--info)]/25 px-3 py-2">
+          <span className="text-sm shrink-0">📍</span>
+          <div className="text-[11px] leading-relaxed">
+            <span className="font-medium text-foreground">
+              {ordinance.regionName} 도시계획조례 자동 적용
+            </span>
+            {ordinance.hasPreciseSource ? (
+              <>
+                <span className="text-muted-foreground"> — {ordinance.source}</span>
+                <a
+                  href={ordinance.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-1.5 text-[var(--info)] hover:underline"
+                >
+                  원문 확인 ↗
+                </a>
+              </>
+            ) : (
+              <a
+                href="https://www.law.go.kr/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-[var(--info)] hover:underline"
+              >
+                {` — 건폐율·용적률 수치는 국가법령정보센터 자치법규 원문 대조 완료. 조문 링크는 국가법령정보센터에서 “${ordinance.regionName} 도시계획 조례”로 직접 검색해주세요 ↗`}
+              </a>
+            )}
+          </div>
+        </div>
+      ) : (
+        parkingLawdCd &&
+        !parkingLawdCd.startsWith("11") && (
+          <div className="text-[10.5px] text-muted-foreground/80 px-1">
+            ⓘ 이 지역 조례 데이터가 아직 없어 국토계획법 시행령 상한을 기준으로
+            표시했습니다. 실제 조례가 더 강화·완화되어 있을 수 있으니 인허가 전
+            해당 지자체에 확인하세요.
+          </div>
+        )
       )}
 
       <SliderInputPair
