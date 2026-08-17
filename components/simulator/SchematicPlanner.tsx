@@ -18,6 +18,7 @@ import {
   RESIDENTIAL_USAGES,
   TIERED_USAGES,
 } from "@/lib/calc/schematic";
+import { ELEVATOR_UNIT_SQM } from "@/lib/calc/elevator";
 import { PARKING_STANDARDS, type ParkingUsageCode } from "@/lib/parking-standards";
 import { getUseStyle } from "@/lib/building-use";
 
@@ -52,6 +53,7 @@ export function SchematicPlanner() {
     exclusiveUnitSqm: unitSqm,
     efficiencyPct: efficiency,
     groundPiloti,
+    usage: parkingUsage,
   });
 
   /** 세대수 → ⑤ 주차 산정 tieredHousehold 자동 배정 */
@@ -232,6 +234,42 @@ export function SchematicPlanner() {
                   </div>
                 </div>
               </div>
+
+              {/* 법정 승강기 검증 — 세대수만 뽑고 승강기 들어갈 자리가
+                  있는지 확인 안 하던 것을 보완 (건축법 64조 + 설비기준규칙 별표1의2) */}
+              {r.elevator?.required && (
+                <div
+                  className="mt-2 rounded-md px-3 py-2"
+                  style={
+                    r.elevatorFitsInCore
+                      ? { background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.3)" }
+                      : { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)" }
+                  }
+                >
+                  <div className="flex items-center gap-1.5 text-[11.5px] font-semibold"
+                    style={{ color: r.elevatorFitsInCore ? "#15803d" : "#b91c1c" }}>
+                    <span>🛗</span>
+                    <span>
+                      법정 승강기 {r.elevator.count}대 필요
+                      {r.elevatorFitsInCore ? " — 코어 면적 안에 여유 있음" : " — 코어 면적 부족 가능성"}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground leading-relaxed">
+                    개략 점유면적 약 {r.elevator.areaSqm}㎡ (승강기 1대당 {ELEVATOR_UNIT_SQM}㎡ 참고치) ·{" "}
+                    {r.elevator.basis}
+                    {r.elevator.possiblyExempt && (
+                      <> · 정확히 6층인 경우 각 층 거실 300㎡ 이내마다 직통계단을 설치하면
+                      승강기 설치 의무가 면제될 수 있습니다(시행령 89조) — 이 시뮬레이터는
+                      해당 예외를 자동 판정하지 않습니다.</>
+                    )}
+                    {!r.elevatorFitsInCore && (
+                      <> · 기준층 코어({r.corePerFloorSqm}㎡)가 승강기 개략 소요면적보다 작습니다.
+                      전용면적·전용률을 조정하거나 코어에 계단·복도까지 포함된 값임을 감안해
+                      건축사와 상세 배치를 검토하세요.</>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* 기준층 개략 배치도 */}
               {diagram && (

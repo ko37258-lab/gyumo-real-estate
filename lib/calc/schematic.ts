@@ -19,6 +19,8 @@ export interface SchematicInput {
   efficiencyPct: number;
   /** 1층 필로티 주차(주거 제외) 여부 */
   groundPiloti: boolean;
+  /** 건축물 용도 — 승강기 대수 산정(별표1의2 그룹)에 사용. 생략 시 승강기 검증 안 함. */
+  usage?: ParkingUsageCode;
 }
 
 export interface SchematicResult {
@@ -36,6 +38,11 @@ export interface SchematicResult {
   corePerFloorSqm: number;
   /** 산출 가능 여부 (기준층이 한 세대 공급면적보다 작으면 false) */
   feasible: boolean;
+  /** 법정 승강기 소요 — usage 미지정 시 undefined */
+  elevator?: ElevatorRequirement;
+  /** 코어 면적이 법정 승강기(개략 점유면적)를 담을 수 있는지.
+   *  elevator 미산정이면 undefined — "부족"을 단정하지 않는다. */
+  elevatorFitsInCore?: boolean;
 }
 
 export function calculateSchematic(i: SchematicInput): SchematicResult {
@@ -52,6 +59,14 @@ export function calculateSchematic(i: SchematicInput): SchematicResult {
     Math.round(totalUnits * i.exclusiveUnitSqm * 10) / 10;
   const corePerFloorSqm =
     Math.round((i.floorAreaSqm - unitsPerFloor * i.exclusiveUnitSqm) * 10) / 10;
+
+  const elevator = i.usage
+    ? calcElevatorRequirement(i.floors, i.floorAreaSqm, i.usage)
+    : undefined;
+  const elevatorFitsInCore = elevator
+    ? !elevator.required || corePerFloorSqm >= elevator.areaSqm
+    : undefined;
+
   return {
     supplyPerUnitSqm: Math.round(supplyPerUnitSqm * 10) / 10,
     residentialFloors,
@@ -60,10 +75,13 @@ export function calculateSchematic(i: SchematicInput): SchematicResult {
     totalExclusiveSqm,
     corePerFloorSqm,
     feasible: unitsPerFloor >= 1 && residentialFloors >= 1,
+    elevator,
+    elevatorFitsInCore,
   };
 }
 
 import type { ParkingUsageCode } from "@/lib/parking-standards";
+import { calcElevatorRequirement, type ElevatorRequirement } from "./elevator";
 
 /** ⑥ 가설계 활성 대상 (세대 개념이 있는 주거계 용도) — UI·3D 공용 */
 export const RESIDENTIAL_USAGES: ParkingUsageCode[] = [
