@@ -225,6 +225,30 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── 소개 영상 (검토 4단계를 40초로) ── */}
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24">
+        <h2 className="text-2xl sm:text-[32px] font-medium tracking-tight leading-snug max-w-lg">
+          40초면, 어떤 도구인지 아십니다.
+        </h2>
+        <p className="mt-3 text-sm text-muted-foreground leading-relaxed max-w-md">
+          지번 입력부터 땅값 추정, 일조권 규모검토, 부담금, 사업성까지 —
+          고상철 대표의 목소리로 직접 설명해 드립니다.
+        </p>
+        <div className="mt-8 overflow-hidden rounded-xl border border-border bg-black">
+          {/* H.264/yuv420p/AAC — 크롬·사파리·안드로이드 공통 재생 */}
+          <video
+            controls
+            preload="metadata"
+            playsInline
+            poster="/videos/intro-poster.jpg"
+            className="block w-full"
+            style={{ aspectRatio: "16 / 9" }}
+          >
+            <source src="/videos/intro.mp4" type="video/mp4" />
+          </video>
+        </div>
+      </section>
+
       {/* ── 실제 작업 흐름 (세로 스텝 + 우측 설명) ── */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
         <h2 className="text-2xl sm:text-[32px] font-medium tracking-tight leading-snug max-w-lg">
