@@ -10,6 +10,7 @@
 //
 //   GET /api/use-prices?pnu=<19>&umd=<법정동명>&months=<기본12>
 import { NextResponse } from "next/server";
+import { datagoKeyFail } from "@/lib/datago-fail";
 
 export const revalidate = 0;
 
@@ -115,6 +116,7 @@ export async function GET(request: Request) {
   const months = Math.min(Number(searchParams.get("months")) || 12, 12);
   const pkey = process.env.DATAGO_KEY;
 
+
   if (!pnu || pnu.length !== 19) {
     return NextResponse.json({ error: "pnu(19자리) 필요" }, { status: 400 });
   }
@@ -154,9 +156,22 @@ export async function GET(request: Request) {
     const results = await pAll(tasks, 20);
 
     const byService: Record<string, Array<Record<string, string>>> = {};
+    let okCalls = 0;
+    let keyFailMsg: string | null = null;
     for (const { key, xml } of results) {
+      const fail = datagoKeyFail(xml);
+      if (fail) { keyFailMsg = fail; continue; }
       if (!xml || !xml.includes("<resultCode>000</resultCode>")) continue;
+      okCalls++;
       (byService[key] ??= []).push(...parseXmlItems(xml));
+    }
+    // 전 호출이 키 문제로 죽었으면 "표본 0"이 아니라 오류다 — 캐시하지 않고 그대로 알린다.
+    // (2026-08-31: 무효 키를 빈 결과로 6시간 캐시해 장애가 몇 주간 숨었던 사고 재발 방지)
+    if (okCalls === 0 && keyFailMsg) {
+      return NextResponse.json(
+        { error: `실거래 조회 실패 — ${keyFailMsg}`, apiError: true },
+        { status: 503 },
+      );
     }
 
     // ── 매매 rows ──

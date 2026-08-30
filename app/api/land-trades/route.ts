@@ -8,6 +8,7 @@
 //
 //   GET /api/land-trades?pnu=<19>&umd=<법정동명>&zone=<용도지역명>&areaSqm=<㎡>&jiga=<원/㎡>
 import { NextResponse } from "next/server";
+import { datagoKeyFail } from "@/lib/datago-fail";
 
 export const revalidate = 0;
 
@@ -107,8 +108,13 @@ export async function GET(request: Request) {
     );
 
     const all: Trade[] = [];
+    let ltOkCalls = 0;
+    let ltKeyFail: string | null = null;
     for (const xml of responses) {
+      const fail = datagoKeyFail(xml);
+      if (fail) { ltKeyFail = fail; continue; }
       if (!xml || !xml.includes("<resultCode>000</resultCode>")) continue;
+      ltOkCalls++;
       for (const it of parseXmlItems(xml)) {
         const area = Number(it.dealArea) || 0;
         const won = amountToWon(it.dealAmount ?? "");
@@ -180,6 +186,13 @@ export async function GET(request: Request) {
       ),
     );
 
+    // 전 호출 키 실패 = 자료 없음이 아니라 장애 (2026-08-31 무효키 조용한 실패 재발 방지)
+    if (ltOkCalls === 0 && ltKeyFail) {
+      return NextResponse.json(
+        { error: `실거래 조회 실패 — ${ltKeyFail}`, apiError: true },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({
       trades: sorted.slice(0, 20),
       sampleCount: sample.length,

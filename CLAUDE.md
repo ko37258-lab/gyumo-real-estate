@@ -595,6 +595,8 @@ TOSS_SECRET_KEY=
 
 ## 11. Claude Code 작업 시 주의사항
 
+0. **🔑 DATAGO_KEY는 3개 앱 공유** — data.go.kr 키를 교체하면 **real-estate-infographic · gyumo · mrk-realestate(Supabase app_config.DATA_GO_KR_KEY)** 를 반드시 함께 바꿀 것. 2026-08-31 gyumo만 누락돼 시세 전 기능이 몇 주간 "자료 없음"으로 위장 실패했다. 키 상태는 `GET /api/health`로 즉시 확인 가능(매일 07시 크론이 실패 시 관리자 메일 발송).
+
 1. **`prototype.html`을 절대 수정하지 말 것** — v0.1 참고 원본. React 컴포넌트는 `app/(app)/simulator/`에 새로 작성.
 2. **법령 인용은 정확하게** — 운영자가 "공법의 신" 브랜드이므로 부정확한 조문 인용은 신뢰도 치명타.
 3. **"Mr. Holmes" 금지** — 브랜드명은 항상 **"미스터홈즈 (미스터홈즈)"**.
