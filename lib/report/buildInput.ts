@@ -226,11 +226,15 @@ export function buildReportInputs(): ReportInputs {
       zoneName: z.name,
       coverRatio: sim.covPct,
       floorRatio: sim.farPct,
+      // 서울은 조례 DB(비서울 전용)가 아니라 zones.ts 정본(서울시 도시계획 조례)을 쓴다.
+      // ordinance=null 을 "조례 미확인"으로 적으면 서울 필지에서 사실과 어긋난다.
       ordinanceSource: sim.ordinance
         ? sim.ordinance.hasPreciseSource
           ? `${sim.ordinance.regionName} 도시계획조례 (${sim.ordinance.source})`
           : `${sim.ordinance.regionName} 도시계획조례 (수치 검증 완료, 조문 링크 미확보)`
-        : "국토계획법 시행령 제84·85조 상한 기준 (해당 지자체 조례 미확인)",
+        : sim.parkingLawdCd?.startsWith("11")
+          ? "서울특별시 도시계획 조례 (2026 기준 · 검토: 고상철 대표)"
+          : "국토계획법 시행령 제84·85조 상한 기준 (해당 지자체 조례 미확인)",
       roadWidth: sim.roadM,
       buildingArea: bldArea,
       legalFloorArea: legalGfa,
