@@ -1335,15 +1335,22 @@ function ParcelMass({
   );
   const fpBounds = useMemo(() => polygonBounds(fp), [fp]);
 
+  // 정북측 인접 대지경계선 = 필지 로컬 좌표의 북쪽 끝(y 최대).
+  // ⚠️ 건축법 시행령 제86조 제1항 (법령 MCP로 현행본 확인, 2026-08-30):
+  //   1. 높이 10m 이하 부분 — 경계선에서 1.5m 이상
+  //   2. 높이 10m 초과 부분 — 경계선에서 해당 부분 높이의 1/2 이상
+  // 이격의 기준은 "인접 대지경계선"이다. 예전 코드는 축소된 건축면적의
+  // 북쪽 끝(fpBounds.maxY)을 기준으로 h/2−1.5를 빼서, 필지 꽉 채운 경우
+  // 상층부가 법정치보다 1.5m 덜 물러났다(위법 매스). 경계선 기준 절대값으로 교정.
+  // (조례로 더 큰 이격을 정할 수 있으므로 1.5m는 최소치 — UI에 조례 확인 문구)
+  const northY = shape.bounds.maxY;
+
   const items: React.ReactNode[] = [];
   const ceilFloors = Math.ceil(floors);
   for (let i = 0; i < ceilFloors; i++) {
-    const fH = (i + 1) * FLOOR_HEIGHT_M;
-    let setback = 0;
-    if (sunOn && fH > SUNLIGHT_THRESHOLD_M) setback = fH / 2 - 1.5;
-    else if (sunOn) setback = 1.5;
-    const pts =
-      setback > 0 ? clipPolygonBelowY(fp, fpBounds.maxY - setback) : fp;
+    const fH = (i + 1) * FLOOR_HEIGHT_M; // 층 상단 높이 기준(층 내 최엄격 지점) — 보수적 근사
+    const required = fH <= SUNLIGHT_THRESHOLD_M ? 1.5 : fH / 2;
+    const pts = sunOn ? clipPolygonBelowY(fp, northY - required) : fp;
     if (pts.length < 3) break;
     const portion = i + 1 <= floors ? 1 : floors - i;
     if (portion <= 0) break;
@@ -1366,6 +1373,15 @@ function ParcelMass({
   return (
     <group>
       {items}
+      {sunOn && hM > 0 && (
+        <SunlightEnvelopeParcel
+          northY={northY}
+          minY={fpBounds.minY}
+          xMin={fpBounds.minX}
+          xMax={fpBounds.maxX}
+          massH={hM}
+        />
+      )}
       {floors > 0 && (
         <Html
           position={[0, hM + 2.4, 0]}
@@ -1646,5 +1662,117 @@ function GroundTile({ spec }: { spec: GroundTileSpec }) {
       <planeGeometry args={[spec.w, spec.h]} />
       <meshStandardMaterial map={tex} roughness={1} />
     </mesh>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 실형상 매스용 일조사선 envelope — 건축법 시행령 제86조 제1항
+// (현행본 법령 MCP 확인 2026-08-30: 10m 이하 1.5m / 초과부 h·½)
+//
+// 허용 영역의 경계면 세 장을 반투명으로 그려 "왜 위층이 깎였는지"를 보여준다.
+//   ① 수직면: 경계선에서 1.5m, 지면→10m
+//   ② 수평면: 높이 10m, 경계선에서 1.5m→5m (h/2=10/2)
+//   ③ 사선면: h = 2d (경계선 기준), 10m→매스 상단(+한 층 여유)
+// ─────────────────────────────────────────────────────────────
+function SunlightEnvelopeParcel({
+  northY,
+  minY,
+  xMin,
+  xMax,
+  massH,
+}: {
+  northY: number;
+  minY: number;
+  xMin: number;
+  xMax: number;
+  massH: number;
+}) {
+  const width = Math.max(2, (xMax - xMin) * 0.98);
+  const cx = (xMin + xMax) / 2;
+  const topH = Math.max(massH + FLOOR_HEIGHT_M, SUNLIGHT_THRESHOLD_M);
+  const vertH = Math.min(SUNLIGHT_THRESHOLD_M, topH);
+  const zWall = -(northY - 1.5); // 수직 한계면 (경계선에서 1.5m)
+  const zKnee = -(northY - SUNLIGHT_THRESHOLD_M / 2); // 사선 시작점 (10m 높이 → 5m 이격)
+  const slantDepth = Math.min(topH / 2, northY - minY + 6); // 사선 끝 이격 (필지 깊이 넘게 그리지 않음)
+  const zTop = -(northY - slantDepth);
+  const slantTopH = slantDepth * 2;
+
+  const mat = (
+    <meshBasicMaterial
+      color={DANGER}
+      transparent
+      opacity={0.13}
+      side={THREE.DoubleSide}
+      depthWrite={false}
+    />
+  );
+
+  return (
+    <group>
+      {/* ① 수직면 (0→10m, 경계선-1.5m) */}
+      <mesh position={[cx, vertH / 2, zWall]}>
+        <planeGeometry args={[width, vertH]} />
+        {mat}
+      </mesh>
+      {topH > SUNLIGHT_THRESHOLD_M && (
+        <>
+          {/* ② 10m 수평 캡 (1.5m→5m) */}
+          <mesh
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[cx, SUNLIGHT_THRESHOLD_M, (zWall + zKnee) / 2]}
+          >
+            <planeGeometry args={[width, Math.abs(zKnee - zWall)]} />
+            {mat}
+          </mesh>
+          {/* ③ 사선면 h=2d */}
+          <TiltedPlane
+            width={width}
+            fromY={SUNLIGHT_THRESHOLD_M}
+            toY={slantTopH}
+            fromZ={zKnee}
+            toZ={zTop}
+          />
+        </>
+      )}
+      {/* 경계 윤곽선 (남쪽에서 봤을 때 계단 규칙이 읽히게) */}
+      <Line
+        points={[
+          [cx - width / 2, 0, zWall],
+          [cx - width / 2, vertH, zWall],
+          ...(topH > SUNLIGHT_THRESHOLD_M
+            ? ([
+                [cx - width / 2, SUNLIGHT_THRESHOLD_M, zKnee],
+                [cx - width / 2, slantTopH, zTop],
+              ] as [number, number, number][])
+            : []),
+        ]}
+        color={DANGER}
+        lineWidth={1.6}
+        dashed
+        dashSize={0.5}
+        gapSize={0.3}
+      />
+      <Html
+        position={[cx, Math.min(topH, SUNLIGHT_THRESHOLD_M) + 1.2, zWall]}
+        center
+        distanceFactor={40}
+        style={{ pointerEvents: "none" }}
+      >
+        <div
+          style={{
+            background: "rgba(255,255,255,0.9)",
+            border: `1px solid ${DANGER}`,
+            borderRadius: 4,
+            padding: "1px 6px",
+            fontSize: 10,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
+            color: DANGER,
+          }}
+        >
+          일조사선 · 10m↓ 1.5m / 초과 h½ (조례 확인)
+        </div>
+      </Html>
+    </group>
   );
 }
