@@ -1,5 +1,12 @@
 "use client";
 
+import { useState } from "react";
+import {
+  buildReductionTips,
+  compactCarAllowance,
+  TIP_STATUS_LABEL,
+  type ReductionContext,
+} from "@/lib/parking/reduction";
 import { useSimulatorStore } from "@/store/simulator";
 import {
   Select,
@@ -580,6 +587,97 @@ export function ParkingCalculator() {
         ⚖️ {std.legalBasis} · 시·군·구 조례별 강화 가능. 최종 인허가 시 해당
         지자체 확인 필수.
       </div>
+
+      <ReductionTips
+        spaces={result.applied.spaces}
+        rawSpaces={result.applied.rawSpaces}
+        usageLabel={std.label}
+        facilityAreaSqm={gfa}
+        groundSpaces={gp.groundSpaces}
+        floor1IndoorSqm={floor1Indoor}
+      />
+    </div>
+  );
+}
+
+/** 주차대수 절감 팁 — 보고서(ParkingPage)와 같은 데이터를 쓴다. */
+function ReductionTips(ctx: ReductionContext) {
+  const [open, setOpen] = useState(false);
+  const tips = buildReductionTips(ctx);
+  const compact = compactCarAllowance(ctx.spaces);
+  const shown = open ? tips : tips.slice(0, 3);
+
+  if (ctx.spaces <= 0) return null;
+
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--info)]/35 bg-card/70 p-3">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="text-[13px] font-semibold text-[var(--info)] whitespace-nowrap">
+          💡 주차대수 줄이는 방법
+        </span>
+        <span className="text-[10.5px] text-muted-foreground">
+          법정 {ctx.spaces}대 기준 · 검토 {tips.length}가지
+        </span>
+      </div>
+
+      {compact > 0 && (
+        <p className="mt-1.5 text-[11.5px] leading-relaxed text-foreground/90">
+          설계만으로 바로 쓰는 건{" "}
+          <b className="text-[var(--info)]">경형 {compact}대</b> — 법정{" "}
+          {ctx.spaces}대 중 10%까지는 경형 전용구획으로 채워도 설치기준을
+          충족합니다(별표1 비고 12).
+        </p>
+      )}
+
+      <ul className="mt-2 space-y-1.5">
+        {shown.map((t) => (
+          <li
+            key={t.id}
+            className="rounded-md border border-border bg-background px-2.5 py-2"
+          >
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span
+                className={`text-[9.5px] px-1.5 py-0.5 rounded whitespace-nowrap shrink-0 ${
+                  t.status === "applicable"
+                    ? "bg-[var(--info)] text-white"
+                    : t.status === "conditional"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {TIP_STATUS_LABEL[t.status]}
+              </span>
+              <span className="text-[12px] font-medium">{t.title}</span>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-foreground/85">
+              {t.action}
+            </p>
+            {t.effect && (
+              <p className="mt-0.5 text-[11px] font-medium text-[var(--info)]">
+                → {t.effect}
+              </p>
+            )}
+            <p className="mt-0.5 text-[10px] text-muted-foreground/80 leading-snug">
+              ⚖️ {t.basis}
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      {tips.length > 3 && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="mt-2 text-[11px] text-[var(--info)] hover:underline"
+        >
+          {open ? "접기 ∧" : `${tips.length - 3}가지 더 보기 ∨`}
+        </button>
+      )}
+
+      <p className="mt-2 text-[10px] text-muted-foreground/80 leading-relaxed">
+        ※ 조례 위임 사항이 많아 최종 적용은 관할 시·군·구 확인이
+        필요합니다.
+      </p>
     </div>
   );
 }

@@ -98,6 +98,8 @@ export interface ReportInputs {
     sunlightLoss: number;
     parkingPlacement: "none" | "basement" | "above" | "mixed";
     parkingSpaces: number;
+    /** 반올림 전 산정 대수 — 별표1 비고6 단서(총 1대 미만 → 0대) 검토용 */
+    parkingRawSpaces?: number;
     /** Day 10: 1층 분해 (필로티/벽체식) */
     groundSpaces: number;
     basementSpaces: number;

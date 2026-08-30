@@ -18,6 +18,11 @@ import type { AIAnalysis, ReportInputs } from "@/lib/ai/types";
 import { formatArea, formatPyeongAsArea } from "@/lib/utils/area";
 import { getBrandConfig } from "@/lib/branding/storage";
 import type { BrandConfig } from "@/lib/branding/types";
+import {
+  buildReductionTips,
+  compactCarAllowance,
+  TIP_STATUS_LABEL,
+} from "@/lib/parking/reduction";
 
 ensurePdfFonts();
 
@@ -107,6 +112,7 @@ export function ReportDocument({ input, analysis, brand }: Props) {
       <CoverPage input={input} analysis={analysis} brand={b} />
       <SummaryPage input={input} analysis={analysis} brand={b} />
       <ScalePage input={input} brand={b} />
+      {input.scale.parkingSpaces > 0 && <ParkingPage input={input} brand={b} />}
       {input.scale.floorTable && <FloorDetailPage input={input} brand={b} />}
       {input.includeCostPage !== false && <CostPage input={input} brand={b} />}
       {input.profit && <ProfitPage input={input} brand={b} />}
@@ -836,8 +842,6 @@ function ScalePage({
         </View>
       ) : null}
 
-      <ParkingExplainBox input={input} brand={brand} />
-
       <PdfText style={[styles.h3, { marginTop: 14 }]}>
         (c) 일조권 손실 다이어그램 (정북단면도)
       </PdfText>
@@ -888,6 +892,223 @@ function ScalePage({
           </View>
         </View>
       ) : null}
+    </Page>
+  );
+}
+
+/* ─────────────────────── 주차장 계획 (전용 페이지) ─────────────────────── */
+
+function ParkingPage({ input, brand }: { input: ReportInputs; brand: BrandConfig }) {
+  const s = input.scale;
+  const raw = s.parkingRawSpaces ?? s.parkingSpaces;
+  const tips = buildReductionTips({
+    spaces: s.parkingSpaces,
+    rawSpaces: raw,
+    usageLabel: s.usageLabel ?? "선택 용도",
+    facilityAreaSqm: s.legalFloorArea,
+    groundSpaces: s.groundSpaces,
+    floor1IndoorSqm: s.floor1Indoor,
+  });
+  const compact = compactCarAllowance(s.parkingSpaces);
+  const totalParkingArea = s.parkingSpaces * s.parkingUnitArea;
+
+  const placeLabel =
+    s.parkingPlacement === "basement"
+      ? "전량 지하"
+      : s.parkingPlacement === "above"
+        ? "전량 지상"
+        : s.parkingPlacement === "mixed"
+          ? "지상·지하 혼합"
+          : "미배치";
+
+  return (
+    <Page size="A4" style={styles.innerPage}>
+      <FixedHeader input={input} brand={brand} />
+      <PdfText style={styles.h2}>4. 주차장 계획</PdfText>
+
+      {/* (a) 산정 결과 */}
+      <PdfText style={styles.h3}>(a) 법정 주차대수 산정</PdfText>
+      <TwoColTable
+        rows={[
+          ["적용 용도", s.usageLabel ?? "—"],
+          ["산정 기준", s.parkingBasisLabel ?? "용도별 설치기준 (별표1)"],
+          ["산정 모수(시설면적)", formatArea(s.legalFloorArea)],
+          [
+            "산정 대수",
+            `${raw.toFixed(2)}대 → 법정 ${s.parkingSpaces}대 (별표1 비고 6: 0.5 이상 올림)`,
+          ],
+          ["1대당 소요면적", `${s.parkingUnitArea}㎡ (주차칸 약 12.5㎡ + 차로·회전)`],
+          ["총 주차 소요면적", formatArea(totalParkingArea)],
+          ["배치 형식", `${placeLabel} — 지상 ${s.groundSpaces}대 / 지하 ${s.basementSpaces}대`],
+        ]}
+      />
+
+      {/* (b) 1층 영향 */}
+      {s.groundParkingArea > 0 ? (
+        <>
+          <PdfText style={[styles.h3, { marginTop: 14 }]}>(b) 1층 잠식 영향</PdfText>
+          <TwoColTable
+            rows={[
+              ["1층 지상주차 점유", formatArea(s.groundParkingArea)],
+              [
+                s.floor1Indoor <= 0 ? "⚠️ 1층 영업 가능 면적" : "1층 영업 가능 면적",
+                s.floor1Indoor <= 0
+                  ? "0㎡ — 1층 전체가 주차"
+                  : formatArea(s.floor1Indoor),
+              ],
+              ["구조 방식", s.pilotiMode ? "필로티 (연면적 제외)" : "벽체식 (연면적 산입)"],
+            ]}
+          />
+        </>
+      ) : null}
+
+      <ParkingExplainBox input={input} brand={brand} />
+
+      {/* (c) 절감 검토 */}
+      <PdfText style={[styles.h3, { marginTop: 16 }]}>
+        (c) 주차대수·주차면적 줄이는 방법 — 법령 검토 체크리스트
+      </PdfText>
+      <PdfText
+        style={{
+          fontSize: 9,
+          lineHeight: 1.5,
+          color: COLORS.GRAY,
+          fontFamily: "Pretendard",
+          marginBottom: 8,
+        }}
+      >
+        주차는 1층 영업면적과 지하 공사비를 동시에 잡아먹는 항목입니다. 아래는 현행 주차장법
+        체계에서 검토할 수 있는 수단을 우선순위로 정리한 것입니다. 조례 위임 사항이 많아
+        최종 적용은 관할 시·군·구 확인이 필요합니다.
+      </PdfText>
+
+      {tips.slice(0, 6).map((t) => (
+        <View
+          key={t.id}
+          wrap={false}
+          style={{
+            marginBottom: 7,
+            padding: 8,
+            backgroundColor: t.status === "applicable" ? COLORS.CREAM : "#FFFFFF",
+            borderWidth: 1,
+            borderColor: t.status === "applicable" ? brand.primaryColor : COLORS.LIGHT_GRAY,
+            borderStyle: "solid",
+            borderRadius: 3,
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 3 }}>
+            <PdfText
+              style={{
+                fontSize: 7.5,
+                fontWeight: 700,
+                color: t.status === "applicable" ? "#FFFFFF" : COLORS.GRAY,
+                backgroundColor:
+                  t.status === "applicable" ? brand.primaryColor : COLORS.LIGHT_GRAY,
+                paddingVertical: 1.5,
+                paddingHorizontal: 5,
+                borderRadius: 2,
+                fontFamily: "Pretendard",
+                marginRight: 5,
+              }}
+            >
+              {TIP_STATUS_LABEL[t.status]}
+            </PdfText>
+            <PdfText
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: COLORS.DARK,
+                fontFamily: "Pretendard",
+                flex: 1,
+              }}
+            >
+              {t.title}
+            </PdfText>
+          </View>
+          <PdfText
+            style={{
+              fontSize: 8.5,
+              lineHeight: 1.5,
+              color: COLORS.GRAY,
+              fontFamily: "Pretendard",
+              marginBottom: 2,
+            }}
+          >
+            ⚖️ {t.basis}
+          </PdfText>
+          <PdfText
+            style={{
+              fontSize: 9,
+              lineHeight: 1.55,
+              color: COLORS.DARK,
+              fontFamily: "Pretendard",
+            }}
+          >
+            {t.action}
+          </PdfText>
+          {t.effect ? (
+            <PdfText
+              style={{
+                fontSize: 9,
+                lineHeight: 1.5,
+                color: brand.primaryColor,
+                fontWeight: 700,
+                fontFamily: "Pretendard",
+                marginTop: 2,
+              }}
+            >
+              → {t.effect}
+            </PdfText>
+          ) : null}
+        </View>
+      ))}
+
+      {compact > 0 ? (
+        <View
+          wrap={false}
+          style={{
+            marginTop: 4,
+            padding: 9,
+            backgroundColor: COLORS.CREAM,
+            borderLeftWidth: 3,
+            borderLeftColor: brand.primaryColor,
+            borderLeftStyle: "solid",
+          }}
+        >
+          <PdfText
+            style={{
+              fontSize: 9.5,
+              lineHeight: 1.6,
+              color: COLORS.DARK,
+              fontFamily: "Pretendard",
+            }}
+          >
+            <PdfText style={{ fontWeight: 700, color: brand.primaryColor }}>
+              가장 먼저 볼 것 ·{" "}
+            </PdfText>
+            법정 {s.parkingSpaces}대 중 <PdfText style={{ fontWeight: 700 }}>{compact}대</PdfText>
+            까지는 경형 전용구획으로 채워도 설치기준을 충족한 것으로 봅니다(별표1 비고 12).
+            조례 협의 없이 설계만으로 적용되는 유일한 수단이라, 1층 면적이 빠듯할 때 가장 먼저
+            검토합니다.
+          </PdfText>
+        </View>
+      ) : null}
+
+      <PdfText
+        style={{
+          fontSize: 8,
+          lineHeight: 1.5,
+          color: COLORS.GRAY,
+          fontFamily: "Pretendard",
+          marginTop: 10,
+        }}
+      >
+        ※ 기준일 2026-08-28 시행 법령(주차장법·시행령·별표1) 기준입니다. 부설주차장 설치기준은
+        지자체 조례가 시행령 기준의 1/2 범위에서 강화·완화할 수 있어(영 제6조 제2항), 실제
+        적용 대수는 관할 조례 확인 후 확정해야 합니다.
+      </PdfText>
+
+      <FixedFooter input={input} />
     </Page>
   );
 }

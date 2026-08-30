@@ -52,18 +52,21 @@ export function buildReportInputs(): ReportInputs {
     ? sunlightLossPct(legalGfa, actualGfa)
     : 0;
 
-  // 주차 대수
+  // 주차 대수 — 반올림 전 원값(rawSpaces)도 보고서로 넘긴다.
+  //   별표1 비고 6 단서(총 1대 미만 → 0대) 검토에 필요하다.
   const std = PARKING_STANDARDS[sim.parkingUsage];
-  const spaces =
+  const parkingCalc =
     std.mode === "area"
-      ? calcArea(legalGfa, sim.parkingAreaPerSpace).spaces
+      ? calcArea(legalGfa, sim.parkingAreaPerSpace)
       : std.mode === "progressive"
-        ? calcProgressive(legalGfa, sim.parkingProgressiveSpec).spaces
+        ? calcProgressive(legalGfa, sim.parkingProgressiveSpec)
         : calcTieredHousehold(
             std.seoulTiers,
             sim.parkingHouseholds,
             sim.parkingTierRatios,
-          ).spaces;
+          );
+  const spaces = parkingCalc.spaces;
+  const rawSpaces = parkingCalc.rawSpaces;
 
   const placement: ReportInputs["scale"]["parkingPlacement"] =
     sim.parkingMode === "ground"
@@ -261,6 +264,7 @@ export function buildReportInputs(): ReportInputs {
       sunlightLoss: lossPct,
       parkingPlacement: placement,
       parkingSpaces: spaces,
+      parkingRawSpaces: rawSpaces,
       groundSpaces: gp.groundSpaces,
       basementSpaces: gp.basementSpaces,
       groundParkingArea: gp.groundParkingArea,
