@@ -21,6 +21,7 @@ import {
 import { ELEVATOR_UNIT_SQM } from "@/lib/calc/elevator";
 import { PARKING_STANDARDS, type ParkingUsageCode } from "@/lib/parking-standards";
 import { getUseStyle } from "@/lib/building-use";
+import RevenueEstimateCard from "@/components/simulator/RevenueEstimateCard";
 
 export function SchematicPlanner() {
   const lotPy = useSimulatorStore((s) => s.lotPy);
@@ -422,6 +423,13 @@ export function SchematicPlanner() {
                   📊 사업성 탭 원클릭 반영이 활성화됩니다.
                 </p>
               )}
+
+              <RevenueEstimateCard
+                unitSqm={unitSqm}
+                efficiencyPct={efficiency}
+                totalUnits={r.totalUnits}
+                usage={parkingUsage}
+              />
             </>
           ) : (
             <div className="px-3 py-2.5 rounded-md bg-amber-50 border border-amber-300 text-[11px] text-amber-800">
