@@ -8,6 +8,7 @@ import { DevParcelMock } from "@/components/simulator/DevParcelMock";
 import { ZoneSelector } from "@/components/simulator/ZoneSelector";
 import { ControlPanel } from "@/components/simulator/ControlPanel";
 import { ScaleVisualizer } from "@/components/simulator/ScaleVisualizer";
+import SunlightImpactCard from "@/components/simulator/SunlightImpactCard";
 import { ResultMetrics } from "@/components/simulator/ResultMetrics";
 import { ParkingCalculator } from "@/components/simulator/ParkingCalculator";
 import { SchematicPlanner } from "@/components/simulator/SchematicPlanner";
@@ -109,6 +110,7 @@ export default function SimulatorPage() {
               <ZoneSelector />
               <ControlPanel />
               <ScaleVisualizer />
+              <SunlightImpactCard />
               <ResultMetrics />
               <ParkingCalculator />
               <SchematicPlanner />

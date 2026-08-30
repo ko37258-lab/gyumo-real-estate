@@ -26,6 +26,7 @@ import { useUsePricesStore } from "@/store/useprices";
 import type { ReportInputs } from "@/lib/ai/types";
 import { PY_TO_SQM, FLOOR_HEIGHT_M } from "@/lib/constants";
 import { computeFloorTable, actualGfaPrecise } from "@/lib/report/floorTable";
+import { checkNorthSunlight } from "@/lib/calc/shadowCheck";
 
 /** 시뮬레이터·비용 store에서 PDF/AI용 ReportInputs를 합성. 클라이언트에서 호출. */
 export function buildReportInputs(): ReportInputs {
@@ -102,6 +103,24 @@ export function buildReportInputs(): ReportInputs {
     usageLabel: std.label,
     shape: shapeForGfa,
   });
+  // 북측 일조 영향 진단 — 실형상일 때만 (근사 박스 매스로는 위치 의미가 없음)
+  let sunlightImpact;
+  if (shapeForGfa && sim.parcelShape) {
+    try {
+      sunlightImpact = checkNorthSunlight({
+        shape: shapeForGfa,
+        bldAreaSqm: bldArea,
+        floors,
+        floorHeightM: FLOOR_HEIGHT_M,
+        sunlightOn: sunlightApplied,
+        latDeg: sim.parcelShape.centerLat,
+        lonDeg: sim.parcelShape.centerLon,
+      });
+    } catch {
+      sunlightImpact = undefined;
+    }
+  }
+
   const parkingBasisLabel =
     std.mode === "area"
       ? `${std.label} — 시설면적 ${sim.parkingAreaPerSpace}㎡당 1대`
@@ -257,6 +276,7 @@ export function buildReportInputs(): ReportInputs {
       usageLabel: std.label,
       parkingBasisLabel,
       floorTable,
+      sunlightImpact,
     },
     cost: {
       abovePyeong: cost.abovePyeong,

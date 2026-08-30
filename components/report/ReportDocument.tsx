@@ -2212,6 +2212,37 @@ function FloorDetailPage({
         </View>
       )}
 
+      {s.sunlightImpact && (
+        <View wrap={false} style={{ marginTop: 14 }}>
+          <PdfText style={styles.h3}>(d) 북측 일조 영향 진단 — 동지 9~15시</PdfText>
+          <View style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid" }}>
+            <DetailRow>
+              <DetailCell header text="북측 경계에서" width="25%" align="center" />
+              <DetailCell header text="최장 연속 일조" width="25%" align="center" />
+              <DetailCell header text="총 일조" width="25%" align="center" />
+              <DetailCell header text="연속 2시간 기준" width="25%" align="center" />
+            </DetailRow>
+            {s.sunlightImpact.rows.map((r, i) => (
+              <DetailRow key={r.offsetM} last={i === s.sunlightImpact!.rows.length - 1}>
+                <DetailCell text={`${r.offsetM}m`} width="25%" align="center" bold />
+                <DetailCell text={`${r.maxRunH}시간`} width="25%" align="center" />
+                <DetailCell text={`${r.totalH}시간`} width="25%" align="center" color={COLORS.GRAY} />
+                <DetailCell
+                  text={r.pass ? "충족" : "미달"}
+                  width="25%"
+                  align="center"
+                  bold
+                  color={r.pass ? "#15803D" : "#DC2626"}
+                />
+              </DetailRow>
+            ))}
+          </View>
+          <PdfText style={[styles.smallText, { marginTop: 4 }]}>
+            ※ {s.sunlightImpact.basis}. 주변 기존 건물·지형은 미반영 — 계획 참고용이며 일조 분쟁 판단은 정밀 시뮬레이션·전문가 감정이 필요합니다.
+          </PdfText>
+        </View>
+      )}
+
       <PdfText style={[styles.smallText, { marginTop: 4 }]}>
         ※ 판정은 입력값 기준 자동 검토이며 인허가 판단이 아닙니다. 지구단위계획·가로구역별 높이제한·문화재 앙각 등 개별 규제는 토지이음과 관할 지자체에서 별도 확인이 필요합니다.
       </PdfText>

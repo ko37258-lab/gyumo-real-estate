@@ -123,6 +123,8 @@ export interface ReportInputs {
     parkingBasisLabel?: string;
     /** 층별 개요표 */
     floorTable?: import("@/lib/report/floorTable").FloorTableResult;
+    /** 북측 일조 영향 진단 (동지 9~15시) — 실형상 조회 시 */
+    sunlightImpact?: import("@/lib/calc/shadowCheck").SunImpactResult;
   };
   cost: {
     abovePyeong: number;
