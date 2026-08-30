@@ -107,6 +107,7 @@ export function ReportDocument({ input, analysis, brand }: Props) {
       <CoverPage input={input} analysis={analysis} brand={b} />
       <SummaryPage input={input} analysis={analysis} brand={b} />
       <ScalePage input={input} brand={b} />
+      {input.scale.floorTable && <FloorDetailPage input={input} brand={b} />}
       {input.includeCostPage !== false && <CostPage input={input} brand={b} />}
       {input.profit && <ProfitPage input={input} brand={b} />}
       {input.usePrices && <UsePricesPage input={input} brand={b} />}
@@ -1969,6 +1970,200 @@ function AppendixPage({
           {brand.corporationName}는 책임을 지지 않습니다.
         </PdfText>
       </View>
+    </Page>
+  );
+}
+
+
+/* ============== 2-1. 층별 개요 · 법규 검토 (플렉시티식 상세) ============== */
+
+function DetailCell({
+  text,
+  width,
+  bold,
+  color,
+  align,
+  header,
+}: {
+  text: string;
+  width: number | string;
+  bold?: boolean;
+  color?: string;
+  align?: "left" | "center" | "right";
+  header?: boolean;
+}) {
+  return (
+    <View
+      style={{
+        width,
+        paddingVertical: 4,
+        paddingHorizontal: 5,
+        borderRightWidth: 0.5,
+        borderRightColor: COLORS.LIGHT_GRAY,
+        borderRightStyle: "solid",
+        backgroundColor: header ? COLORS.CREAM : undefined,
+        justifyContent: "center",
+      }}
+    >
+      <PdfText
+        style={{
+          fontFamily: "Pretendard",
+          fontSize: header ? 8.5 : 9,
+          fontWeight: bold || header ? 700 : 400,
+          color: color ?? COLORS.DARK,
+          textAlign: align ?? "left",
+        }}
+      >
+        {text}
+      </PdfText>
+    </View>
+  );
+}
+
+function DetailRow({ children, last }: { children: React.ReactNode; last?: boolean }) {
+  return (
+    <View
+      wrap={false}
+      style={{
+        flexDirection: "row",
+        borderBottomWidth: last ? 0 : 0.5,
+        borderBottomColor: COLORS.LIGHT_GRAY,
+        borderBottomStyle: "solid",
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function FloorDetailPage({
+  input,
+  brand,
+}: {
+  input: ReportInputs;
+  brand: BrandConfig;
+}) {
+  const s = input.scale;
+  const ft = s.floorTable!;
+  const W = { floor: "12%", area: "30%", setback: "20%", note: "38%" };
+  const pilotiDeduct = s.isReducingFloor1 ? s.groundParkingArea : 0;
+  const overCov = s.legalCovMax != null && s.coverRatio > s.legalCovMax;
+  const overFar = s.legalFarMax != null && s.floorRatio > s.legalFarMax;
+
+  const legal = [
+    { item: "용도지역", plan: s.zoneName, basis: s.ordinanceSource ?? "조회값", verdict: "—", over: false },
+    { item: "건폐율", plan: s.coverRatio + "%", basis: "상한 " + (s.legalCovMax ?? "-") + "%", verdict: overCov ? "초과" : "적합", over: overCov },
+    { item: "용적률", plan: s.floorRatio + "%", basis: "상한 " + (s.legalFarMax ?? "-") + "%", verdict: overFar ? "초과" : "적합", over: overFar },
+    {
+      item: "일조 높이제한",
+      plan: s.sunlightApplied ? "적용 (정북 사선)" : "미적용",
+      basis: "건축법 시행령 제86조① — 10m 이하 1.5m · 초과부 h/2 (전용·일반주거지역)",
+      verdict: s.sunlightApplied ? "반영" : "해당 없음",
+      over: false,
+    },
+    {
+      item: "부설주차장",
+      plan: s.parkingSpaces + "대 (지상 " + s.groundSpaces + " · 지하 " + s.basementSpaces + ")",
+      basis: s.parkingBasisLabel ?? "-",
+      verdict: "반영",
+      over: false,
+    },
+    {
+      item: "층수 · 높이",
+      plan: (s.floorsExact ?? 0).toFixed(1) + "층 · " + ((s.floorsExact ?? 0) * (s.floorHeightM ?? 3.5)).toFixed(1) + "m",
+      basis: "층고 " + (s.floorHeightM ?? 3.5) + "m 가정 · 가로구역별 높이제한 등은 별도 확인",
+      verdict: "참고",
+      over: false,
+    },
+  ];
+
+  return (
+    <Page size="A4" style={styles.innerPage}>
+      <FixedHeader input={input} brand={brand} />
+      <FixedFooter input={input} />
+
+      <PdfText style={styles.h2}>2-1. 층별 개요 · 법규 검토</PdfText>
+      <View style={styles.h2Underline} />
+
+      <PdfText style={styles.h3}>(a) 층별 개요표</PdfText>
+      <View style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid" }}>
+        <DetailRow>
+          <DetailCell header text="층" width={W.floor} align="center" />
+          <DetailCell header text="바닥면적" width={W.area} align="center" />
+          <DetailCell header text="정북 법정이격" width={W.setback} align="center" />
+          <DetailCell header text="비고" width={W.note} />
+        </DetailRow>
+        {[...ft.rows].reverse().map((r) => (
+          <DetailRow key={"f" + r.floor}>
+            <DetailCell text={r.floor + "F"} width={W.floor} align="center" bold />
+            <DetailCell text={formatArea(r.areaSqm)} width={W.area} align="right" />
+            <DetailCell text={r.legalSetbackM > 0 ? r.legalSetbackM.toFixed(2) + "m" : "—"} width={W.setback} align="center" />
+            <DetailCell text={r.note} width={W.note} color={COLORS.GRAY} />
+          </DetailRow>
+        ))}
+        {ft.basement.map((b) => (
+          <DetailRow key={"b" + b.level}>
+            <DetailCell text={"B" + b.level} width={W.floor} align="center" bold color={COLORS.GRAY} />
+            <DetailCell text={formatArea(b.areaSqm)} width={W.area} align="right" color={COLORS.GRAY} />
+            <DetailCell text="—" width={W.setback} align="center" color={COLORS.GRAY} />
+            <DetailCell text={b.note} width={W.note} color={COLORS.GRAY} />
+          </DetailRow>
+        ))}
+        <DetailRow>
+          <DetailCell text="지상 합계" width={W.floor} align="center" bold header />
+          <DetailCell text={formatArea(ft.sumGroundSqm)} width={W.area} align="right" bold header />
+          <DetailCell text="" width={W.setback} header />
+          <DetailCell
+            text={"법정 연면적 " + formatArea(s.legalFloorArea) + " 대비 손실 " + s.sunlightLoss.toFixed(1) + "%"}
+            width={W.note}
+            header
+          />
+        </DetailRow>
+        {pilotiDeduct > 0 && (
+          <DetailRow>
+            <DetailCell text="" width={W.floor} />
+            <DetailCell text={"− " + formatArea(pilotiDeduct)} width={W.area} align="right" color={COLORS.GRAY} />
+            <DetailCell text="" width={W.setback} />
+            <DetailCell text="필로티 주차 — 연면적 제외 (시행령 제119조①4)" width={W.note} color={COLORS.GRAY} />
+          </DetailRow>
+        )}
+        <DetailRow last>
+          <DetailCell text="" width={W.floor} />
+          <DetailCell text={formatArea(s.actualFloorArea)} width={W.area} align="right" bold color={brand.primaryColor} />
+          <DetailCell text="" width={W.setback} />
+          <DetailCell text="✓ 실제 가능 연면적 (시뮬레이터 표시값과 동일)" width={W.note} bold color={brand.primaryColor} />
+        </DetailRow>
+      </View>
+      <PdfText style={[styles.smallText, { marginTop: 4 }]}>
+        ※ 층별 면적은 정북 깊이(√건축면적) 근사 모델로, 화면 KPI와 동일한 수식입니다. 실형상 3D의 절대 이격 클리핑과는 근사 차이가 있을 수 있으며, 정북 법정이격은 인접 대지경계선 기준 제86조① 수치입니다.
+      </PdfText>
+
+      <PdfText style={[styles.h3, { marginTop: 14 }]}>(b) 법규 검토표</PdfText>
+      <View style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid" }}>
+        <DetailRow>
+          <DetailCell header text="항목" width="16%" />
+          <DetailCell header text="계획" width="26%" />
+          <DetailCell header text="기준 · 근거" width="46%" />
+          <DetailCell header text="판정" width="12%" align="center" />
+        </DetailRow>
+        {legal.map((r, i) => (
+          <DetailRow key={r.item} last={i === legal.length - 1}>
+            <DetailCell text={r.item} width="16%" bold />
+            <DetailCell text={r.plan} width="26%" />
+            <DetailCell text={r.basis} width="46%" color={COLORS.GRAY} />
+            <DetailCell
+              text={r.verdict}
+              width="12%"
+              align="center"
+              bold
+              color={r.over ? "#DC2626" : r.verdict === "적합" || r.verdict === "반영" ? "#15803D" : COLORS.GRAY}
+            />
+          </DetailRow>
+        ))}
+      </View>
+      <PdfText style={[styles.smallText, { marginTop: 4 }]}>
+        ※ 판정은 입력값 기준 자동 검토이며 인허가 판단이 아닙니다. 지구단위계획·가로구역별 높이제한·문화재 앙각 등 개별 규제는 토지이음과 관할 지자체에서 별도 확인이 필요합니다.
+      </PdfText>
     </Page>
   );
 }

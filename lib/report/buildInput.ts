@@ -27,7 +27,8 @@ import { useMarketStore } from "@/store/market";
 import { useLandInfoStore } from "@/store/landinfo";
 import { useUsePricesStore } from "@/store/useprices";
 import type { ReportInputs } from "@/lib/ai/types";
-import { PY_TO_SQM } from "@/lib/constants";
+import { PY_TO_SQM, FLOOR_HEIGHT_M } from "@/lib/constants";
+import { computeFloorTable } from "@/lib/report/floorTable";
 
 /** 시뮬레이터·비용 store에서 PDF/AI용 ReportInputs를 합성. 클라이언트에서 호출. */
 export function buildReportInputs(): ReportInputs {
@@ -87,6 +88,25 @@ export function buildReportInputs(): ReportInputs {
     gp.groundParkingArea,
     gp.isReducingFloor1,
   );
+
+  // 플렉시티식 상세 — 층별 개요표 + 법규 검토 근거
+  const sunlightApplied = sim.sunOn && z.sunlight;
+  const floorTable = computeFloorTable({
+    bldAreaSqm: bldArea,
+    floors,
+    floorHeightM: FLOOR_HEIGHT_M,
+    sunlightOn: sunlightApplied,
+    groundParkingArea: gp.groundParkingArea,
+    pilotiMode: sim.parkingPilotiMode,
+    basementParkingArea: gp.basementSpaces * sim.parkingUnitArea,
+    usageLabel: std.label,
+  });
+  const parkingBasisLabel =
+    std.mode === "area"
+      ? `${std.label} — 시설면적 ${sim.parkingAreaPerSpace}㎡당 1대`
+      : std.mode === "progressive"
+        ? `${std.label} — 규모 누진 기준 (주차장법 시행령 별표1)`
+        : `${std.label} — 세대 규모별 기준 (${sim.parkingHouseholds}세대)`;
 
   const costResult = calculateCost(cost);
 
@@ -224,6 +244,14 @@ export function buildReportInputs(): ReportInputs {
       isReducingFloor1: gp.isReducingFloor1,
       parkingUnitArea: sim.parkingUnitArea,
       pilotiMode: sim.parkingPilotiMode,
+      floorHeightM: FLOOR_HEIGHT_M,
+      floorsExact: floors,
+      legalCovMax: sim.ordinance?.coverRatioMax ?? z.maxCov,
+      legalFarMax: sim.ordinance?.floorRatioMax ?? z.farMax,
+      sunlightApplied,
+      usageLabel: std.label,
+      parkingBasisLabel,
+      floorTable,
     },
     cost: {
       abovePyeong: cost.abovePyeong,

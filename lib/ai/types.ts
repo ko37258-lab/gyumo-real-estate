@@ -104,6 +104,23 @@ export interface ReportInputs {
     isReducingFloor1: boolean;
     parkingUnitArea: number;
     pilotiMode: boolean;
+    /* ── 플렉시티식 상세 보고서 (2026-08-31) ── */
+    /** 가정 층고(m) */
+    floorHeightM?: number;
+    /** 소수 층수 (예: 3.33) */
+    floorsExact?: number;
+    /** 적용 건폐율 상한(조례 우선) */
+    legalCovMax?: number;
+    /** 적용 용적률 상한(조례 우선) */
+    legalFarMax?: number;
+    /** 정북 일조 높이제한 적용 여부 (전용·일반주거 + 토글 ON) */
+    sunlightApplied?: boolean;
+    /** 건축물 용도 라벨 (주차 기준 용도) */
+    usageLabel?: string;
+    /** 부설주차장 산정 근거 문구 */
+    parkingBasisLabel?: string;
+    /** 층별 개요표 */
+    floorTable?: import("@/lib/report/floorTable").FloorTableResult;
   };
   cost: {
     abovePyeong: number;
