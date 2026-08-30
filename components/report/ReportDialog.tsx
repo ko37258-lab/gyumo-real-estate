@@ -374,7 +374,7 @@ export function ReportDialog() {
           />
         </div>
 
-        <DialogFooter className="border-t border-border pt-3 flex-col items-stretch gap-2">
+        <DialogFooter className="border-t border-border pt-3 flex-col sm:flex-col sm:justify-start items-stretch gap-2">
           {status === "ready" && input && pdfStatus === "generating" && (
             <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-[11.5px] text-amber-900 leading-relaxed">
               <Loader2Icon className="size-3.5 mt-0.5 shrink-0 animate-spin" />

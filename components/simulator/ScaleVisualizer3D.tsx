@@ -518,6 +518,9 @@ function Scene({
           edgeColor={useStyle.edge}
           useIcon={useStyle.icon}
           useLabel={massLabel}
+          groundSpaces={gp.groundSpaces}
+          groundParkingArea={gp.groundParkingArea}
+          piloti={gp.isReducingFloor1}
         />
       ) : (
         <BuildingMass
@@ -1432,6 +1435,9 @@ function ParcelMass({
   edgeColor,
   useIcon,
   useLabel,
+  groundSpaces = 0,
+  groundParkingArea = 0,
+  piloti = false,
 }: {
   shape: ParcelShape;
   covPct: number;
@@ -1442,6 +1448,9 @@ function ParcelMass({
   edgeColor: string;
   useIcon: string;
   useLabel: string;
+  groundSpaces?: number;
+  groundParkingArea?: number;
+  piloti?: boolean;
 }) {
   const fp = useMemo(
     () => scalePolygon(shape.pts, Math.sqrt(Math.max(covPct, 1) / 100)),
@@ -1484,9 +1493,76 @@ function ParcelMass({
   }
 
   const hM = floors * FLOOR_HEIGHT_M;
+
+  // 1층 지상주차 — 실형상 footprint 남측 밴드에 반투명 표시 + 자동차 배치.
+  // 박스 모드(BuildingMass Day10)와 동일한 시각 문법: 필로티는 더 투명하게.
+  const parking = (() => {
+    if (groundParkingArea <= 0) return null;
+    const width = fpBounds.maxX - fpBounds.minX;
+    const depth = fpBounds.maxY - fpBounds.minY;
+    if (width < 2 || depth < 2) return null;
+    const bandM = Math.min(depth, groundParkingArea / width);
+    const cx0 = (fpBounds.minX + fpBounds.maxX) / 2;
+    const bandCenterY = fpBounds.minY + bandM / 2;
+    const slotW = 2.6;
+    const slotD = 5.5;
+    const cols = Math.max(1, Math.floor(width / slotW));
+    const rows = Math.max(1, Math.floor(bandM / slotD));
+    const shown = Math.min(groundSpaces, cols * rows, 30);
+    return (
+      <group>
+        <mesh position={[cx0, FLOOR_HEIGHT_M / 2, -bandCenterY]}>
+          <boxGeometry args={[width, FLOOR_HEIGHT_M, bandM]} />
+          <meshStandardMaterial
+            color={PARKING_COLOR}
+            transparent
+            opacity={piloti ? 0.25 : 0.5}
+            roughness={0.8}
+          />
+        </mesh>
+        {Array.from({ length: shown }, (_, i) => {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const carX = fpBounds.minX + col * slotW + slotW / 2;
+          const carY = fpBounds.minY + row * slotD + slotD / 2;
+          return (
+            <CarMesh
+              key={i}
+              position={[carX, 0.07, -carY]}
+              rotY={row % 2 === 1 ? Math.PI : 0}
+              color={CAR_COLORS[i % CAR_COLORS.length]}
+            />
+          );
+        })}
+        <Html
+          position={[cx0, FLOOR_HEIGHT_M + 0.5, -bandCenterY]}
+          center
+          distanceFactor={30}
+          style={{ pointerEvents: "none" }}
+        >
+          <div
+            style={{
+              background: "white",
+              border: "2px solid #d97757",
+              borderRadius: 4,
+              padding: "2px 6px",
+              fontSize: 11,
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+              color: "#993C1D",
+            }}
+          >
+            🚗 1층 주차 {groundSpaces}대{piloti ? " (필로티)" : " (벽체식)"}
+          </div>
+        </Html>
+      </group>
+    );
+  })();
+
   return (
     <group>
       {items}
+      {parking}
       {sunOn && hM > 0 && (
         <SunlightEnvelopeParcel
           northY={northY}

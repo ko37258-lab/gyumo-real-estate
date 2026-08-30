@@ -362,6 +362,7 @@ export function ScaleVisualizer() {
         })
       : null;
     return {
+      scale: s,
       parcelPath: pathOf(parcelShape.pts),
       fpPath: pathOf(parcelFp),
       sunSvgY,
@@ -850,6 +851,48 @@ export function ScaleVisualizer() {
                         strokeDasharray="4 3"
                         opacity={0.95}
                       />
+                      {/* 주차선 + 위에서 본 자동차 — 계산된 대수만큼 (2.6m×5.5m 슬롯) */}
+                      {(() => {
+                        const sc = parcelPlan.scale;
+                        const slotW = 2.6 * sc;
+                        const slotD = 5.5 * sc;
+                        const fpW = parcelPlan.fpRightX - parcelPlan.fpLeftX;
+                        const cols = Math.max(1, Math.floor(fpW / slotW));
+                        const rows = Math.max(1, Math.floor(stripH / slotD));
+                        const shown = Math.min(day10.groundSpaces, cols * rows, 40);
+                        if (shown <= 0) return null;
+                        const topY = parcelPlan.fpBotY - stripH;
+                        return (
+                          <>
+                            {Array.from({ length: cols - 1 }, (_, c) => (
+                              <line
+                                key={`psl-${c}`}
+                                x1={parcelPlan.fpLeftX + (c + 1) * slotW}
+                                y1={topY + 1}
+                                x2={parcelPlan.fpLeftX + (c + 1) * slotW}
+                                y2={parcelPlan.fpBotY - 1}
+                                stroke="#ffffff"
+                                strokeWidth={0.8}
+                                opacity={0.85}
+                              />
+                            ))}
+                            {Array.from({ length: shown }, (_, i) => {
+                              const col = i % cols;
+                              const row = Math.floor(i / cols);
+                              return (
+                                <SvgCarTop
+                                  key={`pcar-${i}`}
+                                  cx={parcelPlan.fpLeftX + col * slotW + slotW / 2}
+                                  cy={topY + row * slotD + slotD / 2}
+                                  w={1.8 * sc}
+                                  h={4.2 * sc}
+                                  color={CAR_PALETTE[i % CAR_PALETTE.length]}
+                                />
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
                     </g>
                     {stripH >= 12 && (
                       <text
