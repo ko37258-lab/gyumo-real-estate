@@ -836,6 +836,8 @@ function ScalePage({
         </View>
       ) : null}
 
+      <ParkingExplainBox input={input} brand={brand} />
+
       <PdfText style={[styles.h3, { marginTop: 14 }]}>
         (c) 일조권 손실 다이어그램 (정북단면도)
       </PdfText>
@@ -2314,6 +2316,71 @@ function PlainSummaryBox({ input, brand }: { input: ReportInputs; brand: BrandCo
           {i + 1}. {t}
         </PdfText>
       ))}
+    </View>
+  );
+}
+
+
+/* ── 🅿️ 주차장 산정 해설 — 대수·배치가 어떻게 나왔고 무엇을 의미하는지 ── */
+function ParkingExplainBox({ input, brand }: { input: ReportInputs; brand: BrandConfig }) {
+  const s = input.scale;
+  if (!s.parkingSpaces || s.parkingSpaces <= 0) return null;
+
+  const placeTxt =
+    s.parkingPlacement === "none"
+      ? "주차 배치를 가정하지 않은 검토입니다."
+      : s.parkingPlacement === "basement"
+        ? `전량 지하 배치(${s.basementSpaces}대) — 지하층 주차장은 용적률 산정 연면적에서 제외되지만(건축법 시행령 제119조①4), 굴착·램프 공사비가 지상보다 큽니다.`
+        : s.parkingPlacement === "above"
+          ? `전량 지상 배치(${s.groundSpaces}대) — 1층 바닥의 약 ${Math.round(s.groundParkingArea)}㎡를 주차가 차지해 1층 영업 가능 면적이 ${Math.round(s.floor1Indoor)}㎡로 줄어듭니다.`
+          : `지상 ${s.groundSpaces}대 + 지하 ${s.basementSpaces}대 혼합 배치 — 1층 일부(${Math.round(s.groundParkingArea)}㎡)를 주차로 쓰고 나머지는 지하로 내립니다.`;
+
+  const pilotiTxt =
+    s.groundParkingArea > 0
+      ? s.pilotiMode
+        ? "지상 주차를 필로티(벽 없는 개방형 기둥 구조)로 하면 그 면적이 연면적 산정에서도 빠져 분양 가능 면적 손실을 줄일 수 있습니다(시행령 제119조①4 요건 충족 시)."
+        : "지상 주차를 벽체식(벽으로 둘러싼 구조)으로 하면 그 면적이 연면적에 그대로 산입됩니다 — 필로티 전환 시 연면적 차감 이득이 있는지 검토해 볼 만합니다."
+      : null;
+
+  return (
+    <View
+      wrap={false}
+      style={{
+        marginTop: 10,
+        padding: 10,
+        backgroundColor: COLORS.CREAM,
+        borderLeftWidth: 3,
+        borderLeftColor: brand.primaryColor,
+        borderLeftStyle: "solid",
+      }}
+    >
+      <PdfText
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: brand.primaryColor,
+          fontFamily: "Pretendard",
+          marginBottom: 4,
+        }}
+      >
+        🅿️ 주차장 산정 해설
+      </PdfText>
+      <PdfText style={{ fontSize: 9.5, lineHeight: 1.55, color: COLORS.DARK, fontFamily: "Pretendard" }}>
+        법정 대수 {s.parkingSpaces}대는 「{s.parkingBasisLabel ?? "용도별 설치 기준"}」으로 산정한 값입니다
+        (주차장법 제19조·시행령 별표1, 지자체 주차 조례가 이를 강화할 수 있음).
+        1대당 {s.parkingUnitArea}㎡는 주차칸(약 12.5㎡)에 차로·회전 공간을 더한 실무 소요 면적입니다.
+      </PdfText>
+      <PdfText style={{ fontSize: 9.5, lineHeight: 1.55, color: COLORS.DARK, fontFamily: "Pretendard", marginTop: 3 }}>
+        {placeTxt}
+      </PdfText>
+      {pilotiTxt ? (
+        <PdfText style={{ fontSize: 9.5, lineHeight: 1.55, color: COLORS.DARK, fontFamily: "Pretendard", marginTop: 3 }}>
+          {pilotiTxt}
+        </PdfText>
+      ) : null}
+      <PdfText style={{ fontSize: 8.5, lineHeight: 1.5, color: COLORS.GRAY, fontFamily: "Pretendard", marginTop: 4 }}>
+        ※ 장애인·확장형·환경친화적 자동차 전용구획 비율, 기계식 인정 조건 등은 지자체 조례로 별도 확인이 필요합니다.
+      </PdfText>
     </View>
   );
 }

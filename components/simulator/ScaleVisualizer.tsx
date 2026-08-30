@@ -1567,6 +1567,13 @@ export function ScaleVisualizer() {
           </span>
         )}
       </div>
+      {(parkingMode === "ground" || parkingMode === "mixed") && (
+        <p className="text-[10.5px] text-muted-foreground mt-1.5 leading-relaxed">
+          🚗 평면도의 자동차는 산정된 <b>지상 주차 대수</b>를 실제 주차칸 규격(2.6×5.5m)으로
+          도로(남측) 쪽부터 배치한 예시입니다. 1대당 점유 면적에는 주차칸 외에 차로·회전
+          공간이 포함되며, 필로티 구조면 이 면적이 연면적 산정에서 제외됩니다(시행령 제119조①4).
+        </p>
+      )}
         </TabsContent>
 
         <TabsContent value="3d">

@@ -218,6 +218,8 @@ export default function ScaleVisualizer3D() {
         <span>마우스: 드래그 회전 · 휠 줌 · 우클릭 이동</span>
         <span>•</span>
         <span>모든 값은 좌측 슬라이더·토글로 실시간 반영</span>
+        <span>•</span>
+        <span>🚗 자동차는 산정된 지상 주차 대수를 실제 주차칸 규격(2.6×5.5m)으로 배치한 예시</span>
       </div>
     </div>
   );
