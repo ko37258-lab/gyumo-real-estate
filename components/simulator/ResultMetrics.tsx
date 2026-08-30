@@ -9,10 +9,8 @@ import {
   legalGfaSqm,
   totalHeightM,
 } from "@/lib/calc/far";
-import {
-  calcActualGfaSqm,
-  sunlightLossPct,
-} from "@/lib/calc/sunlight";
+import { sunlightLossPct } from "@/lib/calc/sunlight";
+import { actualGfaPrecise } from "@/lib/report/floorTable";
 import {
   applyPilotiDeduction,
   calculateFloor1Indoor,
@@ -79,6 +77,7 @@ export function ResultMetrics() {
   const parkingGroundRatio = useSimulatorStore((s) => s.parkingGroundRatio);
   const parkingUnitArea = useSimulatorStore((s) => s.parkingUnitArea);
   const parkingPilotiMode = useSimulatorStore((s) => s.parkingPilotiMode);
+  const parcelShape = useSimulatorStore((s) => s.parcelShape);
 
   const z = ZONES[zone];
   const lotSqm = lotPyToSqm(lotPy);
@@ -86,12 +85,16 @@ export function ResultMetrics() {
   const gfa = legalGfaSqm(lotSqm, farPct);
   const floors = floorsFromFarAndCov(farPct, covPct);
   const heightM = totalHeightM(floors);
-  const northDepth = Math.sqrt(bldArea);
-  const actualGfa = calcActualGfaSqm({
+  // 실형상(지적 폴리곤)이 있으면 경계선 기준 절대 이격으로 정밀 계산 —
+  // PDF 층별표·3D와 같은 수식(lib/report/floorTable 단일 계산원).
+  const actualGfa = actualGfaPrecise({
     bldAreaSqm: bldArea,
     floors,
-    northDepthM: northDepth,
+    floorHeightM: FLOOR_HEIGHT_M,
     sunlightOn: sunOn && z.sunlight,
+    shape: parcelShape
+      ? { pts: parcelShape.pts, northY: parcelShape.bounds.maxY }
+      : null,
   });
   const loss = sunlightLossPct(gfa, actualGfa);
 

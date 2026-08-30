@@ -36,6 +36,7 @@ import {
   type AIProvider,
 } from "@/lib/ai/keys";
 import { buildReportInputs } from "@/lib/report/buildInput";
+import { buildLocationMap } from "@/lib/report/locationMap";
 import { warmUpPdfWorker, generatePdfInWorker } from "@/lib/pdf/pdfWorkerClient";
 import { getBrandConfig } from "@/lib/branding/storage";
 import { useSimulatorStore } from "@/store/simulator";
@@ -184,7 +185,9 @@ export function ReportDialog() {
 
       setStep("2/4 데이터 수집 중...");
       await new Promise((r) => setTimeout(r, 200));
-      const built = applySections(buildReportInputs());
+      const locationMap = await buildLocationMap().catch(() => null);
+      const built0 = applySections(buildReportInputs());
+      const built = locationMap ? { ...built0, locationMap } : built0;
       console.log("[ReportDialog] input:", built);
 
       setStep("3/4 전문 종합 분석 중... (약 10~30초)");
@@ -212,7 +215,9 @@ export function ReportDialog() {
 
   async function handleSkip() {
     const visualization3D = sections.viz3d ? await tryCapture3D() : null;
-    const built = applySections(buildReportInputs());
+    const locationMap = await buildLocationMap().catch(() => null);
+      const built0 = applySections(buildReportInputs());
+      const built = locationMap ? { ...built0, locationMap } : built0;
     const finalInput: ReportInputs = visualization3D
       ? { ...built, visualization3D }
       : built;

@@ -14,10 +14,7 @@ import {
   calculateFloor1Indoor,
   calculateGroundParking,
 } from "@/lib/calc/groundParking";
-import {
-  calcActualGfaSqm,
-  sunlightLossPct,
-} from "@/lib/calc/sunlight";
+import { sunlightLossPct } from "@/lib/calc/sunlight";
 import { calculateCost } from "@/lib/calc/cost";
 import { calculateProfit } from "@/lib/calc/profit";
 import { useSimulatorStore } from "@/store/simulator";
@@ -28,7 +25,7 @@ import { useLandInfoStore } from "@/store/landinfo";
 import { useUsePricesStore } from "@/store/useprices";
 import type { ReportInputs } from "@/lib/ai/types";
 import { PY_TO_SQM, FLOOR_HEIGHT_M } from "@/lib/constants";
-import { computeFloorTable } from "@/lib/report/floorTable";
+import { computeFloorTable, actualGfaPrecise } from "@/lib/report/floorTable";
 
 /** 시뮬레이터·비용 store에서 PDF/AI용 ReportInputs를 합성. 클라이언트에서 호출. */
 export function buildReportInputs(): ReportInputs {
@@ -40,12 +37,15 @@ export function buildReportInputs(): ReportInputs {
   const bldArea = buildingFootprintSqm(lotSqm, sim.covPct);
   const floors = floorsFromFarAndCov(sim.farPct, sim.covPct);
   const legalGfa = (lotSqm * sim.farPct) / 100;
-  const northDepth = Math.sqrt(bldArea);
-  const actualGfa = calcActualGfaSqm({
+  const shapeForGfa = sim.parcelShape
+    ? { pts: sim.parcelShape.pts, northY: sim.parcelShape.bounds.maxY }
+    : null;
+  const actualGfa = actualGfaPrecise({
     bldAreaSqm: bldArea,
     floors,
-    northDepthM: northDepth,
+    floorHeightM: FLOOR_HEIGHT_M,
     sunlightOn: sim.sunOn && z.sunlight,
+    shape: shapeForGfa,
   });
   const lossPct = sim.sunOn && z.sunlight
     ? sunlightLossPct(legalGfa, actualGfa)
@@ -100,6 +100,7 @@ export function buildReportInputs(): ReportInputs {
     pilotiMode: sim.parkingPilotiMode,
     basementParkingArea: gp.basementSpaces * sim.parkingUnitArea,
     usageLabel: std.label,
+    shape: shapeForGfa,
   });
   const parkingBasisLabel =
     std.mode === "area"

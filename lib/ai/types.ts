@@ -80,6 +80,8 @@ export interface ReportInputs {
   usePrices?: ReportUsePrices;
   /** 3D 매스 캡쳐 (base64 PNG dataURL) — PDF에 임베드. AI 프롬프트에는 보내지 않음. */
   visualization3D?: string;
+  /** 표지 위치도 (위성 타일 합성 base64 JPEG) — 실형상 조회 시 자동 생성 */
+  locationMap?: string;
   scale: {
     landAreaSqm: number;
     landAreaPyeong: number;

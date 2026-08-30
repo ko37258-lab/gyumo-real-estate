@@ -264,6 +264,20 @@ function CoverPage({
             </View>
           </View>
 
+          {input.locationMap ? (
+            <View style={{ marginTop: 16 }}>
+              <PdfImage
+                src={input.locationMap}
+                style={{ width: "100%", height: 170, objectFit: "cover" }}
+              />
+              <PdfText
+                style={{ fontSize: 8, color: COLORS.GRAY, marginTop: 3, fontFamily: "Pretendard" }}
+              >
+                위치도 — 대상 필지(주황 표시) · VWorld 위성영상 · 상단 N=정북 · 우하단 100m 축척
+              </PdfText>
+            </View>
+          ) : null}
+
           {analysis?.oneLiner ? (
             <View
               wrap={false}
@@ -2135,7 +2149,9 @@ function FloorDetailPage({
         </DetailRow>
       </View>
       <PdfText style={[styles.smallText, { marginTop: 4 }]}>
-        ※ 층별 면적은 정북 깊이(√건축면적) 근사 모델로, 화면 KPI와 동일한 수식입니다. 실형상 3D의 절대 이격 클리핑과는 근사 차이가 있을 수 있으며, 정북 법정이격은 인접 대지경계선 기준 제86조① 수치입니다.
+        {ft.precise
+          ? "※ 실형상 정밀 계산 — 지적 폴리곤을 건폐율만큼 축소한 바닥판을 층별로 정북 인접 대지경계선 기준 법정 이격(제86조①)으로 클리핑해 산정했습니다. 화면 KPI·3D 매스와 동일 수식입니다."
+          : "※ 층별 면적은 정북 깊이(√건축면적) 근사 모델로, 화면 KPI와 동일한 수식입니다. 지번 조회로 실형상을 반영하면 지적 폴리곤 기준 정밀 계산으로 전환됩니다."}
       </PdfText>
 
       <PdfText style={[styles.h3, { marginTop: 14 }]}>(b) 법규 검토표</PdfText>
@@ -2161,6 +2177,39 @@ function FloorDetailPage({
           </DetailRow>
         ))}
       </View>
+      {input.land?.useAttrs && input.land.useAttrs.length > 0 && (
+        <View wrap={false} style={{ marginTop: 14 }}>
+          <PdfText style={styles.h3}>(c) 토지이용계획 지역·지구 등 (전체)</PdfText>
+          <View style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid" }}>
+            <DetailRow>
+              <DetailCell header text="#" width="8%" align="center" />
+              <DetailCell header text="지역 · 지구 · 구역" width="66%" />
+              <DetailCell header text="관계" width="26%" align="center" />
+            </DetailRow>
+            {input.land.useAttrs.map((raw, i) => {
+              const conflict = raw.includes("(저촉)");
+              const name = raw.replace("(저촉)", "").trim();
+              return (
+                <DetailRow key={raw + i} last={i === input.land!.useAttrs!.length - 1}>
+                  <DetailCell text={String(i + 1)} width="8%" align="center" color={COLORS.GRAY} />
+                  <DetailCell text={name} width="66%" />
+                  <DetailCell
+                    text={conflict ? "저촉" : "포함"}
+                    width="26%"
+                    align="center"
+                    bold
+                    color={conflict ? "#DC2626" : "#15803D"}
+                  />
+                </DetailRow>
+              );
+            })}
+          </View>
+          <PdfText style={[styles.smallText, { marginTop: 4 }]}>
+            ※ 출처: VWorld NED 토지이용계획 속성. &quot;저촉&quot;은 해당 규제선이 필지 일부에 걸친다는 뜻입니다. 정확한 범위·행위제한은 토지이음(eum.go.kr) 확인이 필요합니다.
+          </PdfText>
+        </View>
+      )}
+
       <PdfText style={[styles.smallText, { marginTop: 4 }]}>
         ※ 판정은 입력값 기준 자동 검토이며 인허가 판단이 아닙니다. 지구단위계획·가로구역별 높이제한·문화재 앙각 등 개별 규제는 토지이음과 관할 지자체에서 별도 확인이 필요합니다.
       </PdfText>
