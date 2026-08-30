@@ -198,7 +198,7 @@ export default function ScaleVisualizer3D() {
           shadows
           dpr={[1, 2]}
           performance={{ min: 0.5 }}
-          camera={{ position: PRESETS.iso, fov: 35, near: 0.1, far: 2000 }}
+          camera={{ position: PRESETS.iso, fov: 35, near: 0.5, far: 2000 }}
           gl={{ antialias: true, preserveDrawingBuffer: true }}
         >
           <Suspense fallback={null}>
@@ -381,7 +381,7 @@ function Scene({
       )}
 
       {/* 주변 지반 (그림자 수신) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.4, 0]} receiveShadow>
         <planeGeometry args={[240, 240]} />
         <meshStandardMaterial color="#e9ebe0" roughness={1} />
       </mesh>
@@ -470,7 +470,7 @@ function Scene({
       {/* 도로 (남쪽) */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.005, roadZ + 1.4]}
+        position={[0, 0.03, roadZ + 1.4]}
         receiveShadow
       >
         <planeGeometry args={[lotSide + 6, roadDepth]} />
@@ -480,8 +480,8 @@ function Scene({
       {roadDepth >= 5 && (
         <Line
           points={[
-            [-(lotSide + 6) / 2 + 0.5, 0.02, roadZ + 1.4],
-            [(lotSide + 6) / 2 - 0.5, 0.02, roadZ + 1.4],
+            [-(lotSide + 6) / 2 + 0.5, 0.06, roadZ + 1.4],
+            [(lotSide + 6) / 2 - 0.5, 0.06, roadZ + 1.4],
           ]}
           color="#F2C744"
           lineWidth={2.5}
@@ -1728,7 +1728,7 @@ function GroundTile({ spec }: { spec: GroundTileSpec }) {
   return (
     <mesh
       rotation={[-Math.PI / 2, 0, 0]}
-      position={[spec.cx, -0.025, -spec.cy]}
+      position={[spec.cx, -0.15, -spec.cy]}
       receiveShadow
     >
       <planeGeometry args={[spec.w, spec.h]} />
