@@ -12,6 +12,12 @@ import { buildingFootprintSqm, lotPyToSqm } from "@/lib/calc/coverage";
 import { floorsFromFarAndCov, totalHeightM } from "@/lib/calc/far";
 import { SUNLIGHT_THRESHOLD_M } from "@/lib/calc/sunlight";
 import {
+  sunPosition,
+  sunVector,
+  SEASON_LABEL,
+  type SunSeason,
+} from "@/lib/calc/sunPosition";
+import {
   calcArea,
   calcProgressive,
   calcTieredHousehold,
@@ -61,9 +67,22 @@ export default function ScaleVisualizer3D() {
   const [autoRotate, setAutoRotate] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   // 주변 건물·위성 바닥 — 실형상(좌표)이 있어야 의미가 있으므로 parcelShape 있을 때만 노출
-  const hasShape = Boolean(useSimulatorStore((st) => st.parcelShape));
+  const rootShape = useSimulatorStore((st) => st.parcelShape);
+  const hasShape = Boolean(rootShape);
   const [showNeighbors, setShowNeighbors] = useState(true);
   const [showImagery, setShowImagery] = useState(true);
+
+  // ☀️ 그림자 시뮬레이션 — 절기·시각별 태양 위치로 조명을 움직인다.
+  // 기준일이 동지인 이유: 일조 분쟁 판례·시행령 86조③2호 모두 동지 9~15시가 기준.
+  const [shadowMode, setShadowMode] = useState(false);
+  const [season, setSeason] = useState<SunSeason>("winter");
+  const [hour, setHour] = useState(12);
+  const sunLat = rootShape?.centerLat ?? 37.5665;
+  const sunLon = rootShape?.centerLon ?? 126.978;
+  const sunPos = useMemo(
+    () => sunPosition({ latDeg: sunLat, lonDeg: sunLon, season, hourKST: hour }),
+    [sunLat, sunLon, season, hour],
+  );
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 640px)");
@@ -117,6 +136,14 @@ export default function ScaleVisualizer3D() {
         )}
         <Button
           size="xs"
+          variant={shadowMode ? "secondary" : "ghost"}
+          onClick={() => setShadowMode((v) => !v)}
+          className="text-[11px]"
+        >
+          ☀️ 그림자
+        </Button>
+        <Button
+          size="xs"
           variant={autoRotate ? "secondary" : "ghost"}
           onClick={() => setAutoRotate((v) => !v)}
           className="text-[11px]"
@@ -124,6 +151,42 @@ export default function ScaleVisualizer3D() {
           🔄 자동 회전 {autoRotate ? "ON" : "OFF"}
         </Button>
       </div>
+      {shadowMode && (
+        <div className="flex flex-wrap items-center gap-2 px-2.5 py-1.5 border-b border-border bg-amber-50/60 dark:bg-amber-950/20">
+          {(["winter", "equinox", "summer"] as SunSeason[]).map((k) => (
+            <Button
+              key={k}
+              size="xs"
+              variant={season === k ? "secondary" : "ghost"}
+              onClick={() => setSeason(k)}
+              className="text-[11px]"
+            >
+              {SEASON_LABEL[k]}
+            </Button>
+          ))}
+          <input
+            type="range"
+            min={7}
+            max={17}
+            step={0.25}
+            value={hour}
+            onChange={(e) => setHour(Number(e.target.value))}
+            className="w-36 accent-amber-600"
+            aria-label="시각"
+          />
+          <span className="text-[11px] font-bold tabular-nums">
+            {String(Math.floor(hour)).padStart(2, "0")}:{String(Math.round((hour % 1) * 60)).padStart(2, "0")}
+          </span>
+          <span className="text-[10.5px] text-muted-foreground tabular-nums">
+            {sunPos.altitudeDeg > 0
+              ? `☀️ 고도 ${sunPos.altitudeDeg.toFixed(1)}° · 방위 ${Math.round(sunPos.azimuthDeg)}°`
+              : "🌙 해 뜨기 전 / 진 후"}
+          </span>
+          <span className="text-[10px] text-muted-foreground">
+            · 판례 일조 기준: 동지 9~15시 연속 2시간
+          </span>
+        </div>
+      )}
       <div
         style={{
           height: isMobile ? 360 : 480,
@@ -145,6 +208,7 @@ export default function ScaleVisualizer3D() {
               showGrid={!isMobile}
               showNeighbors={showNeighbors}
               showImagery={showImagery}
+              sun={shadowMode ? { vec: sunVector(sunPos), altitudeDeg: sunPos.altitudeDeg } : null}
             />
             <CaptureRegistrar />
           </Suspense>
@@ -165,12 +229,14 @@ function Scene({
   showGrid,
   showNeighbors,
   showImagery,
+  sun,
 }: {
   preset: PresetKey;
   autoRotate: boolean;
   showGrid: boolean;
   showNeighbors: boolean;
   showImagery: boolean;
+  sun: { vec: [number, number, number]; altitudeDeg: number } | null;
 }) {
   const zone = useSimulatorStore((s) => s.zone);
   const lotPy = useSimulatorStore((s) => s.lotPy);
@@ -274,10 +340,16 @@ function Scene({
 
   return (
     <>
-      <ambientLight intensity={0.5} color="#fff7ec" />
+      {/* 그림자 모드: 태양 방향으로 광원 이동. 고도가 낮을수록 색온도를 낮춰 저녁빛 느낌 */}
+      <ambientLight intensity={sun ? 0.42 : 0.5} color="#fff7ec" />
       <directionalLight
-        position={[28, 42, 20]}
-        intensity={1.2}
+        position={
+          sun && sun.altitudeDeg > 0
+            ? [sun.vec[0] * 60, Math.max(sun.vec[1] * 60, 2), sun.vec[2] * 60]
+            : [28, 42, 20]
+        }
+        intensity={sun ? (sun.altitudeDeg > 0 ? 1.35 : 0.05) : 1.2}
+        color={sun && sun.altitudeDeg < 15 ? "#ffd9a0" : "#ffffff"}
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
