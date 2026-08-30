@@ -54,6 +54,34 @@ export function lonLatRingToLocal(ring: Array<[number, number]>): {
   return { pts, centerLon: cLon, centerLat: cLat };
 }
 
+/** 경위도 링 → 로컬 미터 좌표 — 원점을 호출자가 지정 (주변 건물을 필지 좌표계에 올릴 때).
+ *  lonLatRingToLocal은 링 자신의 평균점을 원점으로 잡으므로, 대상 필지 중심을
+ *  공유해야 하는 주변 지형·건물에는 이 함수를 써야 서로 어긋나지 않는다. */
+export function lonLatRingToLocalAt(
+  ring: Array<[number, number]>,
+  centerLon: number,
+  centerLat: number,
+): Pt[] {
+  const cosLat = Math.cos(centerLat * DEG);
+  return ring.map(([lon, lat]) => [
+    (lon - centerLon) * DEG * EARTH_R * cosLat,
+    (lat - centerLat) * DEG * EARTH_R,
+  ]);
+}
+
+/** 점이 폴리곤 내부인지 (ray casting) — 주변 건물 중 대상 필지 위 건물 제외용 */
+export function pointInPolygon([px, py]: Pt, ring: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 /** shoelace 면적 (부호 없는 절대값, ㎡) */
 export function polygonArea(pts: Pt[]): number {
   let s = 0;

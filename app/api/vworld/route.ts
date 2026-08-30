@@ -8,6 +8,7 @@
 //   GET /api/vworld?kind=roads&x=<경도>&y=<위도>    → 주변 도로 접면 판정
 //   GET /api/vworld?kind=parcel&pnu=<19자리>       → 연속지적도 필지 폴리곤 (실형상)
 //   GET /api/vworld?kind=parcelat&x=<경도>&y=<위도> → 좌표가 속한 필지 (지도 클릭 정밀 선택)
+//   GET /api/vworld?kind=buildings&x=<경도>&y=<위도>&r=<반경m> → 주변 건물 폴리곤+층수 (3D 컨텍스트)
 import { NextResponse } from "next/server";
 import {
   fetchVworldLandChar,
@@ -15,6 +16,7 @@ import {
   fetchVworldRoads,
   fetchVworldParcelPolygon,
   fetchVworldParcelAtPoint,
+  fetchVworldBuildings,
   hasVworldDataKey,
 } from "@/lib/vworld-data";
 
@@ -93,8 +95,26 @@ export async function GET(request: Request) {
       return NextResponse.json(data);
     }
 
+    if (kind === "buildings") {
+      const x = Number(searchParams.get("x"));
+      const y = Number(searchParams.get("y"));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return NextResponse.json({ error: "x,y 좌표 필요" }, { status: 400 });
+      }
+      // 반경은 50~300m로 제한 — 넓히면 피처 수가 VWorld size 상한을 넘는다
+      const r = Math.min(300, Math.max(50, Number(searchParams.get("r")) || 170));
+      const data = await fetchVworldBuildings(x, y, r);
+      if (!data) {
+        return NextResponse.json({ error: "주변 건물 정보 없음" }, { status: 404 });
+      }
+      return NextResponse.json(data, {
+        // 건물 형상은 사실상 불변 — CDN 1일 캐시
+        headers: { "Cache-Control": "public, s-maxage=86400, max-age=3600" },
+      });
+    }
+
     return NextResponse.json(
-      { error: "kind는 landchar|zone|roads|parcel 중 하나여야 합니다" },
+      { error: "kind는 landchar|zone|roads|parcel|parcelat|buildings 중 하나여야 합니다" },
       { status: 400 },
     );
   } catch (e) {

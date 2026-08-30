@@ -280,3 +280,8 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
     if (Number.isFinite(v) && v >= 0) set({ newbuildResUnitWon: v });
   },
 }));
+
+// 개발 모드 전용 — 브라우저 콘솔에서 시나리오 주입·검증용 (프로덕션 번들에선 제거됨)
+if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+  (window as unknown as Record<string, unknown>).__simStore = useSimulatorStore;
+}

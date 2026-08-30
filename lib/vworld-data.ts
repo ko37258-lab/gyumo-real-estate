@@ -389,3 +389,62 @@ export async function fetchVworldRoads(
     totalParcels: features.length,
   };
 }
+
+// ── 주변 건물 (3D 컨텍스트) ──────────────────────────────────
+//
+// 규모검토 3D에서 대상 필지 매스만 덜렁 있으면 동네 맥락이 안 보인다.
+// 도로명주소 건물 레이어(LT_C_SPBD)가 건물 외곽 폴리곤 + 지상층수(gro_flo_co)를
+// 주므로 이를 압출해 회색 매스로 세운다.
+// 라이브 검증(연남동 223-14 반경 ~110m): 65동, 층수·형상 정상 (2026-08-30).
+
+export interface NeighborBuilding {
+  /** 외곽 링 [[lon,lat], ...] (닫는 중복점 제거) */
+  ring: Array<[number, number]>;
+  /** 지상층수 (0/결측 → 1로 보정) */
+  floors: number;
+  name: string;
+}
+
+export async function fetchVworldBuildings(
+  lon: number,
+  lat: number,
+  halfM = 170,
+): Promise<{ buildings: NeighborBuilding[]; total: number } | null> {
+  const key = vworldKey();
+  if (!key) return null;
+  // 미터 → 도(度) 근사 (위도 보정)
+  const dLat = halfM / 111000;
+  const dLon = halfM / (111000 * Math.cos((lat * Math.PI) / 180));
+  const box = `BOX(${(lon - dLon).toFixed(7)},${(lat - dLat).toFixed(7)},${(lon + dLon).toFixed(7)},${(lat + dLat).toFixed(7)})`;
+  const url =
+    `${VWORLD_DATA_ENDPOINT}?service=data&request=GetFeature&data=LT_C_SPBD` +
+    `&key=${key}&format=json&geomFilter=${box}&geometry=true&attribute=true` +
+    `&crs=EPSG:4326&size=400&domain=${vworldDomain()}`;
+  const data = await callVworldData(url).catch(() => null);
+  if (!data || data.response?.status !== "OK") return null;
+
+  const features = data.response.result?.featureCollection?.features ?? [];
+  const buildings: NeighborBuilding[] = [];
+  for (const f of features) {
+    const props = f.properties ?? {};
+    const floors = Math.max(1, Number(props.gro_flo_co) || 1);
+    const name = String(props.buld_nm ?? "").trim();
+    const g = f.geometry;
+    if (!g?.coordinates) continue;
+    // MultiPolygon: 파트별 외곽 링을 각각 하나의 건물 매스로 취급
+    const polys: unknown[] =
+      g.type === "MultiPolygon" ? (g.coordinates as unknown[]) :
+      g.type === "Polygon" ? [g.coordinates] : [];
+    for (const poly of polys) {
+      const ring = (poly as number[][][])[0];
+      if (!Array.isArray(ring) || ring.length < 4) continue;
+      const pts = ring.map((p) => [Number(p[0]), Number(p[1])] as [number, number]);
+      // 닫는 중복점 제거
+      const [fx, fy] = pts[0];
+      const [lx, ly] = pts[pts.length - 1];
+      if (Math.abs(fx - lx) < 1e-9 && Math.abs(fy - ly) < 1e-9) pts.pop();
+      if (pts.length >= 3) buildings.push({ ring: pts, floors, name });
+    }
+  }
+  return { buildings, total: features.length };
+}
