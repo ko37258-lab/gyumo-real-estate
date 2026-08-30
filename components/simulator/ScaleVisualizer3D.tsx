@@ -586,26 +586,68 @@ function Scene({
  *  (PDF 생성 중 "페이지 응답 없음" 원인 중 하나). PDF에는 큰 해상도가 필요 없으므로
  *  최대 900px 폭으로 축소 + JPEG(품질 0.85)로 낮춰 용량·인코딩 시간을 크게 줄인다. */
 function CaptureRegistrar() {
-  const { gl } = useThree();
+  const { gl, camera, scene } = useThree();
   useEffect(() => {
     const fn = () => {
+      // ── 1) 캡쳐 직전, 매스가 화면을 채우도록 카메라를 잠시 맞춘다 ──
+      // 사용자가 멀리 줌아웃해 둔 상태로 캡쳐하면 PDF에 빈 하늘·바닥만 크게
+      // 실린다. 건물 크기에서 적정 거리를 계산해 강제 1프레임을 그린 뒤
+      // 캡쳐하고, 카메라는 원위치로 되돌린다. gl.render는 동기 호출이라
+      // rAF가 멈춘 숨은 탭에서도 확실히 찍힌다.
+      const st = useSimulatorStore.getState();
+      const lotSqm = lotPyToSqm(st.lotPy);
+      const ps = st.parcelShape;
+      const lotSide = ps
+        ? Math.max(ps.bounds.maxX - ps.bounds.minX, ps.bounds.maxY - ps.bounds.minY)
+        : Math.sqrt(Math.max(lotSqm, 1));
+      const hM = totalHeightM(floorsFromFarAndCov(st.farPct, st.covPct));
+      const size = Math.max(lotSide * 1.15, hM * 0.95, 14);
+
+      const prevPos = camera.position.clone();
+      const target = new THREE.Vector3(0, Math.min(hM * 0.4, 14), 0);
+      const dir = new THREE.Vector3(1, 0.68, 1).normalize();
+      camera.position.copy(target.clone().add(dir.multiplyScalar(size * 2.0)));
+      camera.lookAt(target);
+      gl.render(scene, camera);
+
       const src = gl.domElement;
+
+      // ── 2) 중앙 4:3 크롭 — 와이드 캔버스의 양옆 빈 공간 제거 ──
+      const ASPECT = 4 / 3;
+      let cropW = src.width;
+      let cropH = src.height;
+      let cx = 0;
+      let cy = 0;
+      if (src.width / src.height > ASPECT) {
+        cropW = src.height * ASPECT;
+        cx = (src.width - cropW) / 2;
+      } else {
+        cropH = src.width / ASPECT;
+        cy = (src.height - cropH) / 2;
+      }
       const MAX_W = 900;
-      const scale = Math.min(1, MAX_W / src.width);
-      if (scale >= 1) return src.toDataURL("image/jpeg", 0.85);
+      const outW = Math.round(Math.min(MAX_W, cropW));
+      const outH = Math.round(outW / ASPECT);
       const out = document.createElement("canvas");
-      out.width = Math.round(src.width * scale);
-      out.height = Math.round(src.height * scale);
+      out.width = outW;
+      out.height = outH;
       const ctx = out.getContext("2d");
-      if (!ctx) return src.toDataURL("image/jpeg", 0.85);
-      ctx.drawImage(src, 0, 0, out.width, out.height);
-      return out.toDataURL("image/jpeg", 0.85);
+      const data = ctx
+        ? (ctx.drawImage(src, cx, cy, cropW, cropH, 0, 0, outW, outH),
+          out.toDataURL("image/jpeg", 0.85))
+        : src.toDataURL("image/jpeg", 0.85);
+
+      // ── 3) 카메라 원복 ──
+      camera.position.copy(prevPos);
+      camera.lookAt(target);
+      gl.render(scene, camera);
+      return data;
     };
     useSimulatorStore.getState().setCapture3D(fn);
     return () => {
       useSimulatorStore.getState().setCapture3D(null);
     };
-  }, [gl]);
+  }, [gl, camera, scene]);
   return null;
 }
 

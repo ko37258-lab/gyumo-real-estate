@@ -390,6 +390,8 @@ function SummaryPage({
       <PdfText style={styles.h2}>1. 검토 요약 (Executive Summary)</PdfText>
       <View style={styles.h2Underline} />
 
+      <PlainSummaryBox input={input} brand={brand} />
+
       {/* 2x2 KPI 그리드 — 카드 폭 ~78mm로 긴 한국어 텍스트 잘림 방지 */}
       <View wrap={false} style={{ marginBottom: 14 }}>
         <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
@@ -2214,5 +2216,73 @@ function FloorDetailPage({
         ※ 판정은 입력값 기준 자동 검토이며 인허가 판단이 아닙니다. 지구단위계획·가로구역별 높이제한·문화재 앙각 등 개별 규제는 토지이음과 관할 지자체에서 별도 확인이 필요합니다.
       </PdfText>
     </Page>
+  );
+}
+
+
+/* ── 📌 한눈에 보는 결론 — 숫자를 문장으로 풀어 비전문가도 바로 읽히게 ── */
+function PlainSummaryBox({ input, brand }: { input: ReportInputs; brand: BrandConfig }) {
+  const s = input.scale;
+  const py = (sqm: number) => Math.round(sqm / 3.305785).toLocaleString();
+  const floorsTxt = s.floorsExact
+    ? (Number.isInteger(s.floorsExact) ? String(s.floorsExact) : s.floorsExact.toFixed(1))
+    : "-";
+  const totalEok = input.cost.total / 1e8;
+
+  const lines: string[] = [];
+  lines.push(
+    `이 땅 ${py(s.landAreaSqm)}평에는 1층 바닥 ${py(s.buildingArea)}평(건폐율 ${s.coverRatio}%) 규모로 최대 ${floorsTxt}층까지 올릴 수 있습니다.`,
+  );
+  if (s.sunlightApplied && s.sunlightLoss > 0.05) {
+    lines.push(
+      `법으로 허용된 연면적은 ${py(s.legalFloorArea)}평이지만, 정북 일조사선으로 위층이 깎여 실제로는 ${py(s.actualFloorArea)}평(${s.sunlightLoss.toFixed(1)}% 손실)까지 지을 수 있습니다.`,
+    );
+  } else {
+    lines.push(
+      `이 용도지역은 일조 높이제한 대상이 아니어서, 법정 연면적 ${py(s.legalFloorArea)}평을 온전히 지을 수 있습니다.`,
+    );
+  }
+  lines.push(
+    `주차는 ${s.parkingSpaces}대(지상 ${s.groundSpaces} · 지하 ${s.basementSpaces})가 필요하고, 총 사업비는 약 ${totalEok.toFixed(1)}억원으로 추정됩니다.`,
+  );
+
+  return (
+    <View
+      wrap={false}
+      style={{
+        marginBottom: 14,
+        padding: 12,
+        backgroundColor: COLORS.CREAM,
+        borderLeftWidth: 4,
+        borderLeftColor: brand.primaryColor,
+        borderLeftStyle: "solid",
+      }}
+    >
+      <PdfText
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: brand.primaryColor,
+          fontFamily: "Pretendard",
+          marginBottom: 5,
+        }}
+      >
+        📌 한눈에 보는 결론
+      </PdfText>
+      {lines.map((t, i) => (
+        <PdfText
+          key={i}
+          style={{
+            fontSize: 10,
+            lineHeight: 1.55,
+            color: COLORS.DARK,
+            fontFamily: "Pretendard",
+            marginBottom: i === lines.length - 1 ? 0 : 3,
+          }}
+        >
+          {i + 1}. {t}
+        </PdfText>
+      ))}
+    </View>
   );
 }

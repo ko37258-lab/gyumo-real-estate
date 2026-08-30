@@ -83,7 +83,7 @@ async function tryCapture3D(): Promise<string | null> {
     await new Promise((r) => setTimeout(r, 150));
     activateTabByText(["3D 360°"]);
     // 3) Canvas 마운트 + 첫 프레임 대기
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 1300));
 
     const fn = useSimulatorStore.getState().capture3D;
     if (!fn) {
