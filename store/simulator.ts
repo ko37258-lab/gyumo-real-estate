@@ -60,7 +60,8 @@ type SimulatorState = {
   parkingLawdCd: string | null;
 
   /** 3D Canvas의 toDataURL 캡쳐 함수 — Canvas 마운트 시 등록, 언마운트 시 null. */
-  capture3D: (() => string) | null;
+  /** 3D 캡쳐 함수 — view 생략 시 기본(iso). PDF 3컷용으로 south/north 지원. */
+  capture3D: ((view?: "iso" | "south" | "north") => string) | null;
 
   /** 합필 구성 필지 (2개 이상일 때만 시각화에 경계 표시, 빈 배열 = 단일 필지) */
   mergedParcels: MergedParcel[];

@@ -102,8 +102,9 @@ export async function GET(request: Request) {
         const r = await fetch(url, {
           headers: { "User-Agent": "Mozilla/5.0 (compatible; gyumo/1.0)" },
         }).catch(() => null);
-        if (!r || !r.ok) return "";
-        return r.text();
+        // 키 오류는 HTTP 403 + 오류 XML로 오므로 상태와 무관하게 본문을 읽어 판정한다.
+        if (!r) return "";
+        return r.text().catch(() => "");
       }),
     );
 
@@ -187,9 +188,9 @@ export async function GET(request: Request) {
     );
 
     // 전 호출 키 실패 = 자료 없음이 아니라 장애 (2026-08-31 무효키 조용한 실패 재발 방지)
-    if (ltOkCalls === 0 && ltKeyFail) {
+    if (ltOkCalls === 0) {
       return NextResponse.json(
-        { error: `실거래 조회 실패 — ${ltKeyFail}`, apiError: true },
+        { error: `실거래 조회 실패 — ${ltKeyFail ?? "공공데이터 서버 응답 이상"}`, apiError: true },
         { status: 503 },
       );
     }

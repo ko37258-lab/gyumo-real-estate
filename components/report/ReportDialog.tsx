@@ -75,7 +75,9 @@ function activateTabByText(searchTexts: string[]) {
 }
 
 /** 3D 매스 캡쳐 — 규모 검토 + 3D 탭 자동 활성 → 렌더 대기 → toDataURL. 실패 시 null. */
-async function tryCapture3D(): Promise<string | null> {
+type Capture3DResult = { iso: string; south?: string; north?: string };
+
+async function tryCapture3D(): Promise<Capture3DResult | null> {
   try {
     // 1) 외부 Tabs: "규모 검토" 활성
     activateTabByText(["규모 검토"]);
@@ -90,7 +92,17 @@ async function tryCapture3D(): Promise<string | null> {
       console.warn("[3D Capture] capture3D 함수 미등록 — Canvas 미마운트?");
       return null;
     }
-    return fn();
+    // 플렉시티식 3컷 — 기본(iso)은 필수, 남·북 정면은 실패해도 보고서는 계속
+    const iso = fn("iso");
+    let south: string | undefined;
+    let north: string | undefined;
+    try {
+      south = fn("south");
+      north = fn("north");
+    } catch (e) {
+      console.warn("[3D Capture] 남·북 컷 실패 (기본 컷만 수록):", e);
+    }
+    return { iso, south, north };
   } catch (e) {
     console.warn("[3D Capture] 실패:", e);
     return null;
@@ -180,7 +192,7 @@ export function ReportDialog() {
       const visualization3D = sections.viz3d ? await tryCapture3D() : null;
       console.log(
         "[3D Capture]",
-        visualization3D ? `성공 (${Math.round(visualization3D.length / 1024)}KB)` : "건너뜀",
+        visualization3D ? `성공 (${Math.round(visualization3D.iso.length / 1024)}KB ×${1 + (visualization3D.south ? 1 : 0) + (visualization3D.north ? 1 : 0)}컷)` : "건너뜀",
       );
 
       setStep("2/4 데이터 수집 중...");
@@ -199,7 +211,7 @@ export function ReportDialog() {
       await new Promise((r) => setTimeout(r, 300));
       // ★ 결과 입력에 3D 이미지 주입 (PDF 임베드용, AI에는 안 보냄)
       const finalInput: ReportInputs = visualization3D
-        ? { ...built, visualization3D }
+        ? { ...built, visualization3D: visualization3D.iso, visualization3DViews: visualization3D }
         : built;
       setInput(finalInput);
       setAnalysis(result);
@@ -219,7 +231,7 @@ export function ReportDialog() {
       const built0 = applySections(buildReportInputs());
       const built = locationMap ? { ...built0, locationMap } : built0;
     const finalInput: ReportInputs = visualization3D
-      ? { ...built, visualization3D }
+      ? { ...built, visualization3D: visualization3D.iso, visualization3DViews: visualization3D }
       : built;
     setInput(finalInput);
     setAnalysis(null);

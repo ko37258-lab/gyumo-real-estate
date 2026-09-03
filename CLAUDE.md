@@ -252,6 +252,15 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-09-03** — **3D 렌더 고도화 + 플렉시티급 보고서(표지·사업개요·3컷·수익 페이지) + 지오코딩 폴백 + 키 가드 보완** (운영자: "3D 스타일 고도화 · 실제 사례로 보고서를 플렉시티처럼").
+  - **3D**: 환경광(three RoomEnvironment→PMREM, 외부 HDR 없음)·반구광·안개, PCF+radius 그림자, 층 번호(남측 외벽선 중점에 부착 — 비정형 필지 대응 `southEdge`)·지붕 슬래브·📏 치수선(폭·깊이·높이·정북 이격)·흰색 도시 컨텍스트(Edges)·☀️ 태양 궤적(호+9/12/15시+태양 구체). **⚠ drei `SoftShadows`(PCSS)는 three 0.184와 비호환**(unpackRGBAToDepth 제거 → 모든 표준 재질 검게) — 절대 쓰지 말 것. troika 폰트에 `↑ ☀` 글리프 없음 → 텍스트로.
+  - **PDF 캡처**: `capture3D(view)` 3컷(iso/south/north) + **캡처 프레임에서만 주변 건물 숨김**(`scene.getObjectByName("neighborhood")`; 도심 밀집지는 이웃이 카메라를 가림 — 성내동 실측).
+  - **보고서**: 페이지 번호 재정렬(1 사업개요(신설)·2 요약·3/3-1 규모·4 주차·5 비용·6 사업성·7 수익추정(신설)/7-1 시세표·8 분석·9 부록). 표지 = 3D 히어로+위치도+KPI 4타일. 사업개요 = 토지표·규모 KPI·층별 면적 스택(SVG)·수익 요약·3컷. 수익 페이지 = 분양/월세 시나리오·총수입 vs 사업비 막대·결론 3문장. 화면 💰카드와 PDF는 `lib/report/revenue.ts` 단일 계산원. **PDF 글리프**: Pretendard에 ⚖·☐·📌·🚗 없음(fontTools cmap 확인) → ※·□·■·제거. SvgText는 `style.fontFamily:"Pretendard"` 필수(없으면 한글·㎡ 깨짐). TwoColTable 줄무늬.
+  - **지오코딩 폴백**: `/api/geocode` 카카오 실패/키없음 → VWorld 지오코더(type=parcel). `level4LC`가 19자리 VWorld PNU(산 1/2)라 건축물대장 규약(0/1)으로 변환. **`domain` 파라미터 붙이면 500** — 붙이지 말 것. 로컬은 카카오 키가 Secret이라 이 폴백으로 E2E.
+  - **키 가드 버그 수정**: data.go.kr는 키 오류를 **HTTP 403 + 오류 XML**로 주는데 `!r.ok → 본문 버림`이라 판정 불가였음(로컬 재현). 본문 항상 읽고, `okCalls===0`이면 사유 없어도 503. 죽은 키로 use-prices·land-trades 503 실측.
+  - **로컬 E2E 장치**: `/api/usage` DEV_BYPASS(`NODE_ENV=development` + `.env.local DEV_BYPASS_USAGE=1`) — 프로덕션 불가. 로컬 DATAGO_KEY도 새 키로 교체. PDF 검증은 브라우저 `URL.createObjectURL` 훅으로 blob 회수 → PyMuPDF 페이지 이미지.
+  - 검증: 성내동 562 실사례 — 조회→다세대 3세대→💰 16.86억/월 214만→12쪽 PDF(표지·개요·3컷·수익 페이지 이미지 확인). tsc 0 / eslint 기존 1건 외 0.
+
 - **2026-07-20** — **지적도 폴리곤 근사 면적 최후 폴백 (행정구역 개편 필지 대응)** (운영자: "운북동 1257-78 실거래 추정가 안 나옴").
   - **원인**: 2026.7.1 인천 행정구역 개편(중구 영종도 → **영종구 신설**, 시군구코드 28155)으로 카카오 지오코딩은 새 PNU를 주는데 **VWorld NED 토지특성이 새 PNU를 모름**(구 중구 코드로도 없음 — DB 미갱신) → 면적·공시지가·지목 전부 빈값 → 추정가(중앙값×면적) 계산 불가. RTMS 실거래는 신코드로 이미 조회됨(표본 49건 존재).
   - **수정**: `/api/landarea`에 3번째 폴백 `fromCadastralPolygon` — 건축물대장·NED 모두 면적 없으면 연속지적도 폴리곤(`fetchVworldParcelPolygon`)의 shoelace 면적(`buildParcelShape`) + 지번 접미 지목(`normalizeJimok`). `source:"cadastral"` + "지적도 근사" 라벨 + 등록 면적과 다를 수 있음 message. LandLookup `LandArea.source` 타입·라벨 확장.

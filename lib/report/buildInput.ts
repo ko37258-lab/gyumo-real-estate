@@ -27,6 +27,8 @@ import type { ReportInputs } from "@/lib/ai/types";
 import { PY_TO_SQM, FLOOR_HEIGHT_M } from "@/lib/constants";
 import { computeFloorTable, actualGfaPrecise } from "@/lib/report/floorTable";
 import { checkNorthSunlight } from "@/lib/calc/shadowCheck";
+import { calculateSchematic, RESIDENTIAL_USAGES } from "@/lib/calc/schematic";
+import { estimateRevenue } from "@/lib/report/revenue";
 
 /** 시뮬레이터·비용 store에서 PDF/AI용 ReportInputs를 합성. 클라이언트에서 호출. */
 export function buildReportInputs(): ReportInputs {
@@ -235,12 +237,37 @@ export function buildReportInputs(): ReportInputs {
   const usePrices =
     upState.data && land && upState.pnu === land.pnu ? upState.data : undefined;
 
+  // ⑥ 가설계 세대수 (주거계 용도) → 💰 수익 추정 (화면 카드와 같은 계산원 lib/report/revenue)
+  const schematic = RESIDENTIAL_USAGES.includes(sim.parkingUsage)
+    ? calculateSchematic({
+        floorAreaSqm: bldArea,
+        floors,
+        exclusiveUnitSqm: sim.schematicUnitSqm,
+        efficiencyPct: sim.schematicEfficiencyPct,
+        groundPiloti:
+          (sim.parkingMode === "ground" || sim.parkingMode === "mixed") && sim.parkingPilotiMode,
+        usage: sim.parkingUsage,
+      })
+    : null;
+  const totalUnits = schematic?.feasible ? schematic.totalUnits : undefined;
+  const revenue =
+    usePrices && totalUnits
+      ? estimateRevenue({
+          usePrices,
+          usage: sim.parkingUsage,
+          unitSqm: sim.schematicUnitSqm,
+          efficiencyPct: sim.schematicEfficiencyPct,
+          totalUnits,
+        }) ?? undefined
+      : undefined;
+
   return {
     address: sim.address || undefined,
     reviewDate: new Date().toISOString().slice(0, 10),
     land,
     usePrices,
     market,
+    revenue,
     scale: {
       landAreaSqm: lotSqm,
       landAreaPyeong: sim.lotPy,
@@ -281,6 +308,9 @@ export function buildReportInputs(): ReportInputs {
       parkingBasisLabel,
       floorTable,
       sunlightImpact,
+      totalUnits,
+      unitExclusiveSqm: totalUnits ? sim.schematicUnitSqm : undefined,
+      heightM: floors * FLOOR_HEIGHT_M,
     },
     cost: {
       abovePyeong: cost.abovePyeong,

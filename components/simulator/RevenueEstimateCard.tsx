@@ -12,27 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useLandInfoStore } from "@/store/landinfo";
 import { useUsePricesStore } from "@/store/useprices";
 import type { ReportUsePrices } from "@/lib/ai/types";
-
-const PY = 3.305785;
-
-function fmtEok(won: number): string {
-  if (won >= 1e8) return `${(won / 1e8).toFixed(1).replace(/\.0$/, "")}억`;
-  return `${Math.round(won / 1e4).toLocaleString()}만원`;
-}
-
-/** 용도 코드 → 시세 표 라벨 매칭 키워드 */
-function matchRow<T extends { label: string }>(rows: T[], usage: string): T | null {
-  const prefer: string[] =
-    usage === "아파트" ? ["아파트"]
-    : usage === "오피스텔" ? ["오피스텔"]
-    : usage === "다가구" || usage === "단독주택" ? ["단독", "다가구"]
-    : ["다세대", "연립"]; // 다세대연립·도시형생활 등
-  for (const kw of prefer) {
-    const hit = rows.find((r) => r.label.includes(kw));
-    if (hit) return hit;
-  }
-  return rows[0] ?? null;
-}
+import { estimateRevenue, fmtEokShort as fmtEok } from "@/lib/report/revenue";
 
 export default function RevenueEstimateCard({
   unitSqm,
@@ -83,22 +63,20 @@ export default function RevenueEstimateCard({
 
   if (totalUnits <= 0) return null;
 
-  // ── 계산 ──
-  const exclusivePy = unitSqm / PY;
-  const supplyPy = unitSqm / Math.max(efficiencyPct, 1) * 100 / PY;
-  const saleRow = cached ? matchRow(cached.sale, usage) : null;
-  const rentRow = cached ? matchRow(cached.rentMonthly, usage) : null;
-
-  const salePerUnit = saleRow
-    ? saleRow.manPerPy * 1e4 * (saleRow.exclusive ? exclusivePy : supplyPy)
-    : 0;
-  const saleTotal = salePerUnit * totalUnits;
-  const rentPerUnit = rentRow
-    ? rentRow.manPerPy * 1e4 * (rentRow.exclusive ? exclusivePy : supplyPy)
-    : 0;
-  const rentMonthly = rentPerUnit * totalUnits;
-  const rentYearly = rentMonthly * 12;
-  const grossYieldPct = saleTotal > 0 && rentYearly > 0 ? (rentYearly / saleTotal) * 100 : 0;
+  // ── 계산 (lib/report/revenue — PDF 수익 페이지와 동일 계산원) ──
+  const est = cached
+    ? estimateRevenue({ usePrices: cached, usage, unitSqm, efficiencyPct, totalUnits })
+    : null;
+  const saleRow = est?.sale ?? null;
+  const rentRow = est?.rent ?? null;
+  const exclusivePy = est?.exclusivePy ?? 0;
+  const supplyPy = est?.supplyPy ?? 0;
+  const salePerUnit = saleRow?.perUnitWon ?? 0;
+  const saleTotal = saleRow?.totalWon ?? 0;
+  const rentPerUnit = rentRow?.perUnitMonthlyWon ?? 0;
+  const rentMonthly = rentRow?.monthlyWon ?? 0;
+  const rentYearly = rentRow?.yearlyWon ?? 0;
+  const grossYieldPct = est?.grossYieldPct ?? 0;
 
   return (
     <div className="mt-3 rounded-md border border-amber-300 bg-amber-50/50 overflow-hidden">

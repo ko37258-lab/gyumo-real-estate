@@ -78,8 +78,12 @@ export interface ReportInputs {
   land?: ReportLandInfo;
   /** 용도별 분양가·임대료 표 — 팝업에서 조회한 경우 선택 포함. */
   usePrices?: ReportUsePrices;
-  /** 3D 매스 캡쳐 (base64 PNG dataURL) — PDF에 임베드. AI 프롬프트에는 보내지 않음. */
+  /** 3D 매스 캡쳐 (base64 JPEG dataURL, 기본 뷰) — PDF에 임베드. AI 프롬프트에는 보내지 않음. */
   visualization3D?: string;
+  /** 3D 다각도 캡쳐 — 기본(iso)·남측 정면·북측 정면 (플렉시티식 3컷) */
+  visualization3DViews?: { iso?: string; south?: string; north?: string };
+  /** 💰 분양·월세 수익 추정 — 주거계 용도 + 가설계 세대수 + 인근 실거래(use-prices) 있을 때 */
+  revenue?: import("@/lib/report/revenue").ReportRevenue;
   /** 표지 위치도 (위성 타일 합성 base64 JPEG) — 실형상 조회 시 자동 생성 */
   locationMap?: string;
   scale: {
@@ -127,6 +131,12 @@ export interface ReportInputs {
     floorTable?: import("@/lib/report/floorTable").FloorTableResult;
     /** 북측 일조 영향 진단 (동지 9~15시) — 실형상 조회 시 */
     sunlightImpact?: import("@/lib/calc/shadowCheck").SunImpactResult;
+    /** ⑥ 가설계 총 세대수 (주거계 용도·산출 가능 시) */
+    totalUnits?: number;
+    /** ⑥ 가설계 유닛 전용면적 ㎡ */
+    unitExclusiveSqm?: number;
+    /** 건물 총 높이 m (층수 × 층고) */
+    heightM?: number;
   };
   cost: {
     abovePyeong: number;

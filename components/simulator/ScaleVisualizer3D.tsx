@@ -646,10 +646,16 @@ function Scene({
  *  PDF에 박으면 용량이 수 MB로 커져 react-pdf 인코딩·임베드가 오래 걸린다
  *  (PDF 생성 중 "페이지 응답 없음" 원인 중 하나). PDF에는 큰 해상도가 필요 없으므로
  *  최대 900px 폭으로 축소 + JPEG(품질 0.85)로 낮춰 용량·인코딩 시간을 크게 줄인다. */
+const CAPTURE_DIRS: Record<"iso" | "south" | "north", [number, number, number]> = {
+  iso: [1, 0.68, 1],
+  south: [0.18, 0.42, 1], // 남쪽(도로 쪽)에서 살짝 위·동측으로 — 정면 입면
+  north: [-0.18, 0.42, -1], // 북쪽에서 — 일조사선 후퇴 계단이 보이는 면
+};
+
 function CaptureRegistrar() {
   const { gl, camera, scene } = useThree();
   useEffect(() => {
-    const fn = () => {
+    const fn = (view: "iso" | "south" | "north" = "iso") => {
       // ── 1) 캡쳐 직전, 매스가 화면을 채우도록 카메라를 잠시 맞춘다 ──
       // 사용자가 멀리 줌아웃해 둔 상태로 캡쳐하면 PDF에 빈 하늘·바닥만 크게
       // 실린다. 건물 크기에서 적정 거리를 계산해 강제 1프레임을 그린 뒤
@@ -666,9 +672,14 @@ function CaptureRegistrar() {
 
       const prevPos = camera.position.clone();
       const target = new THREE.Vector3(0, Math.min(hM * 0.4, 14), 0);
-      const dir = new THREE.Vector3(1, 0.68, 1).normalize();
-      camera.position.copy(target.clone().add(dir.multiplyScalar(size * 2.0)));
+      const dir = new THREE.Vector3(...CAPTURE_DIRS[view]).normalize();
+      camera.position.copy(target.clone().add(dir.multiplyScalar(size * (view === "iso" ? 2.0 : 2.2))));
       camera.lookAt(target);
+      // 도심 밀집지는 이웃 건물이 카메라를 가려 대상 매스가 안 보인다(성내동 실측) —
+      // 캡처 프레임에서만 주변 건물을 숨기고, 화면에서는 그대로 둔다.
+      const neighborhood = scene.getObjectByName("neighborhood");
+      const neighborhoodWasVisible = neighborhood ? neighborhood.visible : true;
+      if (neighborhood) neighborhood.visible = false;
       gl.render(scene, camera);
 
       const src = gl.domElement;
@@ -698,7 +709,8 @@ function CaptureRegistrar() {
           out.toDataURL("image/jpeg", 0.85))
         : src.toDataURL("image/jpeg", 0.85);
 
-      // ── 3) 카메라 원복 ──
+      // ── 3) 카메라·주변 건물 원복 ──
+      if (neighborhood) neighborhood.visible = neighborhoodWasVisible;
       camera.position.copy(prevPos);
       camera.lookAt(target);
       gl.render(scene, camera);
@@ -830,17 +842,63 @@ function Dimension({
   );
 }
 
-/** 층 번호 — 남측면 서쪽 끝, 유리 밴드 아래에 작게. 층이 많으면 간격을 띄운다(항상 최상층 포함). */
+/** 폴리곤에서 가장 남쪽 외벽선(중점 y 최소) — 중점·바깥 법선·씬 Y회전각.
+ *  비정형 필지는 바운딩박스 모서리가 건물 밖일 수 있어, 라벨은 실제 외벽선에 붙인다. */
+function southEdge(pts: Pt[]): { mid: Pt; nx: number; ny: number; rotY: number } | null {
+  if (pts.length < 3) return null;
+  let cx = 0;
+  let cy = 0;
+  for (const [x, y] of pts) {
+    cx += x;
+    cy += y;
+  }
+  cx /= pts.length;
+  cy /= pts.length;
+  let best: { mid: Pt; nx: number; ny: number; rotY: number } | null = null;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[(i + 1) % pts.length];
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    if (len < 2) continue;
+    const mid: Pt = [(x1 + x2) / 2, (y1 + y2) / 2];
+    let nx = (y2 - y1) / len;
+    let ny = -(x2 - x1) / len;
+    if (nx * (mid[0] - cx) + ny * (mid[1] - cy) < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    if (ny > -0.3) continue; // 남향(바깥 법선이 남쪽)인 벽만
+    if (!best || mid[1] < best.mid[1]) best = { mid, nx, ny, rotY: Math.atan2(nx, -ny) };
+  }
+  return best;
+}
+
+/** 층 번호 — 남측 외벽선 중점, 유리 밴드 아래에 작게. 층이 많으면 간격을 띄운다(항상 최상층 포함). */
 function floorLabelStep(n: number): number {
   return n <= 12 ? 1 : n <= 30 ? 2 : 5;
 }
-function FloorLabel({ i, x, z, color }: { i: number; x: number; z: number; color: string }) {
+function FloorLabel({
+  i,
+  x,
+  z,
+  color,
+  rotY = 0,
+  anchorX = "left",
+}: {
+  i: number;
+  x: number;
+  z: number;
+  color: string;
+  rotY?: number;
+  anchorX?: "left" | "center";
+}) {
   return (
     <Text
       position={[x, i * FLOOR_HEIGHT_M + FLOOR_HEIGHT_M * 0.15, z]}
+      rotation={[0, rotY, 0]}
       fontSize={0.72}
       color="#ffffff"
-      anchorX="left"
+      anchorX={anchorX}
       anchorY="middle"
       outlineWidth={0.05}
       outlineColor={color}
@@ -1755,6 +1813,10 @@ function ParcelMass({
   let topY = 0;
   let topRequired = 0;
   const labelStep = floorLabelStep(ceilFloors);
+  const se = southEdge(fp);
+  const labelX = se ? se.mid[0] + se.nx * 0.16 : fpBounds.minX + 0.9;
+  const labelZ = se ? -(se.mid[1] + se.ny * 0.16) : -fpBounds.minY + 0.14;
+  const labelRot = se ? se.rotY : 0;
   for (let i = 0; i < ceilFloors; i++) {
     const fH = (i + 1) * FLOOR_HEIGHT_M; // 층 상단 높이 기준(층 내 최엄격 지점) — 보수적 근사
     const required = fH <= SUNLIGHT_THRESHOLD_M ? 1.5 : fH / 2;
@@ -1767,7 +1829,7 @@ function ParcelMass({
       topRequired = sunOn ? required : 0;
       if (i % labelStep === 0 || i === ceilFloors - 1) {
         items.push(
-          <FloorLabel key={`fl-${i}`} i={i} x={fpBounds.minX + 0.9} z={-fpBounds.minY + 0.14} color={edgeColor} />,
+          <FloorLabel key={`fl-${i}`} i={i} x={labelX} z={labelZ} color={edgeColor} rotY={labelRot} anchorX="center" />,
         );
       }
     }
@@ -2067,7 +2129,7 @@ function Neighborhood({ shape }: { shape: ParcelShape }) {
 
   if (!items) return null;
   return (
-    <group>
+    <group name="neighborhood">
       {geoms.map((g, i) => (
         // Shape(x=동, y=북) 평면을 X축 -90° 회전 → (x, 높이, -북) = 씬 좌표 규약
         <mesh

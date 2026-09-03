@@ -139,7 +139,7 @@ export async function GET(request: Request) {
   try {
     // 서비스×월 전체 태스크를 동시성 20으로 실행
     const keys = Object.keys(SERVICES);
-    const tasks: Array<() => Promise<{ key: string; xml: string }>> = [];
+    const tasks: Array<() => Promise<{ key: string; xml: string; status: number }>> = [];
     for (const key of keys) {
       for (const ym of yms) {
         tasks.push(async () => {
@@ -148,8 +148,10 @@ export async function GET(request: Request) {
             `?serviceKey=${encodeURIComponent(pkey)}&LAWD_CD=${lawdCd}&DEAL_YMD=${ym}` +
             `&numOfRows=800&pageNo=1`;
           const r = await fetch(url, { headers: UA }).catch(() => null);
-          if (!r || !r.ok) return { key, xml: "" };
-          return { key, xml: await r.text() };
+          // ⚠ data.go.kr는 키 오류를 HTTP 403/500 + 오류 XML로 준다. 본문을 버리면
+          //   "키 죽음"을 판정할 수 없어 0건으로 위장된다(2026-09-03 로컬 재현). 항상 본문을 읽는다.
+          if (!r) return { key, xml: "", status: 0 };
+          return { key, xml: await r.text().catch(() => ""), status: r.status };
         });
       }
     }
@@ -158,18 +160,23 @@ export async function GET(request: Request) {
     const byService: Record<string, Array<Record<string, string>>> = {};
     let okCalls = 0;
     let keyFailMsg: string | null = null;
-    for (const { key, xml } of results) {
+    let lastBadStatus = 0;
+    for (const { key, xml, status } of results) {
       const fail = datagoKeyFail(xml);
       if (fail) { keyFailMsg = fail; continue; }
-      if (!xml || !xml.includes("<resultCode>000</resultCode>")) continue;
+      if (!xml || !xml.includes("<resultCode>000</resultCode>")) { lastBadStatus = status; continue; }
       okCalls++;
       (byService[key] ??= []).push(...parseXmlItems(xml));
     }
-    // 전 호출이 키 문제로 죽었으면 "표본 0"이 아니라 오류다 — 캐시하지 않고 그대로 알린다.
-    // (2026-08-31: 무효 키를 빈 결과로 6시간 캐시해 장애가 몇 주간 숨었던 사고 재발 방지)
-    if (okCalls === 0 && keyFailMsg) {
+    // 전 호출이 실패했으면 "표본 0"이 아니라 오류다 — 캐시하지 않고 그대로 알린다.
+    // (2026-08-31: 무효 키를 빈 결과로 6시간 캐시해 장애가 몇 주간 숨었던 사고 재발 방지.
+    //  키 사유가 안 잡혀도 정상 응답이 하나도 없으면 실패로 본다.)
+    if (okCalls === 0) {
       return NextResponse.json(
-        { error: `실거래 조회 실패 — ${keyFailMsg}`, apiError: true },
+        {
+          error: `실거래 조회 실패 — ${keyFailMsg ?? `공공데이터 서버 응답 이상 (HTTP ${lastBadStatus || "없음"})`}`,
+          apiError: true,
+        },
         { status: 503 },
       );
     }

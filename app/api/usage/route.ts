@@ -23,7 +23,27 @@ async function loadProfile(userId: string) {
 // (승인 즉시 배지·잔액이 반영되도록).
 const NO_STORE = { headers: { "Cache-Control": "no-store, max-age=0" } };
 
+/** 로컬 개발 전용 우회 — `NODE_ENV=development` 이고 `.env.local`에 `DEV_BYPASS_USAGE=1`을
+ *  명시했을 때만 스텝(무제한)으로 간주한다. 프로덕션 빌드에서는 NODE_ENV가 production이라
+ *  어떤 env를 넣어도 절대 켜지지 않는다. (로컬 Supabase가 placeholder라 로그인 E2E가 불가능해
+ *  지번 조회→보고서까지 실데이터로 검증하기 위한 장치.) */
+const DEV_BYPASS =
+  process.env.NODE_ENV === "development" && process.env.DEV_BYPASS_USAGE === "1";
+const DEV_STAFF_RESPONSE = {
+  isLoggedIn: true,
+  userId: "dev-bypass",
+  credits: 9999,
+  used: 0,
+  limit: 9999,
+  remaining: 9999,
+  allowed: true,
+  unlimited: true,
+  role: "스텝",
+  nextExpiry: null,
+};
+
 export async function GET() {
+  if (DEV_BYPASS) return NextResponse.json(DEV_STAFF_RESPONSE, NO_STORE);
   const supabase = await createClient();
   const {
     data: { user },
@@ -93,6 +113,7 @@ export async function GET() {
 }
 
 export async function POST() {
+  if (DEV_BYPASS) return NextResponse.json(DEV_STAFF_RESPONSE, NO_STORE);
   const supabase = await createClient();
   const {
     data: { user },
