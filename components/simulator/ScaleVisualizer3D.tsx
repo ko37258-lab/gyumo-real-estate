@@ -1,7 +1,8 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Html, OrbitControls, Grid, Text, Line } from "@react-three/drei";
+import { Html, OrbitControls, Grid, Text, Line, Edges, Billboard, Environment } from "@react-three/drei";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
@@ -44,9 +45,25 @@ const PARKING_EDGE = "#4B5563";
 const ROAD_COLOR = "#8B8D91";
 const LOT_COLOR = "#fbfaf6";
 const GLASS_COLOR = "#9CC3E5";
+const NEIGHBOR_TINTS = ["#f4f2ec", "#efede6", "#f7f5f0", "#ebe9e2", "#f2efe8"];
 const CAR_COLORS = ["#DC2626", "#2563EB", "#F1F5F9", "#64748B", "#0F766E", "#D97706", "#1E293B"];
 
 type PresetKey = "iso" | "top" | "south" | "north";
+
+/** ☀️ 태양 궤적 — 그림자 모드에서 하루 태양 호(弧)와 현재 위치를 그린다. 씬 단위(m). */
+interface SunPathData {
+  arc: [number, number, number][];
+  marks: { hour: number; pos: [number, number, number] }[];
+  cur: [number, number, number] | null;
+  hourLabel: string;
+}
+const SUN_PATH_R = 95;
+
+function darken(hex: string, k: number): string {
+  const c = new THREE.Color(hex);
+  c.multiplyScalar(k);
+  return "#" + c.getHexString();
+}
 
 const PRESETS: Record<PresetKey, [number, number, number]> = {
   iso: [40, 35, 40],
@@ -83,6 +100,30 @@ export default function ScaleVisualizer3D() {
     () => sunPosition({ latDeg: sunLat, lonDeg: sunLon, season, hourKST: hour }),
     [sunLat, sunLon, season, hour],
   );
+  const sunPath = useMemo<SunPathData | null>(() => {
+    if (!shadowMode) return null;
+    const at = (h: number) => {
+      const p = sunPosition({ latDeg: sunLat, lonDeg: sunLon, season, hourKST: h });
+      const v = sunVector(p);
+      return {
+        up: p.altitudeDeg > 0,
+        pos: [v[0] * SUN_PATH_R, v[1] * SUN_PATH_R, v[2] * SUN_PATH_R] as [number, number, number],
+      };
+    };
+    const arc: [number, number, number][] = [];
+    for (let h = 5; h <= 19.001; h += 0.25) {
+      const r = at(h);
+      if (r.up) arc.push(r.pos);
+    }
+    const marks = [9, 12, 15]
+      .map((h) => ({ hour: h, ...at(h) }))
+      .filter((m) => m.up)
+      .map((m) => ({ hour: m.hour, pos: m.pos }));
+    const c = at(hour);
+    const hh = Math.floor(hour);
+    const mm = Math.round((hour - hh) * 60);
+    return { arc, marks, cur: c.up ? c.pos : null, hourLabel: `${hh}:${String(mm).padStart(2, "0")}` };
+  }, [shadowMode, sunLat, sunLon, season, hour]);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 640px)");
@@ -195,7 +236,7 @@ export default function ScaleVisualizer3D() {
       >
         <Canvas
           frameloop="demand"
-          shadows
+          shadows={{ type: THREE.PCFShadowMap }}
           dpr={[1, 2]}
           performance={{ min: 0.5 }}
           camera={{ position: PRESETS.iso, fov: 35, near: 0.5, far: 2000 }}
@@ -209,6 +250,8 @@ export default function ScaleVisualizer3D() {
               showNeighbors={showNeighbors}
               showImagery={showImagery}
               sun={shadowMode ? { vec: sunVector(sunPos), altitudeDeg: sunPos.altitudeDeg } : null}
+              sunPath={sunPath}
+              quality={isMobile ? "low" : "high"}
             />
             <CaptureRegistrar />
           </Suspense>
@@ -232,6 +275,8 @@ function Scene({
   showNeighbors,
   showImagery,
   sun,
+  sunPath,
+  quality,
 }: {
   preset: PresetKey;
   autoRotate: boolean;
@@ -239,6 +284,8 @@ function Scene({
   showNeighbors: boolean;
   showImagery: boolean;
   sun: { vec: [number, number, number]; altitudeDeg: number } | null;
+  sunPath: SunPathData | null;
+  quality: "high" | "low";
 }) {
   const zone = useSimulatorStore((s) => s.zone);
   const lotPy = useSimulatorStore((s) => s.lotPy);
@@ -342,8 +389,14 @@ function Scene({
 
   return (
     <>
+      {/* 분위기 — 환경광(내장 스튜디오 큐브맵, 네트워크 불필요)·하늘/지면 반구광·거리 안개.
+          ⚠ drei SoftShadows(PCSS)는 three 0.184의 depth-texture 그림자와 호환되지 않아(셰이더 컴파일 실패 → 전부 검게)
+          쓰지 않는다. 부드러운 그림자는 Canvas shadows="variance"(VSM) + 광원 shadow-radius로. */}
+      <EnvLighting />
+      <fog attach="fog" args={["#dfe7ee", 170, 520]} />
+      <hemisphereLight args={["#dfefff", "#cfc7b8", sun ? 0.28 : 0.34]} />
       {/* 그림자 모드: 태양 방향으로 광원 이동. 고도가 낮을수록 색온도를 낮춰 저녁빛 느낌 */}
-      <ambientLight intensity={sun ? 0.42 : 0.5} color="#fff7ec" />
+      <ambientLight intensity={sun ? 0.2 : 0.24} color="#fff7ec" />
       <directionalLight
         position={
           sun && sun.altitudeDeg > 0
@@ -360,9 +413,12 @@ function Scene({
         shadow-camera-top={80}
         shadow-camera-bottom={-80}
         shadow-camera-far={200}
-        shadow-bias={-0.0005}
+        shadow-bias={-0.0004}
+        shadow-radius={quality === "high" ? 5 : 2}
+        shadow-blurSamples={quality === "high" ? 14 : 6}
       />
-      <directionalLight position={[-15, 20, -15]} intensity={0.25} />
+      <directionalLight position={[-15, 20, -15]} intensity={0.22} />
+      {sunPath && <SunPath data={sunPath} />}
 
       <CameraRig preset={preset} autoRotate={autoRotate} />
 
@@ -656,6 +712,158 @@ function CaptureRegistrar() {
   return null;
 }
 
+/** 환경광 — three 내장 RoomEnvironment를 PMREM으로 구워 scene.environment에 건다.
+ *  외부 HDR 파일 없이(오프라인) 유리·금속 밴드에 반사가 생기고 매스 음영이 부드러워진다. */
+function EnvLighting() {
+  const gl = useThree((st) => st.gl);
+  const rt = useMemo(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const out = pmrem.fromScene(new RoomEnvironment(), 0.04);
+    pmrem.dispose();
+    return out;
+  }, [gl]);
+  useEffect(() => () => rt.dispose(), [rt]);
+  return <Environment map={rt.texture} environmentIntensity={0.42} />;
+}
+
+/** ☀️ 태양 궤적 — 하루 태양 호(점선) + 9·12·15시 눈금 + 현재 시각 태양 구체 */
+function SunPath({ data }: { data: SunPathData }) {
+  return (
+    <group>
+      {data.arc.length >= 2 && (
+        <Line
+          points={data.arc}
+          color="#F59E0B"
+          lineWidth={1.4}
+          dashed
+          dashSize={2.2}
+          gapSize={1.4}
+          transparent
+          opacity={0.85}
+        />
+      )}
+      {data.marks.map((m) => (
+        <group key={m.hour} position={m.pos}>
+          <mesh>
+            <sphereGeometry args={[0.9, 12, 12]} />
+            <meshBasicMaterial color="#F59E0B" />
+          </mesh>
+          <Billboard position={[0, 2.6, 0]}>
+            <Text fontSize={2.2} color="#B45309" anchorX="center" anchorY="middle" outlineWidth={0.12} outlineColor="#ffffff">
+              {`${m.hour}시`}
+            </Text>
+          </Billboard>
+        </group>
+      ))}
+      {data.cur && (
+        <group position={data.cur}>
+          <mesh>
+            <sphereGeometry args={[2.6, 20, 20]} />
+            <meshBasicMaterial color="#FFB300" toneMapped={false} />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[4.2, 20, 20]} />
+            <meshBasicMaterial color="#FFD166" transparent opacity={0.28} toneMapped={false} depthWrite={false} />
+          </mesh>
+          <Billboard position={[0, 6.5, 0]}>
+            <Text fontSize={2.6} color="#92400E" anchorX="center" anchorY="middle" outlineWidth={0.14} outlineColor="#ffffff">
+              {`태양 ${data.hourLabel}`}
+            </Text>
+          </Billboard>
+        </group>
+      )}
+    </group>
+  );
+}
+
+/** 📏 치수선 — 양 끝 눈금 + 라벨. flat=true면 라벨을 바닥에 눕힘(남쪽에서 읽는 방향), 아니면 카메라를 향함. */
+function Dimension({
+  from,
+  to,
+  label,
+  tickDir,
+  flat = false,
+  color = "#374151",
+  fontSize = 1.0,
+}: {
+  from: [number, number, number];
+  to: [number, number, number];
+  label: string;
+  tickDir: [number, number, number];
+  flat?: boolean;
+  color?: string;
+  fontSize?: number;
+}) {
+  const A = new THREE.Vector3(...from);
+  const B = new THREE.Vector3(...to);
+  if (A.distanceTo(B) < 0.5) return null;
+  const t = new THREE.Vector3(...tickDir).normalize().multiplyScalar(0.7);
+  const mid = A.clone().add(B).multiplyScalar(0.5);
+  const lab = mid.clone().add(t.clone().multiplyScalar(flat ? 2.2 : 4.5));
+  const arr = (v: THREE.Vector3) => [v.x, v.y, v.z] as [number, number, number];
+  return (
+    <group>
+      <Line points={[arr(A), arr(B)]} color={color} lineWidth={1.1} />
+      <Line points={[arr(A.clone().sub(t)), arr(A.clone().add(t))]} color={color} lineWidth={1.1} />
+      <Line points={[arr(B.clone().sub(t)), arr(B.clone().add(t))]} color={color} lineWidth={1.1} />
+      {flat ? (
+        <Text
+          position={arr(lab)}
+          rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={fontSize}
+          color={color}
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={fontSize * 0.06}
+          outlineColor="#ffffff"
+        >
+          {label}
+        </Text>
+      ) : (
+        <Billboard position={arr(lab)}>
+          <Text fontSize={fontSize} color={color} anchorX="center" anchorY="middle" outlineWidth={fontSize * 0.06} outlineColor="#ffffff">
+            {label}
+          </Text>
+        </Billboard>
+      )}
+    </group>
+  );
+}
+
+/** 층 번호 — 남측면 서쪽 끝, 유리 밴드 아래에 작게. 층이 많으면 간격을 띄운다(항상 최상층 포함). */
+function floorLabelStep(n: number): number {
+  return n <= 12 ? 1 : n <= 30 ? 2 : 5;
+}
+function FloorLabel({ i, x, z, color }: { i: number; x: number; z: number; color: string }) {
+  return (
+    <Text
+      position={[x, i * FLOOR_HEIGHT_M + FLOOR_HEIGHT_M * 0.15, z]}
+      fontSize={0.72}
+      color="#ffffff"
+      anchorX="left"
+      anchorY="middle"
+      outlineWidth={0.05}
+      outlineColor={color}
+    >
+      {`${i + 1}F`}
+    </Text>
+  );
+}
+
+/** 지붕 슬래브 — 최상층 윤곽을 살짝 줄여 어두운 판으로 덮어 매스에 마감감을 준다. */
+function RoofSlab({ pts, y, color }: { pts: Pt[]; y: number; color: string }) {
+  const geom = useMemo(() => {
+    const g = new THREE.ShapeGeometry(shapeFromPts(scalePolygon(pts, 0.965)));
+    g.rotateX(-Math.PI / 2);
+    return g;
+  }, [pts]);
+  return (
+    <mesh geometry={geom} position={[0, y + 0.04, 0]}>
+      <meshStandardMaterial color={darken(color, 0.78)} roughness={0.9} />
+    </mesh>
+  );
+}
+
 function CameraRig({
   preset,
   autoRotate,
@@ -808,6 +1016,11 @@ function BuildingMass({
   const ceilFloors = Math.ceil(floors);
   const boxes: React.ReactNode[] = [];
   const bldCenterZ = offsetZ;
+  const labelStep = floorLabelStep(ceilFloors);
+  let topDepth = bldSide;
+  let topCz = bldCenterZ;
+  let topY = 0;
+  let topSetback = 0;
 
   for (let i = 0; i < ceilFloors; i++) {
     const fH = (i + 1) * FLOOR_HEIGHT_M;
@@ -823,6 +1036,21 @@ function BuildingMass({
     const floorH = FLOOR_HEIGHT_M * portion;
     const y = i * FLOOR_HEIGHT_M + floorH / 2;
     const cz = bldCenterZ + setback / 2;
+    topDepth = depth;
+    topCz = cz;
+    topY = i * FLOOR_HEIGHT_M + floorH;
+    topSetback = setback;
+    if (i % labelStep === 0 || i === ceilFloors - 1) {
+      boxes.push(
+        <FloorLabel
+          key={`fl-${i}`}
+          i={i}
+          x={-bldSide / 2 + 0.9}
+          z={bldCenterZ + bldSide / 2 + 0.14}
+          color={edgeColor}
+        />,
+      );
+    }
 
     // Day 10: 1F + 지상주차 있을 때 → 실내 + 주차 분리 렌더 (남측에 주차)
     const isFloor1Split =
@@ -1011,6 +1239,57 @@ function BuildingMass({
           </mesh>
           <BoxEdges side={[pw, 1.3, pd]} color={edgeColor} />
         </group>,
+      );
+    }
+  }
+
+  // 지붕 슬래브 + 📏 치수선
+  if (floors > 0 && topDepth > 1) {
+    const hM = floors * FLOOR_HEIGHT_M;
+    const southZ = bldCenterZ + bldSide / 2;
+    boxes.push(
+      <mesh key="roof" position={[0, topY + 0.06, topCz]}>
+        <boxGeometry args={[bldSide * 0.965, 0.12, topDepth * 0.965]} />
+        <meshStandardMaterial color={darken(massColor, 0.78)} roughness={0.9} />
+      </mesh>,
+      <Dimension
+        key="dim-w"
+        from={[-bldSide / 2, 0.1, southZ + 2.0]}
+        to={[bldSide / 2, 0.1, southZ + 2.0]}
+        tickDir={[0, 0, 1]}
+        label={`${bldSide.toFixed(1)}m`}
+        flat
+        fontSize={Math.min(1.2, Math.max(0.8, bldSide * 0.06))}
+      />,
+      <Dimension
+        key="dim-d"
+        from={[bldSide / 2 + 2.0, 0.1, southZ]}
+        to={[bldSide / 2 + 2.0, 0.1, southZ - bldSide]}
+        tickDir={[1, 0, 0]}
+        label={`${bldSide.toFixed(1)}m`}
+        flat
+        fontSize={Math.min(1.2, Math.max(0.8, bldSide * 0.06))}
+      />,
+      <Dimension
+        key="dim-h"
+        from={[bldSide / 2 + 0.9, 0, southZ + 0.9]}
+        to={[bldSide / 2 + 0.9, hM, southZ + 0.9]}
+        tickDir={[1, 0, 0]}
+        label={`H ${hM.toFixed(1)}m · ${Math.ceil(floors)}층`}
+        fontSize={Math.min(1.3, Math.max(0.9, hM * 0.05))}
+      />,
+    );
+    if (sunOn && topSetback > 1.5) {
+      boxes.push(
+        <Dimension
+          key="dim-sb"
+          from={[0, topY + 0.5, bldCenterZ - bldSide / 2]}
+          to={[0, topY + 0.5, bldCenterZ - bldSide / 2 + topSetback]}
+          tickDir={[1, 0, 0]}
+          label={`상층부 후퇴 ${topSetback.toFixed(1)}m (h/2-1.5)`}
+          color={DANGER}
+          fontSize={Math.min(1.2, Math.max(0.8, bldSide * 0.05))}
+        />,
       );
     }
   }
@@ -1472,12 +1751,26 @@ function ParcelMass({
 
   const items: React.ReactNode[] = [];
   const ceilFloors = Math.ceil(floors);
+  let topPts: Pt[] = fp;
+  let topY = 0;
+  let topRequired = 0;
+  const labelStep = floorLabelStep(ceilFloors);
   for (let i = 0; i < ceilFloors; i++) {
     const fH = (i + 1) * FLOOR_HEIGHT_M; // 층 상단 높이 기준(층 내 최엄격 지점) — 보수적 근사
     const required = fH <= SUNLIGHT_THRESHOLD_M ? 1.5 : fH / 2;
     const pts = sunOn ? clipPolygonBelowY(fp, northY - required) : fp;
     if (pts.length < 3) break;
     const portion = i + 1 <= floors ? 1 : floors - i;
+    if (portion > 0) {
+      topPts = pts;
+      topY = i * FLOOR_HEIGHT_M + FLOOR_HEIGHT_M * portion;
+      topRequired = sunOn ? required : 0;
+      if (i % labelStep === 0 || i === ceilFloors - 1) {
+        items.push(
+          <FloorLabel key={`fl-${i}`} i={i} x={fpBounds.minX + 0.9} z={-fpBounds.minY + 0.14} color={edgeColor} />,
+        );
+      }
+    }
     if (portion <= 0) break;
     const floorH = FLOOR_HEIGHT_M * portion;
     items.push(
@@ -1561,10 +1854,55 @@ function ParcelMass({
     );
   })();
 
+  const fpW = fpBounds.maxX - fpBounds.minX;
+  const fpD = fpBounds.maxY - fpBounds.minY;
+  const topNorthY = topPts.length >= 3 ? polygonBounds(topPts).maxY : fpBounds.maxY;
+
   return (
     <group>
       {items}
+      {floors > 0 && topPts.length >= 3 && <RoofSlab pts={topPts} y={topY} color={massColor} />}
       {parking}
+      {/* 📏 치수 — 폭·깊이(바닥)·높이(모서리)·정북 이격(최상층) */}
+      {floors > 0 && fpW > 3 && (
+        <Dimension
+          from={[fpBounds.minX, 0.1, -fpBounds.minY + 2.0]}
+          to={[fpBounds.maxX, 0.1, -fpBounds.minY + 2.0]}
+          tickDir={[0, 0, 1]}
+          label={`${fpW.toFixed(1)}m`}
+          flat
+          fontSize={Math.min(1.2, Math.max(0.8, fpW * 0.06))}
+        />
+      )}
+      {floors > 0 && fpD > 3 && (
+        <Dimension
+          from={[fpBounds.maxX + 2.0, 0.1, -fpBounds.minY]}
+          to={[fpBounds.maxX + 2.0, 0.1, -fpBounds.maxY]}
+          tickDir={[1, 0, 0]}
+          label={`${fpD.toFixed(1)}m`}
+          flat
+          fontSize={Math.min(1.2, Math.max(0.8, fpD * 0.06))}
+        />
+      )}
+      {floors > 0 && hM > 2 && (
+        <Dimension
+          from={[fpBounds.maxX + 0.9, 0, -fpBounds.minY + 0.9]}
+          to={[fpBounds.maxX + 0.9, hM, -fpBounds.minY + 0.9]}
+          tickDir={[1, 0, 0]}
+          label={`H ${hM.toFixed(1)}m · ${Math.ceil(floors)}층`}
+          fontSize={Math.min(1.3, Math.max(0.9, hM * 0.05))}
+        />
+      )}
+      {sunOn && floors > 0 && topRequired >= 1.5 && (
+        <Dimension
+          from={[(fpBounds.minX + fpBounds.maxX) / 2, topY + 0.5, -northY]}
+          to={[(fpBounds.minX + fpBounds.maxX) / 2, topY + 0.5, -topNorthY]}
+          tickDir={[1, 0, 0]}
+          label={`정북 이격 ${(northY - topNorthY).toFixed(1)}m (법정 ${topRequired.toFixed(1)}m 이상)`}
+          color={DANGER}
+          fontSize={Math.min(1.2, Math.max(0.8, fpW * 0.05))}
+        />
+      )}
       {sunOn && hM > 0 && (
         <SunlightEnvelopeParcel
           northY={northY}
@@ -1739,7 +2077,9 @@ function Neighborhood({ shape }: { shape: ParcelShape }) {
           castShadow
           receiveShadow
         >
-          <meshStandardMaterial color="#d8d5cc" roughness={0.95} />
+          {/* 플렉시티식 흰색 도시 컨텍스트 — 건물마다 미세한 톤 차 + 연한 외곽선으로 대상 매스(코랄)만 튀게 */}
+          <meshStandardMaterial color={NEIGHBOR_TINTS[i % NEIGHBOR_TINTS.length]} roughness={0.92} />
+          <Edges color="#b9b3a6" threshold={20} />
         </mesh>
       ))}
     </group>
