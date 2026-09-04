@@ -19,6 +19,18 @@ import {
 } from "@/lib/parking-standards";
 import { getUseStyle } from "@/lib/building-use";
 import { SunlightLearnSheet } from "@/components/simulator/SunlightLearnSheet";
+import { lotPyToSqm, buildingFootprintSqm } from "@/lib/calc/coverage";
+import { floorsFromFarAndCov } from "@/lib/calc/far";
+import { actualGfaPrecise } from "@/lib/report/floorTable";
+import {
+  compareRulesByFloor,
+  sunlightLossPct,
+  SUNLIGHT_RULE_META,
+  type SunlightRule,
+} from "@/lib/calc/sunlight";
+import { FLOOR_HEIGHT_M } from "@/lib/constants";
+import { formatArea } from "@/lib/utils/area";
+import type { ParcelShape } from "@/lib/geo/parcel";
 
 const SQM_PER_PYEONG = 3.305785; // 1평 = 3.305785㎡
 
@@ -39,6 +51,9 @@ export function ControlPanel() {
   const setFarPct = useSimulatorStore((s) => s.setFarPct);
   const setRoadM = useSimulatorStore((s) => s.setRoadM);
   const setSunOn = useSimulatorStore((s) => s.setSunOn);
+  const sunlightRule = useSimulatorStore((s) => s.sunlightRule);
+  const setSunlightRule = useSimulatorStore((s) => s.setSunlightRule);
+  const parcelShape = useSimulatorStore((s) => s.parcelShape);
   const setIsCBD = useSimulatorStore((s) => s.setIsCBD);
   const ordinance = useSimulatorStore((s) => s.ordinance);
   const parkingLawdCd = useSimulatorStore((s) => s.parkingLawdCd);
@@ -315,17 +330,214 @@ export function ControlPanel() {
         />
         <span className="text-[11px] text-muted-foreground/80 flex-1">
           {z.sunlight
-            ? "전용·일반주거지역 · 정북방향 (시행령 86조 1항, 2023.9.12 개정 10m 기준)"
+            ? "전용·일반주거지역 · 정북방향 (건축법 61조① — 2026.8.11 개정 · 11.12 시행)"
             : z.code === "junju"
-              ? "준주거지역 · 정북 일조권 미적용 (86조 1항은 전용·일반주거만 — 공동주택 채광기준은 별도)"
+              ? "준주거지역 · 정북 일조권 미적용 (61조①은 전용·일반주거만 — 공동주택 채광기준은 별도)"
               : "전용·일반주거지역 외 · 정북 일조권 사선제한 비적용"}
         </span>
         <SunlightLearnSheet />
       </div>
 
+      {sunOn && z.sunlight && (
+        <SunlightRulePicker
+          rule={sunlightRule}
+          onChange={setSunlightRule}
+          lotPy={lotPy}
+          covPct={covPct}
+          farPct={farPct}
+          parcelShape={parcelShape}
+        />
+      )}
+
       <p className="text-[10px] text-muted-foreground/80 pt-2 border-t border-border/60">
         ⚖️ 출처: 서울특별시 도시계획 조례 (2026 기준) · 검토: 고상철 대표
       </p>
+    </div>
+  );
+}
+
+/**
+ * 일조 규칙 선택 + 개정 전·후 비교 카드.
+ * 원칙은 개정 후(2026.11.12 시행). [개정 전 보기]를 누르면 시뮬레이터 전체(2D·3D·KPI·보고서)가
+ * 개정 전 규칙으로 바뀌고, 아래에 층별 이격·연면적 차이가 나란히 표시된다.
+ */
+function SunlightRulePicker({
+  rule,
+  onChange,
+  lotPy,
+  covPct,
+  farPct,
+  parcelShape,
+}: {
+  rule: SunlightRule;
+  onChange: (r: SunlightRule) => void;
+  lotPy: number;
+  covPct: number;
+  farPct: number;
+  parcelShape: ParcelShape | null;
+}) {
+  const lotSqm = lotPyToSqm(lotPy);
+  const bldArea = buildingFootprintSqm(lotSqm, covPct);
+  const floors = floorsFromFarAndCov(farPct, covPct);
+  const legalGfa = (lotSqm * farPct) / 100;
+  const shape = parcelShape
+    ? { pts: parcelShape.pts, northY: parcelShape.bounds.maxY }
+    : null;
+  const gfa = (r: SunlightRule) =>
+    actualGfaPrecise({
+      bldAreaSqm: bldArea,
+      floors,
+      floorHeightM: FLOOR_HEIGHT_M,
+      sunlightOn: true,
+      shape,
+      rule: r,
+    });
+  const legacyGfa = gfa("legacy");
+  const revisedGfa = gfa("revised");
+  const diff = revisedGfa - legacyGfa;
+  const rows = compareRulesByFloor(floors, FLOOR_HEIGHT_M);
+  const gained = rows.filter((r) => r.gainM > 0.01);
+  const meta = SUNLIGHT_RULE_META[rule];
+
+  return (
+    <div className="rounded-md border border-border bg-card/70 p-2.5 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+          적용 규칙
+        </span>
+        <div className="flex rounded-md border border-border overflow-hidden">
+          {(["revised", "legacy"] as SunlightRule[]).map((r) => {
+            const active = rule === r;
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => onChange(r)}
+                className={`px-2.5 py-1 text-[11.5px] whitespace-nowrap transition ${
+                  active
+                    ? "bg-[var(--info)] text-white font-semibold"
+                    : "bg-background text-muted-foreground hover:bg-secondary"
+                }`}
+              >
+                {r === "revised" ? "개정 후 (원칙)" : "개정 전 보기"}
+              </button>
+            );
+          })}
+        </div>
+        <span className="text-[10.5px] text-muted-foreground/80">
+          {meta.basis} · {meta.effective}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-1.5 text-[10.5px]">
+        {meta.tiers.map((t) => (
+          <div key={t.range} className="rounded bg-secondary/70 px-2 py-1">
+            <div className="text-muted-foreground leading-tight">{t.range}</div>
+            <div className="font-semibold tabular-nums">{t.setback}</div>
+          </div>
+        ))}
+      </div>
+
+      {rule === "legacy" && (
+        <div className="rounded-md border border-[var(--info)]/40 bg-[var(--info-bg)]/60 p-2.5 space-y-2">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-[12px] font-semibold text-[var(--info)] whitespace-nowrap">
+              개정 전 → 후, 무엇이 좋아졌나
+            </span>
+            <span className="text-[10.5px] text-muted-foreground">
+              현재 조건({floors.toFixed(1)}층 · 층고 {FLOOR_HEIGHT_M}m) 기준
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1.5">
+            <div className="rounded bg-background px-2 py-1.5">
+              <div className="text-[10px] text-muted-foreground">개정 전 실제 연면적</div>
+              <div className="text-[12px] font-semibold tabular-nums">{formatArea(legacyGfa, 0)}</div>
+              <div className="text-[10px] text-muted-foreground">
+                손실 {sunlightLossPct(legalGfa, legacyGfa).toFixed(1)}%
+              </div>
+            </div>
+            <div className="rounded bg-background px-2 py-1.5 border border-[var(--info)]/50">
+              <div className="text-[10px] text-muted-foreground">개정 후 실제 연면적</div>
+              <div className="text-[12px] font-semibold tabular-nums text-[var(--info)]">
+                {formatArea(revisedGfa, 0)}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                손실 {sunlightLossPct(legalGfa, revisedGfa).toFixed(1)}%
+              </div>
+            </div>
+            <div className="rounded bg-background px-2 py-1.5">
+              <div className="text-[10px] text-muted-foreground">차이</div>
+              <div
+                className={`text-[12px] font-semibold tabular-nums ${
+                  diff > 0.5 ? "text-[var(--info)]" : ""
+                }`}
+              >
+                {diff >= 0 ? "+" : ""}
+                {Math.round(diff).toLocaleString("ko-KR")}㎡
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {diff >= 0 ? "+" : ""}
+                {(diff / SQM_PER_PYEONG).toFixed(1)}평
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded border border-border bg-background">
+            <table className="w-full text-[10.5px] tabular-nums">
+              <thead className="bg-secondary text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1 text-left font-medium whitespace-nowrap">층</th>
+                  <th className="px-2 py-1 text-right font-medium whitespace-nowrap">상단 높이</th>
+                  <th className="px-2 py-1 text-right font-medium whitespace-nowrap">개정 전 이격</th>
+                  <th className="px-2 py-1 text-right font-medium whitespace-nowrap text-[var(--info)]">개정 후 이격</th>
+                  <th className="px-2 py-1 text-right font-medium whitespace-nowrap">완화</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr
+                    key={r.floor}
+                    className={`border-t border-border ${
+                      r.gainM > 0.01 ? "bg-[var(--info-bg)]/70 font-medium" : ""
+                    }`}
+                  >
+                    <td className="px-2 py-1">{r.floor}F</td>
+                    <td className="px-2 py-1 text-right">{r.heightM.toFixed(1)}m</td>
+                    <td className="px-2 py-1 text-right">{r.legacyM.toFixed(2)}m</td>
+                    <td className="px-2 py-1 text-right">{r.revisedM.toFixed(2)}m</td>
+                    <td className="px-2 py-1 text-right">
+                      {r.gainM > 0.01 ? `−${r.gainM.toFixed(2)}m` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-[10.5px] leading-relaxed text-foreground/85">
+            {gained.length > 0 ? (
+              <>
+                <b>{gained.map((r) => `${r.floor}F`).join("·")}</b> 부분(10~17m 구간)의
+                이격이 <b>5m 고정</b>으로 줄어 북측이 덜 깎입니다. 17m부터는 두 규칙이 같아
+                차이가 없습니다.
+              </>
+            ) : floors * FLOOR_HEIGHT_M <= 10 ? (
+              <>10m 이하 저층이라 두 규칙 모두 1.5m 이격 — 이 규모에선 차이가 없습니다.</>
+            ) : (
+              <>현재 층 구성에는 10~17m 구간 층 상단이 없어 차이가 없습니다.</>
+            )}{" "}
+            시행 전(2026.11.11까지) 접수분은 개정 전 기준으로 심사됩니다.
+          </p>
+          <button
+            type="button"
+            onClick={() => onChange("revised")}
+            className="text-[11px] text-[var(--info)] hover:underline"
+          >
+            ← 개정 후(원칙)로 돌아가기
+          </button>
+        </div>
+      )}
     </div>
   );
 }

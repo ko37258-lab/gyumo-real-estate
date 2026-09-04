@@ -14,7 +14,7 @@ import {
   calculateFloor1Indoor,
   calculateGroundParking,
 } from "@/lib/calc/groundParking";
-import { sunlightLossPct } from "@/lib/calc/sunlight";
+import { sunlightLossPct, compareRulesByFloor } from "@/lib/calc/sunlight";
 import { calculateCost } from "@/lib/calc/cost";
 import { calculateProfit } from "@/lib/calc/profit";
 import { useSimulatorStore } from "@/store/simulator";
@@ -49,10 +49,23 @@ export function buildReportInputs(): ReportInputs {
     floorHeightM: FLOOR_HEIGHT_M,
     sunlightOn: sim.sunOn && z.sunlight,
     shape: shapeForGfa,
+    rule: sim.sunlightRule,
   });
   const lossPct = sim.sunOn && z.sunlight
     ? sunlightLossPct(legalGfa, actualGfa)
     : 0;
+  // 개정 전·후 비교 — 반대 규칙으로 한 번 더 계산해 보고서에 나란히 싣는다.
+  const otherRule = sim.sunlightRule === "revised" ? "legacy" : "revised";
+  const actualGfaOther = actualGfaPrecise({
+    bldAreaSqm: bldArea,
+    floors,
+    floorHeightM: FLOOR_HEIGHT_M,
+    sunlightOn: sim.sunOn && z.sunlight,
+    shape: shapeForGfa,
+    rule: otherRule,
+  });
+  const legacyActualGfa = sim.sunlightRule === "revised" ? actualGfaOther : actualGfa;
+  const revisedActualGfa = sim.sunlightRule === "revised" ? actualGfa : actualGfaOther;
 
   // 주차 대수 — 반올림 전 원값(rawSpaces)도 보고서로 넘긴다.
   //   별표1 비고 6 단서(총 1대 미만 → 0대) 검토에 필요하다.
@@ -107,6 +120,7 @@ export function buildReportInputs(): ReportInputs {
     basementParkingArea: gp.basementSpaces * sim.parkingUnitArea,
     usageLabel: std.label,
     shape: shapeForGfa,
+    rule: sim.sunlightRule,
   });
   // 북측 일조 영향 진단 — 실형상일 때만 (근사 박스 매스로는 위치 의미가 없음)
   let sunlightImpact;
@@ -118,6 +132,7 @@ export function buildReportInputs(): ReportInputs {
         floors,
         floorHeightM: FLOOR_HEIGHT_M,
         sunlightOn: sunlightApplied,
+        rule: sim.sunlightRule,
         latDeg: sim.parcelShape.centerLat,
         lonDeg: sim.parcelShape.centerLon,
       });
@@ -304,6 +319,16 @@ export function buildReportInputs(): ReportInputs {
       legalCovMax: sim.ordinance?.coverRatioMax ?? z.maxCov,
       legalFarMax: sim.ordinance?.floorRatioMax ?? z.farMax,
       sunlightApplied,
+      sunlightRule: sim.sunlightRule,
+      sunlightCompare: sunlightApplied
+        ? {
+            legacyActualFloorArea: legacyActualGfa,
+            revisedActualFloorArea: revisedActualGfa,
+            legacyLoss: sunlightLossPct(legalGfa, legacyActualGfa),
+            revisedLoss: sunlightLossPct(legalGfa, revisedActualGfa),
+            byFloor: compareRulesByFloor(floors, FLOOR_HEIGHT_M),
+          }
+        : undefined,
       usageLabel: std.label,
       parkingBasisLabel,
       floorTable,

@@ -2,14 +2,19 @@
 //
 // 정밀도 2단계:
 //  - shape 제공(실형상): 지적 폴리곤을 건폐율만큼 축소한 footprint를 층별로
-//    정북 경계선 기준 절대 이격(제86조① — 10m 이하 1.5m / 초과 h/2)으로
+//    정북 경계선 기준 절대 이격(requiredSetbackM — 개정 후 3단계 / 개정 전 2단계)으로
 //    클리핑해 면적을 적분한다. 3D ParcelMass와 동일 규칙.
 //  - shape 없음(수동 입력): 정북 깊이 √건축면적 근사(calcActualGfaSqm과 동일).
 //
 // ⚠️ 이 모듈이 유일한 계산원이다 — 화면 KPI(ResultMetrics)·PDF 층별표·
 //    보고서 요약이 전부 여기서 나온 같은 숫자를 써야 한다.
 
-import { SUNLIGHT_THRESHOLD_M } from "@/lib/calc/sunlight";
+import {
+  requiredSetbackM,
+  extraSetbackM,
+  DEFAULT_SUNLIGHT_RULE,
+  type SunlightRule,
+} from "@/lib/calc/sunlight";
 import {
   scalePolygon,
   clipPolygonBelowY,
@@ -55,8 +60,10 @@ export function floorAreas(p: {
   floorHeightM: number;
   sunlightOn: boolean;
   shape?: ShapeForGfa | null;
+  rule?: SunlightRule;
 }): Array<{ floor: number; areaSqm: number; portion: number; legalSetbackM: number }> {
   const { bldAreaSqm, floors, floorHeightM, sunlightOn, shape } = p;
+  const rule = p.rule ?? DEFAULT_SUNLIGHT_RULE;
   const out: Array<{ floor: number; areaSqm: number; portion: number; legalSetbackM: number }> = [];
   const ceil = Math.ceil(floors);
 
@@ -67,7 +74,7 @@ export function floorAreas(p: {
     const fp = scalePolygon(shape.pts, Math.min(1, k));
     for (let i = 0; i < ceil; i++) {
       const fH = (i + 1) * floorHeightM;
-      const req = sunlightOn ? (fH <= SUNLIGHT_THRESHOLD_M ? 1.5 : fH / 2) : 0;
+      const req = sunlightOn ? requiredSetbackM(fH, rule) : 0;
       const pts = req > 0 ? clipPolygonBelowY(fp, shape.northY - req) : fp;
       const portion = Math.min(1, floors - i);
       if (portion <= 0) break;
@@ -82,7 +89,7 @@ export function floorAreas(p: {
   const northDepth = Math.sqrt(Math.max(bldAreaSqm, 0.01));
   for (let i = 0; i < ceil; i++) {
     const fH = (i + 1) * floorHeightM;
-    const extra = sunlightOn && fH > SUNLIGHT_THRESHOLD_M ? fH / 2 - 1.5 : 0;
+    const extra = sunlightOn ? extraSetbackM(fH, rule) : 0;
     const ratio = Math.max(0, (northDepth - extra) / northDepth);
     const portion = Math.min(1, floors - i);
     if (portion <= 0) break;
@@ -90,7 +97,7 @@ export function floorAreas(p: {
       floor: i + 1,
       areaSqm: bldAreaSqm * (sunlightOn ? ratio : 1) * portion,
       portion,
-      legalSetbackM: sunlightOn ? (fH <= SUNLIGHT_THRESHOLD_M ? 1.5 : fH / 2) : 0,
+      legalSetbackM: sunlightOn ? requiredSetbackM(fH, rule) : 0,
     });
   }
   return out;
@@ -111,6 +118,7 @@ export function computeFloorTable(p: {
   basementParkingArea: number;
   usageLabel: string;
   shape?: ShapeForGfa | null;
+  rule?: SunlightRule;
 }): FloorTableResult {
   const areas = floorAreas(p);
   const rows: FloorRow[] = areas.map((a) => {

@@ -9,6 +9,7 @@ import {
 } from "@/lib/parking-standards";
 import { resolveAreaPerSpace } from "@/lib/parking-regions";
 import type { ParkingMode } from "@/lib/calc/parking";
+import { DEFAULT_SUNLIGHT_RULE, type SunlightRule } from "@/lib/calc/sunlight";
 import type { ParcelShape } from "@/lib/geo/parcel";
 import { findOrdinanceLimit, type OrdinanceLimit } from "@/lib/ordinance-db";
 
@@ -39,6 +40,8 @@ type SimulatorState = {
   farPct: number;
   roadM: number;
   sunOn: boolean;
+  /** 정북 일조 규칙 버전 — 원칙은 개정 후(2026.11.12 시행). 개정 전은 비교용 */
+  sunlightRule: SunlightRule;
   /** 서울도심(사대문 안) 특례 적용 — zone.floorRatioCBD 사용 */
   isCBD: boolean;
 
@@ -92,6 +95,7 @@ type SimulatorState = {
   setFarPct: (v: number) => void;
   setRoadM: (v: number) => void;
   setSunOn: (v: boolean) => void;
+  setSunlightRule: (v: SunlightRule) => void;
   setIsCBD: (v: boolean) => void;
 
   setParkingUsage: (code: ParkingUsageCode) => void;
@@ -141,6 +145,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   farPct: ZONES["2il"].defFar,
   roadM: 6,
   sunOn: ZONES["2il"].sunlight,
+  sunlightRule: DEFAULT_SUNLIGHT_RULE,
   isCBD: false,
   ...initialParking,
   capture3D: null,
@@ -213,6 +218,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
     if (Number.isFinite(v)) set({ roadM: v });
   },
   setSunOn: (v) => set({ sunOn: v }),
+  setSunlightRule: (v) => set({ sunlightRule: v }),
   setIsCBD: (v) => set({ isCBD: v }),
 
   // 주차장 — 용도 변경 시 해당 지자체(미조회 시 서울) 기준값으로 user-editable 필드 리셋

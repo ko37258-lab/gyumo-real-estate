@@ -11,7 +11,12 @@ import { ZONES } from "@/lib/zones";
 import { FLOOR_HEIGHT_M } from "@/lib/constants";
 import { buildingFootprintSqm, lotPyToSqm } from "@/lib/calc/coverage";
 import { floorsFromFarAndCov, totalHeightM } from "@/lib/calc/far";
-import { SUNLIGHT_THRESHOLD_M } from "@/lib/calc/sunlight";
+import {
+  requiredSetbackM,
+  envelopeProfile,
+  SUNLIGHT_RULE_META,
+  type SunlightRule,
+} from "@/lib/calc/sunlight";
 import {
   sunPosition,
   sunVector,
@@ -293,6 +298,7 @@ function Scene({
   const farPct = useSimulatorStore((s) => s.farPct);
   const roadM = useSimulatorStore((s) => s.roadM);
   const sunOnRaw = useSimulatorStore((s) => s.sunOn);
+  const sunlightRule = useSimulatorStore((s) => s.sunlightRule);
   const parkingUsage = useSimulatorStore((s) => s.parkingUsage);
   const parkingAreaPerSpace = useSimulatorStore((s) => s.parkingAreaPerSpace);
   const parkingProgressiveSpec = useSimulatorStore(
@@ -571,6 +577,7 @@ function Scene({
           covPct={covPct}
           floors={floors}
           sunOn={sunOn}
+          rule={sunlightRule}
           massColor={useStyle.gradMid}
           glassColor={useStyle.glass}
           edgeColor={useStyle.edge}
@@ -586,6 +593,7 @@ function Scene({
           floors={floors}
           offsetZ={bldOffsetZ}
           sunOn={sunOn}
+          rule={sunlightRule}
           pilotisFloors={pilotisFloors}
           day10ParkingFraction={day10ParkingFraction}
           day10IsPiloti={gp.isReducingFloor1}
@@ -615,6 +623,7 @@ function Scene({
           bldSide={bldSide}
           heightM={heightM}
           offsetZ={bldOffsetZ}
+          rule={sunlightRule}
         />
       )}
 
@@ -1047,6 +1056,7 @@ function BuildingMass({
   floors,
   offsetZ,
   sunOn,
+  rule,
   pilotisFloors,
   day10ParkingFraction,
   day10IsPiloti,
@@ -1061,6 +1071,7 @@ function BuildingMass({
   floors: number;
   offsetZ: number;
   sunOn: boolean;
+  rule: SunlightRule;
   pilotisFloors: number;
   day10ParkingFraction: number;
   day10IsPiloti: boolean;
@@ -1082,9 +1093,8 @@ function BuildingMass({
 
   for (let i = 0; i < ceilFloors; i++) {
     const fH = (i + 1) * FLOOR_HEIGHT_M;
-    let setback = 0;
-    if (sunOn && fH > SUNLIGHT_THRESHOLD_M) setback = fH / 2 - 1.5;
-    else if (sunOn) setback = 1.5;
+    // 박스 북측 변 = 정북 인접 대지경계선. 층 상단 높이 기준 절대 이격만큼 깎는다.
+    const setback = sunOn ? requiredSetbackM(fH, rule) : 0;
 
     const depth = Math.max(0, bldSide - setback);
     if (depth <= 0) continue;
@@ -1281,9 +1291,7 @@ function BuildingMass({
   // 옥탑 (2층 이상일 때)
   if (floors >= 2) {
     const hM = floors * FLOOR_HEIGHT_M;
-    let sb = 0;
-    if (sunOn && hM > SUNLIGHT_THRESHOLD_M) sb = hM / 2 - 1.5;
-    else if (sunOn) sb = 1.5;
+    const sb = sunOn ? requiredSetbackM(hM, rule) : 0;
     const depthTop = Math.max(0, bldSide - sb);
     if (depthTop > 3) {
       const czTop = bldCenterZ + sb / 2;
@@ -1403,75 +1411,138 @@ function SunlightEnvelope({
   bldSide,
   heightM,
   offsetZ,
+  rule,
 }: {
   bldSide: number;
   heightM: number;
   offsetZ: number;
+  rule: SunlightRule;
 }) {
-  // 정북 쪽 envelope: 지면(0~10m)은 1.5m 수직, 10m 위는 비스듬히 멀어짐.
-  // 평면을 두 개 plane으로 나눠서 그리는 게 정확하지만 단순화하여 사선 부분만 그림.
-  const half = bldSide / 2;
-  const baseZ = -bldSide / 2 + offsetZ + 1.5;
-  const topZ = -bldSide / 2 + offsetZ + 1.5 + Math.max(0, (heightM - SUNLIGHT_THRESHOLD_M) / 2);
+  // 박스 북측 변(z = -bldSide/2 + offsetZ)이 정북 인접 대지경계선.
+  // envelopeProfile이 주는 (경계선 거리 d, 허용 높이 h) 꼭짓점을 그대로 면으로 잇는다.
+  const northZ = -bldSide / 2 + offsetZ;
+  return (
+    <EnvelopeSurfaces
+      width={bldSide * 0.95}
+      cx={0}
+      northZ={northZ}
+      topH={heightM}
+      rule={rule}
+    />
+  );
+}
 
-  const bottomY = Math.min(heightM, SUNLIGHT_THRESHOLD_M);
-  // 두 사각형:
-  // 1) 수직 부분: y=0 to bottomY, z=baseZ
-  // 2) 사선 부분: y=bottomY to heightM, z=baseZ to topZ
+/**
+ * 정북 일조 envelope 공통 렌더러 — 박스 매스·실형상 매스가 같은 계단 모양을 그린다.
+ *   z = northZ + d  (경계선에서 남쪽으로 d만큼)
+ *   수직 구간(d 동일) → planeGeometry, 수평 구간(h 동일) → 눕힌 plane, 사선 → TiltedPlane
+ */
+function EnvelopeSurfaces({
+  width,
+  cx,
+  northZ,
+  topH,
+  rule,
+  label = true,
+}: {
+  width: number;
+  cx: number;
+  northZ: number;
+  topH: number;
+  rule: SunlightRule;
+  label?: boolean;
+}) {
+  const prof = envelopeProfile(topH, rule);
+  const mat = (
+    <meshBasicMaterial
+      color={DANGER}
+      transparent
+      opacity={0.14}
+      side={THREE.DoubleSide}
+      depthWrite={false}
+    />
+  );
+  const segs: React.ReactNode[] = [];
+  for (let i = 0; i < prof.length - 1; i++) {
+    const a = prof[i];
+    const b = prof[i + 1];
+    const za = northZ + a.d;
+    const zb = northZ + b.d;
+    if (Math.abs(a.d - b.d) < 1e-6 && b.h > a.h) {
+      // 수직면
+      segs.push(
+        <mesh key={i} position={[cx, (a.h + b.h) / 2, za]}>
+          <planeGeometry args={[width, b.h - a.h]} />
+          {mat}
+        </mesh>,
+      );
+    } else if (Math.abs(a.h - b.h) < 1e-6 && b.d > a.d) {
+      // 수평 캡
+      segs.push(
+        <mesh
+          key={i}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[cx, a.h, (za + zb) / 2]}
+        >
+          <planeGeometry args={[width, zb - za]} />
+          {mat}
+        </mesh>,
+      );
+    } else if (b.h > a.h) {
+      segs.push(
+        <group key={i} position={[cx, 0, 0]}>
+          <TiltedPlane width={width} fromY={a.h} toY={b.h} fromZ={za} toZ={zb} />
+        </group>,
+      );
+    }
+  }
+  const outline = prof.map(
+    (p) => [0, p.h, northZ + p.d] as [number, number, number],
+  );
+  const half = width / 2;
+  const meta = SUNLIGHT_RULE_META[rule];
   return (
     <group>
-      {/* 수직 사선면 */}
-      {bottomY > 0 && (
-        <mesh position={[0, bottomY / 2, baseZ]}>
-          <planeGeometry args={[bldSide * 0.95, bottomY]} />
-          <meshBasicMaterial
-            color={DANGER}
-            transparent
-            opacity={0.15}
-            side={THREE.DoubleSide}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
-      {/* 기울어진 부분 */}
-      {heightM > SUNLIGHT_THRESHOLD_M && (
-        <TiltedPlane
-          width={bldSide * 0.95}
-          fromY={SUNLIGHT_THRESHOLD_M}
-          toY={heightM}
-          fromZ={baseZ}
-          toZ={topZ}
+      {segs}
+      {[-half, half].map((x) => (
+        <Line
+          key={x}
+          points={outline.map(([, y, z]) => [cx + x, y, z] as [number, number, number])}
+          color={DANGER}
+          lineWidth={1.6}
+          dashed
+          dashSize={0.5}
+          gapSize={0.3}
         />
+      ))}
+      {label && (
+        <Html
+          position={[cx, Math.min(topH, 10) + 1.2, northZ + 1.5]}
+          center
+          distanceFactor={40}
+          style={{ pointerEvents: "none" }}
+        >
+          <div
+            style={{
+              background: "rgba(255,255,255,0.9)",
+              border: `1px solid ${DANGER}`,
+              borderRadius: 4,
+              padding: "1px 6px",
+              fontSize: 10,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              color: DANGER,
+            }}
+          >
+            {rule === "revised"
+              ? "일조 · 10m↓1.5m / 17m↓5m / 초과 h½"
+              : "일조(개정 전) · 10m↓1.5m / 초과 h½"}
+            <span style={{ fontWeight: 400, marginLeft: 4, opacity: 0.8 }}>
+              {meta.short}
+            </span>
+          </div>
+        </Html>
       )}
-      {/* 경계 라인 */}
-      <Line
-        points={[
-          [-half * 0.95, 0, baseZ],
-          [-half * 0.95, bottomY, baseZ],
-          ...(heightM > SUNLIGHT_THRESHOLD_M
-            ? ([[-half * 0.95, heightM, topZ]] as [number, number, number][])
-            : []),
-        ]}
-        color={DANGER}
-        lineWidth={1.8}
-        dashed
-        dashSize={0.5}
-        gapSize={0.3}
-      />
-      <Line
-        points={[
-          [half * 0.95, 0, baseZ],
-          [half * 0.95, bottomY, baseZ],
-          ...(heightM > SUNLIGHT_THRESHOLD_M
-            ? ([[half * 0.95, heightM, topZ]] as [number, number, number][])
-            : []),
-        ]}
-        color={DANGER}
-        lineWidth={1.8}
-        dashed
-        dashSize={0.5}
-        gapSize={0.3}
-      />
     </group>
   );
 }
@@ -1769,6 +1840,7 @@ function ParcelMass({
   covPct,
   floors,
   sunOn,
+  rule,
   massColor,
   glassColor,
   edgeColor,
@@ -1782,6 +1854,7 @@ function ParcelMass({
   covPct: number;
   floors: number;
   sunOn: boolean;
+  rule: SunlightRule;
   massColor: string;
   glassColor: string;
   edgeColor: string;
@@ -1819,7 +1892,7 @@ function ParcelMass({
   const labelRot = se ? se.rotY : 0;
   for (let i = 0; i < ceilFloors; i++) {
     const fH = (i + 1) * FLOOR_HEIGHT_M; // 층 상단 높이 기준(층 내 최엄격 지점) — 보수적 근사
-    const required = fH <= SUNLIGHT_THRESHOLD_M ? 1.5 : fH / 2;
+    const required = requiredSetbackM(fH, rule);
     const pts = sunOn ? clipPolygonBelowY(fp, northY - required) : fp;
     if (pts.length < 3) break;
     const portion = i + 1 <= floors ? 1 : floors - i;
@@ -1972,6 +2045,7 @@ function ParcelMass({
           xMin={fpBounds.minX}
           xMax={fpBounds.maxX}
           massH={hM}
+          rule={rule}
         />
       )}
       {floors > 0 && (
@@ -2274,99 +2348,22 @@ function SunlightEnvelopeParcel({
   xMin,
   xMax,
   massH,
+  rule,
 }: {
   northY: number;
   minY: number;
   xMin: number;
   xMax: number;
   massH: number;
+  rule: SunlightRule;
 }) {
   const width = Math.max(2, (xMax - xMin) * 0.98);
   const cx = (xMin + xMax) / 2;
-  const topH = Math.max(massH + FLOOR_HEIGHT_M, SUNLIGHT_THRESHOLD_M);
-  const vertH = Math.min(SUNLIGHT_THRESHOLD_M, topH);
-  const zWall = -(northY - 1.5); // 수직 한계면 (경계선에서 1.5m)
-  const zKnee = -(northY - SUNLIGHT_THRESHOLD_M / 2); // 사선 시작점 (10m 높이 → 5m 이격)
-  const slantDepth = Math.min(topH / 2, northY - minY + 6); // 사선 끝 이격 (필지 깊이 넘게 그리지 않음)
-  const zTop = -(northY - slantDepth);
-  const slantTopH = slantDepth * 2;
-
-  const mat = (
-    <meshBasicMaterial
-      color={DANGER}
-      transparent
-      opacity={0.13}
-      side={THREE.DoubleSide}
-      depthWrite={false}
-    />
-  );
-
+  // 사선 끝을 필지 깊이 너머로 그리지 않게 상한 — 이격 d ≤ (필지 깊이 + 6m) → 높이 2d
+  const maxDepth = northY - minY + 6;
+  const topH = Math.min(Math.max(massH + FLOOR_HEIGHT_M, 10), maxDepth * 2);
+  // 로컬 y(북+) → three z(남+): z = -y. 경계선 z = -northY.
   return (
-    <group>
-      {/* ① 수직면 (0→10m, 경계선-1.5m) */}
-      <mesh position={[cx, vertH / 2, zWall]}>
-        <planeGeometry args={[width, vertH]} />
-        {mat}
-      </mesh>
-      {topH > SUNLIGHT_THRESHOLD_M && (
-        <>
-          {/* ② 10m 수평 캡 (1.5m→5m) */}
-          <mesh
-            rotation={[-Math.PI / 2, 0, 0]}
-            position={[cx, SUNLIGHT_THRESHOLD_M, (zWall + zKnee) / 2]}
-          >
-            <planeGeometry args={[width, Math.abs(zKnee - zWall)]} />
-            {mat}
-          </mesh>
-          {/* ③ 사선면 h=2d */}
-          <TiltedPlane
-            width={width}
-            fromY={SUNLIGHT_THRESHOLD_M}
-            toY={slantTopH}
-            fromZ={zKnee}
-            toZ={zTop}
-          />
-        </>
-      )}
-      {/* 경계 윤곽선 (남쪽에서 봤을 때 계단 규칙이 읽히게) */}
-      <Line
-        points={[
-          [cx - width / 2, 0, zWall],
-          [cx - width / 2, vertH, zWall],
-          ...(topH > SUNLIGHT_THRESHOLD_M
-            ? ([
-                [cx - width / 2, SUNLIGHT_THRESHOLD_M, zKnee],
-                [cx - width / 2, slantTopH, zTop],
-              ] as [number, number, number][])
-            : []),
-        ]}
-        color={DANGER}
-        lineWidth={1.6}
-        dashed
-        dashSize={0.5}
-        gapSize={0.3}
-      />
-      <Html
-        position={[cx, Math.min(topH, SUNLIGHT_THRESHOLD_M) + 1.2, zWall]}
-        center
-        distanceFactor={40}
-        style={{ pointerEvents: "none" }}
-      >
-        <div
-          style={{
-            background: "rgba(255,255,255,0.9)",
-            border: `1px solid ${DANGER}`,
-            borderRadius: 4,
-            padding: "1px 6px",
-            fontSize: 10,
-            fontWeight: 700,
-            whiteSpace: "nowrap",
-            color: DANGER,
-          }}
-        >
-          일조사선 · 10m↓ 1.5m / 초과 h½ (조례 확인)
-        </div>
-      </Html>
-    </group>
+    <EnvelopeSurfaces width={width} cx={cx} northZ={-northY} topH={topH} rule={rule} />
   );
 }

@@ -35,10 +35,10 @@ export function SunlightLearnSheet() {
           </div>
           <SheetTitle>일조권 사선제한 · 한 시간 강의 요약</SheetTitle>
           <SheetDescription>
-            2023.9.12 개정으로 기준점이 9m → 10m로 상향됐습니다. 디벨로퍼·중개사·
-            수험생을 위한 핵심 정리. 모든 인용은 헌법 35조 환경권부터 건축법
-            시행령 86조까지의 실정법 기준이며, 실제 인허가 시 해당 지자체
-            확인이 필수입니다.
+            2026.8.11 건축법 개정(11.12 시행)으로 이격 기준이 법률 본문 3단계로
+            바뀌었습니다 — 10~17m 구간이 5m 고정. 디벨로퍼·중개사·수험생을 위한
+            핵심 정리. 모든 인용은 헌법 35조 환경권부터 건축법 61조·시행령 86조까지의
+            실정법 기준이며, 실제 인허가 시 해당 지자체 확인이 필수입니다.
           </SheetDescription>
         </SheetHeader>
 
@@ -81,6 +81,75 @@ export function SunlightLearnSheet() {
 
           <Section
             num={2}
+            title="2026.8.11 개정 — 10~17m 구간 5m 고정 (11.12 시행)"
+            summary="이격 기준이 시행령 → 법률 본문으로. 4~5층 구간이 가장 크게 풀렸다."
+          >
+            <p>
+              <b>2026년 8월 11일 공포 · 11월 12일 시행</b> 건축법 개정으로 정북
+              일조 이격 기준이 시행령 제86조에서 <b>법 제61조 제1항 본문</b>으로
+              올라오면서 <b>3단계</b>로 재편됐습니다. 핵심은 새로 생긴 가운데
+              구간입니다.
+            </p>
+            <div className="mt-3 rounded-md border border-border bg-card overflow-hidden">
+              <table className="w-full text-[12px]">
+                <thead className="bg-secondary text-muted-foreground">
+                  <tr>
+                    <th className="text-left px-2.5 py-1.5 font-medium">높이 구간</th>
+                    <th className="text-left px-2.5 py-1.5 font-medium">개정 전</th>
+                    <th className="text-left px-2.5 py-1.5 font-medium text-[var(--info)]">개정 후</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-border">
+                    <td className="px-2.5 py-1.5">10m 이하</td>
+                    <td className="px-2.5 py-1.5 tabular-nums">1.5m</td>
+                    <td className="px-2.5 py-1.5 tabular-nums">1.5m (동일)</td>
+                  </tr>
+                  <tr className="border-t border-border bg-[var(--info-bg)]/50">
+                    <td className="px-2.5 py-1.5">10m 초과 ~ 17m 이하</td>
+                    <td className="px-2.5 py-1.5 tabular-nums">높이의 ½ (5~8.5m)</td>
+                    <td className="px-2.5 py-1.5 tabular-nums font-semibold text-[var(--info)]">5m 고정 ← 신설</td>
+                  </tr>
+                  <tr className="border-t border-border">
+                    <td className="px-2.5 py-1.5">17m 초과</td>
+                    <td className="px-2.5 py-1.5 tabular-nums">높이의 ½</td>
+                    <td className="px-2.5 py-1.5 tabular-nums">높이의 ½ (동일)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <ul className="mt-3 space-y-1.5">
+              <li>
+                · <b>무엇이 좋아졌나</b> — 층고 3.5m 기준 <b>3층(10.5m)·4층(14m)</b> 부분이
+                개정 전 5.25m·7m 이격에서 <b>5m</b>로 줄어듭니다. 5층(17.5m)부터는
+                17/2 = 8.5m로 두 규칙이 만나 차이가 사라집니다. 즉 <b>4~5층 규모의
+                다세대·다가구·근생</b>이 가장 큰 수혜입니다.
+              </li>
+              <li>
+                · <b>나빠지는 경우는 없음</b> — 모든 높이에서 개정 후 이격은 개정 전과
+                같거나 작습니다. 시뮬레이터의 [개정 전 보기]로 층별 차이를 바로
+                확인할 수 있습니다.
+              </li>
+              <li>
+                · <b>적용 제외의 법률 승격</b> — 정북 인접대지가 전용·일반주거지역이
+                아니면 적용하지 않는다는 규정이 법 단서로 올라왔습니다(그 밖의
+                제외는 대통령령 위임 유지).
+              </li>
+              <li>
+                · <b>조례 위임은 그대로</b> — 「다음 범위에서 조례로 정하는 거리
+                이상」이므로 지자체 건축조례가 1.5m·5m보다 크게 둘 수 있습니다.
+                서울 등 조례 개정 여부를 반드시 확인하세요.
+              </li>
+            </ul>
+            <p className="mt-2 text-[12px] text-muted-foreground/90">
+              시행일 전(2026.11.11까지) 접수되는 인허가는 개정 전 기준입니다. 이
+              시뮬레이터는 개정 후를 원칙으로 계산하고, 개정 전은 비교용으로
+              함께 보여줍니다.
+            </p>
+          </Section>
+
+          <Section
+            num={3}
             title="2023.9.12 개정 — 9m에서 10m로"
             summary="저층부 1.5m 이격 기준이 9m → 10m로 상향. 사실상 3층까지 자유."
           >
@@ -112,9 +181,9 @@ export function SunlightLearnSheet() {
           </Section>
 
           <Section
-            num={3}
-            title="정북방향 일조권 (86조 1항)"
-            summary="전용·일반주거지역만 적용. 10m 단계별 이격."
+            num={4}
+            title="정북방향 일조권 (법 61조 1항 · 영 86조)"
+            summary="전용·일반주거지역만 적용. 10m·17m 3단계 이격 (법 61조①)."
           >
             <p>
               가장 자주 만나는 규제. <b>전용주거지역</b>과{" "}
@@ -139,7 +208,11 @@ export function SunlightLearnSheet() {
                     <td className="px-2.5 py-1.5 tabular-nums">1.5m 이상</td>
                   </tr>
                   <tr className="border-t border-border">
-                    <td className="px-2.5 py-1.5">10m 초과</td>
+                    <td className="px-2.5 py-1.5">10m 초과 ~ 17m 이하</td>
+                    <td className="px-2.5 py-1.5 tabular-nums">5m 이상 (2026.11.12 시행)</td>
+                  </tr>
+                  <tr className="border-t border-border">
+                    <td className="px-2.5 py-1.5">17m 초과</td>
                     <td className="px-2.5 py-1.5 tabular-nums">
                       해당 부분 높이의 1/2 이상
                     </td>
@@ -148,14 +221,14 @@ export function SunlightLearnSheet() {
               </table>
             </div>
             <p className="mt-2">
-              예시: 4층 14m 건물의 4층 부분은 14m의 1/2 = 7m, 거기서 1.5m를 뺀
-              5.5m 이상 이격이 필요합니다. (정확히는 해당 부분 높이의 1/2 이상.
-              조례에 따라 −1.5 보정 인정 방식 차이 있음)
+              예시: 4층 14m 건물의 4층 부분은 개정 전엔 14m의 1/2 = 7m 이격이
+              필요했지만, 개정 후엔 10~17m 구간이라 <b>5m</b>면 됩니다. 6층 21m
+              부분은 두 규칙 모두 21/2 = 10.5m 이상입니다.
             </p>
           </Section>
 
           <Section
-            num={4}
+            num={5}
             title="채광방향 일조권 (86조 3항) — 공동주택 전용"
             summary="동간 이격(인동거리). 채광창에서 경계선까지 2배(준주거·근린상업은 4배)."
           >
@@ -189,7 +262,7 @@ export function SunlightLearnSheet() {
           </Section>
 
           <Section
-            num={5}
+            num={6}
             title="적용 제외 (86조 2항)"
             summary="도로·공원·철도 인접, 정북 인접대지가 비주거, 너비 2m 이하."
           >
@@ -223,7 +296,7 @@ export function SunlightLearnSheet() {
           </Section>
 
           <Section
-            num={6}
+            num={7}
             title="정남방향 특례 (86조 4항)"
             summary="택지개발지구·대지조성사업지구 등 일률 적용 단지에서 가능."
           >
@@ -247,7 +320,7 @@ export function SunlightLearnSheet() {
           </Section>
 
           <Section
-            num={7}
+            num={8}
             title="실무 팁 — 사업성에 미치는 영향"
             summary="좁고 깊은 부지에 치명적. 회전배치·인접대지 확보·사전협의로 완화."
           >
@@ -280,7 +353,7 @@ export function SunlightLearnSheet() {
           </Section>
 
           <Section
-            num={8}
+            num={9}
             title="자주 묻는 질문 + 법령 원문"
             summary="개정 적용일·조례 강화·민사 손해배상 등."
           >

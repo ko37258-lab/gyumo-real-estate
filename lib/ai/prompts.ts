@@ -71,7 +71,8 @@ export function buildUserPrompt(input: ReportInputs): string {
 - 필로티 적용: ${s.isReducingFloor1 ? "예 (연면적에서 " + formatArea(s.groundParkingArea) + " 추가 제외, 시행령 119조 1항 4호)" : "아니오"}
 - 법정 연면적: ${formatArea(s.legalFloorArea)}
 - 실제 가능 연면적(일조권 반영): ${formatArea(s.actualFloorArea)}
-- 일조권 손실: ${s.sunlightLoss.toFixed(1)}%
+- 일조권 손실: ${s.sunlightLoss.toFixed(1)}%${s.sunlightApplied ? `
+- 일조 규칙: ${s.sunlightRule === "legacy" ? "개정 전 (시행령 86조① — 10m 이하 1.5m / 초과 h/2)" : "개정 후 (건축법 61조① 2026.8.11 개정·11.12 시행 — 10m 이하 1.5m / 10~17m 5m 고정 / 17m 초과 h/2)"}${s.sunlightCompare ? ` · 개정 전 ${formatArea(s.sunlightCompare.legacyActualFloorArea)} → 개정 후 ${formatArea(s.sunlightCompare.revisedActualFloorArea)} (${(s.sunlightCompare.revisedActualFloorArea - s.sunlightCompare.legacyActualFloorArea) >= 0 ? "+" : ""}${Math.round(s.sunlightCompare.revisedActualFloorArea - s.sunlightCompare.legacyActualFloorArea)}㎡)` : ""}` : ""}
 - 주차 배치: ${placement[s.parkingPlacement] ?? s.parkingPlacement} (지상 ${s.groundSpaces}대 + 지하 ${s.basementSpaces}대, 총 ${s.parkingSpaces}대)
 
 [비용·부담금]

@@ -6,7 +6,7 @@ import { ZONES } from "@/lib/zones";
 import { FLOOR_HEIGHT_M, PY_TO_SQM } from "@/lib/constants";
 import { buildingFootprintSqm, lotPyToSqm } from "@/lib/calc/coverage";
 import { floorsFromFarAndCov, totalHeightM } from "@/lib/calc/far";
-import { SUNLIGHT_THRESHOLD_M } from "@/lib/calc/sunlight";
+import { requiredSetbackM, extraSetbackM, envelopeProfile } from "@/lib/calc/sunlight";
 import {
   calcArea,
   calcProgressive,
@@ -227,6 +227,7 @@ export function ScaleVisualizer() {
   const farPct = useSimulatorStore((s) => s.farPct);
   const roadM = useSimulatorStore((s) => s.roadM);
   const sunOnRaw = useSimulatorStore((s) => s.sunOn);
+  const sunlightRule = useSimulatorStore((s) => s.sunlightRule);
   const parkingUsage = useSimulatorStore((s) => s.parkingUsage);
   const parkingAreaPerSpace = useSimulatorStore((s) => s.parkingAreaPerSpace);
   const parkingProgressiveSpec = useSimulatorStore(
@@ -312,8 +313,7 @@ export function ScaleVisualizer() {
 
   const planSunlight = (() => {
     if (!sunOn) return null;
-    const maxSetback =
-      heightM <= SUNLIGHT_THRESHOLD_M ? 1.5 : heightM / 2 - 1.5;
+    const maxSetback = extraSetbackM(heightM, sunlightRule) || 1.5;
     const setbackPx = (maxSetback / Math.sqrt(lotSqm)) * lotPx;
     const limitY = ly + Math.min(setbackPx, lotPx * 0.3);
     return { maxSetback, limitY };
@@ -402,16 +402,17 @@ export function ScaleVisualizer() {
   const elevSunPath = (() => {
     if (!sunOn) return null;
     const sb15 = 1.5 * mPx;
-    const h10px = SUNLIGHT_THRESHOLD_M * mPx;
-    const sunStartY = baseY;
-    const sunV1Y = baseY - h10px;
     const topY = baseY - heightM * mPx;
-    let path = `M ${eBldL + sb15} ${sunStartY} L ${eBldL + sb15} ${sunV1Y}`;
-    if (heightM > SUNLIGHT_THRESHOLD_M) {
-      const extraH = heightM - SUNLIGHT_THRESHOLD_M;
-      const sb2 = extraH * 0.5 * mPx;
-      path += ` L ${eBldL + sb15 + sb2} ${topY}`;
-    }
+    // 정북 단면 envelope — 개정 전·후 계단 규칙을 한 함수(envelopeProfile)로 그린다.
+    //   x = 북측 벽(eBldL) + d·mPx  (경계선이 eBldL이고 벽은 1.5m 안쪽이라는 기존 도면 가정)
+    const prof = envelopeProfile(heightM, sunlightRule);
+    const path = prof
+      .map((p, i) => {
+        const x = eBldL + p.d * mPx;
+        const y = baseY - p.h * mPx;
+        return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+      })
+      .join(" ");
     return { d: path, sb15, topY };
   })();
 
@@ -419,9 +420,8 @@ export function ScaleVisualizer() {
   const ceilFloors = Math.ceil(floors);
   for (let i = 0; i < ceilFloors; i++) {
     const fH = (i + 1) * FLOOR_HEIGHT_M;
-    let setbackPx = 0;
-    if (sunOn && fH > SUNLIGHT_THRESHOLD_M) setbackPx = (fH / 2 - 1.5) * mPx;
-    else if (sunOn) setbackPx = 1.5 * mPx;
+    // 층 상단 높이 기준 절대 이격(1.5m 포함)을 px로 — 2D 입면은 경계선을 eBldL에 둔다
+    const setbackPx = sunOn ? requiredSetbackM(fH, sunlightRule) * mPx : 0;
     const fL = sunOn ? eBldL + setbackPx : eBldL;
     let fW = eBldR - fL;
     if (fW < 0) fW = 0;

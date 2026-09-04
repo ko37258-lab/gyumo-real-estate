@@ -123,6 +123,22 @@ export interface ReportInputs {
     legalFarMax?: number;
     /** 정북 일조 높이제한 적용 여부 (전용·일반주거 + 토글 ON) */
     sunlightApplied?: boolean;
+    /** 적용한 일조 규칙 — revised(2026.11.12 시행 개정 후) / legacy(개정 전) */
+    sunlightRule?: "revised" | "legacy";
+    /** 개정 전·후 비교 (일조 적용 시) */
+    sunlightCompare?: {
+      legacyActualFloorArea: number;
+      revisedActualFloorArea: number;
+      legacyLoss: number;
+      revisedLoss: number;
+      byFloor: Array<{
+        floor: number;
+        heightM: number;
+        legacyM: number;
+        revisedM: number;
+        gainM: number;
+      }>;
+    };
     /** 건축물 용도 라벨 (주차 기준 용도) */
     usageLabel?: string;
     /** 부설주차장 산정 근거 문구 */

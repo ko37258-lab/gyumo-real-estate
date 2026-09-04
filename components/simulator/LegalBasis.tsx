@@ -20,7 +20,7 @@ export function LegalBasis() {
         <li>
           · 일조권 사선제한 —{" "}
           <code className="bg-secondary px-1 py-px rounded text-[10px]">
-            건축법 제61조 + 시행령 제86조 (2023.9.12 개정, 10m 기준)
+            건축법 제61조① (2026.8.11 개정 · 11.12 시행 — 10m↓1.5m · 17m↓5m · 초과 h/2)
           </code>
         </li>
         <li>

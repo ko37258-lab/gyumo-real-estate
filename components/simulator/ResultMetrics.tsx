@@ -78,6 +78,7 @@ export function ResultMetrics() {
   const parkingUnitArea = useSimulatorStore((s) => s.parkingUnitArea);
   const parkingPilotiMode = useSimulatorStore((s) => s.parkingPilotiMode);
   const parcelShape = useSimulatorStore((s) => s.parcelShape);
+  const sunlightRule = useSimulatorStore((s) => s.sunlightRule);
 
   const z = ZONES[zone];
   const lotSqm = lotPyToSqm(lotPy);
@@ -95,6 +96,7 @@ export function ResultMetrics() {
     shape: parcelShape
       ? { pts: parcelShape.pts, northY: parcelShape.bounds.maxY }
       : null,
+    rule: sunlightRule,
   });
   const loss = sunlightLossPct(gfa, actualGfa);
 

@@ -12,7 +12,11 @@
 // 균시차 생략(±15분). 인허가·소송 판단이 아니라 계획 참고용.
 
 import { sunPosition } from "@/lib/calc/sunPosition";
-import { SUNLIGHT_THRESHOLD_M } from "@/lib/calc/sunlight";
+import {
+  requiredSetbackM,
+  DEFAULT_SUNLIGHT_RULE,
+  type SunlightRule,
+} from "@/lib/calc/sunlight";
 import {
   scalePolygon,
   clipPolygonBelowY,
@@ -51,8 +55,10 @@ export function checkNorthSunlight(p: {
   sunlightOn: boolean;
   latDeg: number;
   lonDeg: number;
+  rule?: SunlightRule;
 }): SunImpactResult {
   const { shape, bldAreaSqm, floors, floorHeightM, sunlightOn, latDeg, lonDeg } = p;
+  const rule = p.rule ?? DEFAULT_SUNLIGHT_RULE;
 
   // ── 층별 프리즘 (floorAreas 실형상 분기와 동일 규칙) ──
   const shapeArea = polygonArea(shape.pts);
@@ -62,7 +68,7 @@ export function checkNorthSunlight(p: {
   const ceil = Math.ceil(floors);
   for (let i = 0; i < ceil; i++) {
     const fH = (i + 1) * floorHeightM;
-    const req = sunlightOn ? (fH <= SUNLIGHT_THRESHOLD_M ? 1.5 : fH / 2) : 0;
+    const req = sunlightOn ? requiredSetbackM(fH, rule) : 0;
     const poly = req > 0 ? clipPolygonBelowY(fp, shape.northY - req) : fp;
     if (poly.length < 3) break;
     const portion = Math.min(1, floors - i);
