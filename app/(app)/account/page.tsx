@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
 import { saveProfileInfoForm } from "@/app/actions/profile";
 import { PROFILE_BONUS_CREDITS } from "@/lib/credits";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import Link from "next/link";
 
 export const metadata = { title: "마이페이지 | 규모검토" };
@@ -43,6 +44,28 @@ export default async function AccountPage({
   // 구글 가입자는 가입 폼을 거치지 않아 이름·전화가 비어 있다 — 채우면 3크레딧.
   const isGoogle = (user.app_metadata as { provider?: string } | null)?.provider === "google";
   const infoMissing = !(profile?.full_name ?? "").trim() || !(profile?.phone ?? "").trim();
+
+  // 같은 전화번호·이름으로 묶인 계정 — 크레딧을 함께 쓴다 (gyumo_linked_user_ids, 본인 포함).
+  // 다른 계정의 이메일은 RLS 상 본인 클라이언트로 못 읽으므로 서버 키로 조회한다.
+  let linkedAccounts: { email: string; created_at: string | null }[] = [];
+  try {
+    const { data: ids } = await supabase.rpc("gyumo_linked_user_ids", { p_user: user.id });
+    const otherIds = ((ids ?? []) as string[]).filter((id) => id !== user.id);
+    if (otherIds.length > 0 && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const svc = createServiceClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        { auth: { autoRefreshToken: false, persistSession: false } },
+      );
+      const { data: rows } = await svc
+        .from("gyumo_profiles")
+        .select("email, created_at")
+        .in("id", otherIds);
+      linkedAccounts = rows ?? [];
+    }
+  } catch {
+    /* RPC 미배포(마이그레이션 전)면 연결 계정 카드만 생략 */
+  }
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
@@ -102,10 +125,10 @@ export default async function AccountPage({
               background: "var(--card)",
               borderColor: isGoogle ? "rgba(255,207,13,0.55)" : "var(--border)",
             }}>
-            <h2 className="font-semibold mb-1">이름·전화번호를 알려주세요</h2>
+            <h2 className="font-semibold mb-1">{isGoogle ? "자기이름 등록" : "이름·전화번호를 알려주세요"}</h2>
             <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
               {isGoogle
-                ? `입력해 주시면 감사의 뜻으로 무료 크레딧 ${PROFILE_BONUS_CREDITS}개를 추가로 드립니다 (1회).`
+                ? `이름이 등록되지 않으면 사용이 불가능합니다. 등록해 주시면 무료 크레딧 ${PROFILE_BONUS_CREDITS}개를 추가로 드립니다 (1회). 아이디는 ${user.email}`
                 : "크레딧 신청·문의 확인에 사용됩니다."}
             </p>
             <form action={saveProfileInfoForm} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
@@ -171,6 +194,30 @@ export default async function AccountPage({
             </div>
           )}
         </div>
+
+        {/* 연결 계정 — 같은 전화번호·이름 = 한 계정처럼 크레딧 공유 */}
+        {linkedAccounts.length > 0 && (
+          <div className="rounded-2xl border p-6"
+            style={{ background: "var(--card)", borderColor: "rgba(96,165,250,0.45)" }}>
+            <h2 className="font-semibold mb-1">👥 연결된 계정 {linkedAccounts.length + 1}개</h2>
+            <p className="text-xs mb-3" style={{ color: "var(--muted-foreground)" }}>
+              같은 이름·전화번호로 등록된 계정은 한 계정처럼 관리되며, 위 크레딧 잔액은 모든 계정을 합친 값입니다.
+            </p>
+            <ul className="text-sm space-y-1">
+              <li className="font-medium">{user.email} <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>(현재 로그인)</span></li>
+              {linkedAccounts.map((a) => (
+                <li key={a.email}>
+                  {a.email}
+                  {a.created_at && (
+                    <span className="text-xs ml-2" style={{ color: "var(--muted-foreground)" }}>
+                      가입 {new Date(a.created_at).toLocaleDateString("ko-KR")}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* 계정 정보 */}
         <div className="rounded-2xl border p-6"

@@ -17,6 +17,8 @@ type Profile = {
   agreed_terms: boolean | null;
   agreed_at: string | null;
   created_at: string;
+  /** 구글 가입자 "자기이름 등록" 완료 시각 (2026-09-04 컬럼) */
+  name_registered_at?: string | null;
 };
 
 const ROLE_COLOR: Record<string, string> = {
@@ -32,11 +34,14 @@ export function UserTable({
   profiles,
   isSuperAdmin,
   buyerIds,
+  linkedEmails = {},
 }: {
   profiles: Profile[];
   isSuperAdmin: boolean;
   /** purchase 크레딧을 받은 적 있는 회원 id — 💳 구매자 배지 표시용 */
   buyerIds: string[];
+  /** 회원 id → 같은 전화번호·이름으로 묶인 다른 계정 이메일 (👥 N계정 배지) */
+  linkedEmails?: Record<string, string[]>;
 }) {
   const router = useRouter();
   const buyers = new Set(buyerIds);
@@ -226,21 +231,35 @@ export function UserTable({
                             💳 구매자
                           </span>
                         )}
-                        {/* 구글 가입은 이름이 자동으로 오므로, 직접 입력 여부는 전화번호로 판별 */}
+                        {/* 동일 전화번호·이름 묶음 — 한 계정처럼 크레딧을 함께 쓴다 */}
+                        {(linkedEmails[p.id]?.length ?? 0) > 0 && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                            title={`함께 묶인 계정: ${linkedEmails[p.id].join(", ")}`}
+                            style={{ background: "rgba(96,165,250,0.14)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.35)" }}>
+                            👥 {linkedEmails[p.id].length + 1}계정
+                          </span>
+                        )}
+                        {/* 구글 가입은 이름이 자동으로 오므로, "자기이름 등록" 여부는 등록시각(또는 전화)으로 판별 */}
                         {p.signup_provider === "google" && (
-                          (p.phone ?? "").trim() !== "" ? (
+                          (p.name_registered_at || (p.phone ?? "").trim() !== "") ? (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                               style={{ background: "rgba(52,211,153,0.14)", color: "#34d399", border: "1px solid rgba(52,211,153,0.35)" }}>
-                              구글 · 정보 확인
+                              구글 · 이름 등록
                             </span>
                           ) : (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                              style={{ background: "rgba(245,158,11,0.14)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.35)" }}>
-                              구글 · 정보 미입력
+                              title="자기이름 등록 전 — 서비스 이용 불가"
+                              style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.35)" }}>
+                              구글 · 이름 미등록
                             </span>
                           )
                         )}
                       </div>
+                      {(linkedEmails[p.id]?.length ?? 0) > 0 && (
+                        <div className="text-[10px] mt-1" style={{ color: "#60a5fa" }}>
+                          함께: {linkedEmails[p.id].join(", ")}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {/* 등급 토글 — 누른 등급이 곧바로 적용된다 (별도 저장 없음) */}

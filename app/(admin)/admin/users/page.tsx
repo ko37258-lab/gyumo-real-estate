@@ -2,8 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import { ALL_ROLES } from "@/lib/membership";
 import Link from "next/link";
 import { UserTable } from "./UserTable";
+import { groupLinked, linkKey, normPhone } from "@/lib/linkedAccounts";
 
 export const metadata = { title: "회원 관리 | 규모검토 관리자" };
+
+/** 구글 가입자의 "자기이름 등록" 완료 여부 — 컬럼 도입 전 데이터는 전화 입력으로 대신 판별 */
+function isNameRegistered(p: { name_registered_at?: string | null; phone?: string | null }) {
+  return Boolean(p.name_registered_at) || (p.phone ?? "").trim() !== "";
+}
 
 export default async function UsersPage({
   searchParams,
@@ -21,14 +27,21 @@ export default async function UsersPage({
     .single();
   const isSuperAdmin = me?.is_admin === true;
 
+  const COLS = "id, email, full_name, phone, role, credits, is_admin, agreed_terms, agreed_at, created_at, signup_provider";
   let query = supabase
     .from("gyumo_profiles")
-    .select("id, email, full_name, phone, role, credits, is_admin, agreed_terms, agreed_at, created_at, signup_provider")
+    .select(`${COLS}, name_registered_at`)
     .order("created_at", { ascending: false });
 
   if (params.role && params.role !== "all") query = query.eq("role", params.role);
 
-  const { data: profiles } = await query;
+  let { data: profiles } = await query;
+  if (!profiles) {
+    // name_registered_at 컬럼 추가(supabase/schema_linked_accounts.sql) 전 환경 폴백
+    let q2 = supabase.from("gyumo_profiles").select(COLS).order("created_at", { ascending: false });
+    if (params.role && params.role !== "all") q2 = q2.eq("role", params.role);
+    profiles = ((await q2).data ?? []).map((p) => ({ ...p, name_registered_at: null as string | null }));
+  }
 
   // 크레딧 구매자 = purchase 배치를 받은 적 있는 회원 (admin RLS 로 조회)
   const { data: purchaseBatches } = await supabase
@@ -37,33 +50,45 @@ export default async function UsersPage({
     .eq("source", "purchase");
   const buyerIds = new Set((purchaseBatches ?? []).map((b) => b.user_id as string));
 
-  let filtered = params.q
+  // 동일 전화번호+이름 계정 묶음 — 전체 목록 기준으로 묶은 뒤 검색·필터를 건다
+  // (검색 결과에 한 계정만 남아도 "👥 2계정" 배지가 유지되도록)
+  const linked = groupLinked(profiles ?? []);
+  const linkedEmails: Record<string, string[]> = {};
+  for (const [id, others] of linked) linkedEmails[id] = others.map((o) => o.email);
+  const linkedGroupCount = new Set(
+    [...linked.keys()].map((id) => linkKey(profiles!.find((p) => p.id === id)!)),
+  ).size;
+
+  // 검색: 이름·이메일·전화(하이픈 유무 무관 — "01012345678"로도 "010-1234-5678"이 잡힌다)
+  const qRaw = (params.q ?? "").trim();
+  const qDigits = normPhone(qRaw);
+  let filtered = qRaw
     ? (profiles ?? []).filter((p) =>
-        p.email?.includes(params.q!) ||
-        (p.full_name ?? "").includes(params.q!) ||
-        (p.phone ?? "").includes(params.q!),
+        p.email?.includes(qRaw) ||
+        (p.full_name ?? "").includes(qRaw) ||
+        (p.phone ?? "").includes(qRaw) ||
+        (qDigits.length >= 4 && normPhone(p.phone).includes(qDigits)),
       )
     : (profiles ?? []);
 
-  // 분류 필터 — 구매자 / 구글 가입(이름 확인·미입력)
+  // 분류 필터 — 구매자 / 다계정 / 구글 가입(이름 등록·미등록)
   switch (params.cls) {
     case "buyer":
       filtered = filtered.filter((p) => buyerIds.has(p.id));
+      break;
+    case "multi":
+      filtered = filtered.filter((p) => linked.has(p.id));
       break;
     case "google":
       filtered = filtered.filter((p) => p.signup_provider === "google");
       break;
     // ⚠ 구글 가입은 이름이 구글 프로필에서 자동으로 채워진다 (16명 전원 보유 확인).
-    //   본인이 직접 입력했는지는 전화번호로 판별한다 — 전화는 우리 폼으로만 들어온다.
+    //   본인이 직접 "자기이름 등록"을 했는지는 name_registered_at(또는 전화 입력)으로 판별한다.
     case "google_named":
-      filtered = filtered.filter(
-        (p) => p.signup_provider === "google" && (p.phone ?? "").trim() !== "",
-      );
+      filtered = filtered.filter((p) => p.signup_provider === "google" && isNameRegistered(p));
       break;
     case "google_unnamed":
-      filtered = filtered.filter(
-        (p) => p.signup_provider === "google" && (p.phone ?? "").trim() === "",
-      );
+      filtered = filtered.filter((p) => p.signup_provider === "google" && !isNameRegistered(p));
       break;
   }
 
@@ -99,9 +124,10 @@ export default async function UsersPage({
           style={{ background: "var(--card)", borderColor: "var(--border)" }}>
           <option value="all">전체 분류</option>
           <option value="buyer">💳 크레딧 구매자</option>
+          <option value="multi">👥 다계정 (전화번호 동일)</option>
           <option value="google">구글 가입 전체</option>
-          <option value="google_named">구글 가입 · 정보 확인(전화 입력)</option>
-          <option value="google_unnamed">구글 가입 · 정보 미입력</option>
+          <option value="google_named">구글 가입 · 이름 등록 완료</option>
+          <option value="google_unnamed">구글 가입 · 이름 미등록(이용 불가)</option>
         </select>
         <button type="submit" className="rounded-lg px-4 py-2 text-sm font-medium"
           style={{ background: "#FFCF0D", color: "#020425" }}>검색</button>
@@ -109,9 +135,10 @@ export default async function UsersPage({
 
       <div className="text-xs mb-3" style={{ color: "var(--muted-foreground)" }}>
         총 {filtered.length}명
+        {linkedGroupCount > 0 && ` · 다계정 ${linkedGroupCount}묶음(${linked.size}계정) — 같은 전화번호·이름은 한 계정처럼 크레딧을 함께 씁니다`}
       </div>
 
-      <UserTable profiles={filtered} isSuperAdmin={isSuperAdmin} buyerIds={[...buyerIds]} />
+      <UserTable profiles={filtered} isSuperAdmin={isSuperAdmin} buyerIds={[...buyerIds]} linkedEmails={linkedEmails} />
     </div>
   );
 }

@@ -75,16 +75,49 @@ export async function proxy(request: NextRequest) {
   // 실제로 기존 회원 6명이 미동의로 남아 있어 여기서 상시 차단한다.
   // 마케팅 페이지(/, /pricing, /building-law)는 열어 두고 실제 도구만 막는다.
   if (user && GATED_PREFIXES.some((p) => pathname.startsWith(p))) {
-    const { data: profile } = await supabase
-      .from("gyumo_profiles")
-      .select("agreed_terms")
-      .eq("id", user.id)
-      .single();
+    // name_registered_at 컬럼은 2026-09-04 마이그레이션(supabase/schema_linked_accounts.sql)에서
+    // 추가됐다. 마이그레이션 전 배포에서도 동의 게이트가 풀리지 않도록, 컬럼이 없어
+    // 조회가 실패하면 agreed_terms 만 다시 읽는다.
+    let profile: { agreed_terms: boolean | null; name_registered_at?: string | null } | null = null;
+    {
+      const r = await supabase
+        .from("gyumo_profiles")
+        .select("agreed_terms, name_registered_at")
+        .eq("id", user.id)
+        .single();
+      if (r.error) {
+        const r2 = await supabase
+          .from("gyumo_profiles")
+          .select("agreed_terms")
+          .eq("id", user.id)
+          .single();
+        profile = r2.data;
+      } else {
+        profile = r.data;
+      }
+    }
 
     // 조회 실패(profile null)는 통과 — 장애 시 서비스가 잠기지 않도록.
     if (profile && profile.agreed_terms === false) {
       const url = request.nextUrl.clone();
       url.pathname = "/consent";
+      url.search = "";
+      url.searchParams.set("next", pathname);
+      return NextResponse.redirect(url);
+    }
+
+    // 구글 가입자는 가입 폼을 거치지 않아 이름·전화가 없다 — "자기이름 등록"을
+    // 마치지 않으면(name_registered_at NULL) 서비스 이용 불가. 동의 게이트 다음 순서.
+    // 구글 프로필 이름이 자동으로 들어오므로 full_name 유무로는 판별할 수 없다.
+    const provider = (user.app_metadata as { provider?: string } | null)?.provider;
+    if (
+      provider === "google" &&
+      profile &&
+      "name_registered_at" in profile &&
+      !profile.name_registered_at
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/register-name";
       url.search = "";
       url.searchParams.set("next", pathname);
       return NextResponse.redirect(url);

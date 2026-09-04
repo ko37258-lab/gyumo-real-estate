@@ -116,21 +116,30 @@ export async function agreeTerms(formData: FormData) {
     );
   }
 
+  // 구글 가입자는 동의와 함께 "자기이름 등록"(이름·전화번호)이 필수다 —
+  // 등록하지 않으면 서비스 이용이 불가능하다(proxy.ts 게이트). 동의 전에 검증해서
+  // 값이 틀리면 동의도 기록하지 않고 되돌린다.
+  const isGoogle =
+    (user.app_metadata as { provider?: string } | null)?.provider === "google";
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const backToConsent = (msg: string) =>
+    redirect(`/consent?next=${encodeURIComponent(next)}&error=${encodeURIComponent(msg)}`);
+  if (isGoogle && formData.has("full_name")) {
+    if (!fullName) backToConsent("이름을 입력해주세요. 이름이 등록되지 않으면 사용이 불가능합니다.");
+    if (!phone) backToConsent("전화번호를 입력해주세요.");
+  }
+
   await supabase
     .from("gyumo_profiles")
     .update({ agreed_terms: true, agreed_at: new Date().toISOString() })
     .eq("id", user.id);
 
-  // 동의 화면에서 이름·전화를 같이 입력한 경우(구글 가입자 3크레딧 보너스).
-  // 선택 입력이므로 값이 이상해도 동의 자체는 막지 않는다 — 조용히 건너뛰고
-  // 마이페이지에서 다시 입력하게 둔다.
-  const fullName = String(formData.get("full_name") ?? "").trim();
-  const phone = String(formData.get("phone") ?? "").trim();
   if (fullName && phone) {
-    try {
-      await saveProfileInfo({ fullName, phone });
-    } catch (e) {
-      console.error("[consent] 프로필 저장 실패(동의는 완료됨)", e);
+    const res = await saveProfileInfo({ fullName, phone });
+    if (!res.ok) {
+      // 동의는 됐으니 /register-name 게이트가 다시 받는다 — 오류만 보여준다
+      redirect(`/register-name?next=${encodeURIComponent(next)}&error=${encodeURIComponent(res.error ?? "저장 실패")}`);
     }
   }
 

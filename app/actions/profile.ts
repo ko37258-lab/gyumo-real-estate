@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { PROFILE_BONUS_CREDITS } from "@/lib/credits";
+import { safeNext } from "@/lib/auth/safe-next";
 
 /**
  * 이름·전화번호 저장 + 구글 가입자 프로필 완성 보너스(3크레딧).
@@ -42,6 +43,15 @@ export async function saveProfileInfo(input: {
     .update({ full_name: fullName, phone })
     .eq("id", user.id);
   if (upErr) return { ok: false, bonusGranted: false, error: "저장에 실패했습니다." };
+
+  // "자기이름 등록" 완료 시각 — 구글 가입자 이용 게이트(proxy.ts)의 기준.
+  // 최초 1회만 기록한다. 컬럼이 아직 없는(마이그레이션 전) 환경에서는 조용히 건너뛴다.
+  const { error: regErr } = await supabase
+    .from("gyumo_profiles")
+    .update({ name_registered_at: new Date().toISOString() })
+    .eq("id", user.id)
+    .is("name_registered_at", null);
+  if (regErr) console.warn("[profile] name_registered_at 기록 실패(마이그레이션 전?)", regErr.message);
 
   // 보너스는 구글 가입자만 — 지급 RPC 가 service_role 전용이라 서버 키로 호출
   const provider = (user.app_metadata as { provider?: string } | null)?.provider;
@@ -84,6 +94,29 @@ export async function saveProfileInfo(input: {
     return { ok: true, bonusGranted: false };
   }
   return { ok: true, bonusGranted: true };
+}
+
+/**
+ * "자기이름 등록" 화면(/register-name) <form action>.
+ * 구글 가입자는 이름·전화번호를 등록하지 않으면 서비스 이용이 불가능하다.
+ * 저장 규칙·보너스는 saveProfileInfo 와 동일하고, 성공하면 원래 가려던 곳으로 보낸다.
+ */
+export async function registerName(formData: FormData) {
+  const next = safeNext(formData.get("next"));
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+
+  const back = (msg: string) =>
+    redirect(`/register-name?next=${encodeURIComponent(next)}&error=${encodeURIComponent(msg)}`);
+
+  if (!fullName) back("이름을 입력해주세요. 이름이 등록되지 않으면 사용이 불가능합니다.");
+  if (!phone) back("전화번호를 입력해주세요.");
+
+  const res = await saveProfileInfo({ fullName, phone });
+  if (!res.ok) back(res.error ?? "저장에 실패했습니다.");
+
+  revalidatePath("/", "layout");
+  redirect(next);
 }
 
 /** 마이페이지 <form action> 용 래퍼 — 결과를 쿼리스트링으로 돌려보낸다 */
