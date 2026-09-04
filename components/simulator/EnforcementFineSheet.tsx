@@ -4,7 +4,7 @@
 // 계산은 lib/calc/enforcementFine.ts 단일 출처. 여기서는 입력·표시만 한다.
 
 import { useMemo, useState } from "react";
-import { CalculatorIcon, ChevronDownIcon } from "lucide-react";
+import { CalculatorIcon, ChevronDownIcon, FileDownIcon } from "lucide-react";
 import {
   Sheet,
   SheetBody,
@@ -20,6 +20,7 @@ import { useSimulatorStore } from "@/store/simulator";
 import { useLandInfoStore } from "@/store/landinfo";
 import { ZONES } from "@/lib/zones";
 import { lotPyToSqm } from "@/lib/calc/coverage";
+import { getBrandConfig } from "@/lib/branding/storage";
 import {
   calcEnforcementFine,
   VIOLATION_TYPES,
@@ -141,6 +142,7 @@ export function EnforcementFineSheet({
   const [times, setTimes] = useState(1);
   const [years, setYears] = useState(1);
   const [showSteps, setShowSteps] = useState(true);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const type = VIOLATION_TYPES.find((t) => t.code === typeCode) ?? VIOLATION_TYPES[2];
   const inCapital = /^(서울|경기|인천)/.test(address ?? "");
@@ -172,6 +174,49 @@ export function EnforcementFineSheet({
 
   const toggle = <T extends string>(list: T[], v: T, set: (x: T[]) => void) =>
     set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+
+  /** 📄 결과 보고서 PDF — 입력 조건 스냅샷 + 계산 결과를 그대로 싣는다. 이벤트 안에서 생성·즉시 해제. */
+  async function handleDownloadPdf() {
+    if (!result || pdfBusy) return;
+    setPdfBusy(true);
+    let url: string | null = null;
+    try {
+      const conditions: Array<[string, string]> = [
+        ["위반 유형", `${type.label} — ${type.basis}`],
+        type.group === "area"
+          ? ["시가표준액 · 위반면적", `1㎡당 ${fmt(unitValue)}원 × 위반면적 ${area}㎡${ordinanceRate !== "" ? ` · 조례 비율 ${ordinanceRate}%` : ` · 시행령 비율 ${Math.round(type.rate * 100)}%`}`]
+          : ["시가표준액", `${fmt(totalValue)}원 (해당 부분) × ${Math.round(type.rate * 100)}%`],
+        ["주거용 특례", residential ? `주거용 · 연면적(세대 면적) ${gfa}㎡` : "해당 없음(비주거)"],
+        ["가중 사유", aggs.length ? `${aggs.map((a) => AGGRAVATION_LABEL[a]).join(" / ")} — ${amended ? "2027.2.12 시행 개정(50~100%)" : "현행(100% 범위)"}${aggRate !== "" ? ` · 조례 가중률 ${aggRate}%` : ""}` : "없음"],
+        ["감경 사유", reds.length ? reds.map((r) => REDUCTION_LABEL[r]).join(" / ") + (reds.includes("agri") ? ` · 농어업 시설 ${agriArea}㎡ (${inCapital ? "수도권" : "수도권 외"})` : "") : "없음"],
+        ["부과 가정", `연 ${times}회 × ${years}년`],
+      ];
+      const [{ pdf }, { EnforcementFineDocument }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/report/EnforcementFineDocument"),
+      ]);
+      const reviewDate = new Date().toISOString().slice(0, 10);
+      const blob = await pdf(
+        <EnforcementFineDocument
+          input={{ address: address || undefined, reviewDate, conditions, result }}
+          brand={getBrandConfig()}
+        />,
+      ).toBlob();
+      url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `이행강제금_산정보고서_${reviewDate.replace(/-/g, "")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error("[이행강제금 PDF] 생성 실패:", e);
+      alert("PDF 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setPdfBusy(false);
+      setTimeout(() => { if (url) URL.revokeObjectURL(url); }, 500);
+    }
+  }
 
   // 시트는 마운트된 채 남으므로, 열 때마다 시뮬레이터 초과분 프리셋을 다시 적용한다.
   const handleOpenChange = (v: boolean) => {
@@ -368,6 +413,18 @@ export function EnforcementFineSheet({
                     ))}
                   </ul>
                 )}
+                <Button
+                  size="sm"
+                  onClick={handleDownloadPdf}
+                  disabled={pdfBusy}
+                  className="w-full gap-1.5 bg-amber-800 hover:bg-amber-900 text-white mt-1"
+                >
+                  <FileDownIcon className="size-3.5" />
+                  <span>{pdfBusy ? "PDF 생성 중…" : "📄 계산결과 보고서 PDF 다운로드"}</span>
+                </Button>
+                <p className="text-[10px] text-muted-foreground text-center">
+                  입력 조건·산정 과정·근거 법령이 담긴 A4 1~2쪽 보고서 (브랜드 설정 반영)
+                </p>
               </div>
             )}
 
