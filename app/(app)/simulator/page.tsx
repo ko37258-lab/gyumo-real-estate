@@ -13,6 +13,7 @@ import { ResultMetrics } from "@/components/simulator/ResultMetrics";
 import { ParkingCalculator } from "@/components/simulator/ParkingCalculator";
 import { SchematicPlanner } from "@/components/simulator/SchematicPlanner";
 import { LegalBasis } from "@/components/simulator/LegalBasis";
+import EnforcementFineTip from "@/components/simulator/EnforcementFineSheet";
 import { CostSimulator } from "@/components/simulator/cost/CostSimulator";
 import { ProfitAnalyzer } from "@/components/simulator/profit/ProfitAnalyzer";
 import { ReportDialog } from "@/components/report/ReportDialog";
@@ -115,6 +116,7 @@ export default function SimulatorPage() {
               <ParkingCalculator />
               <SchematicPlanner />
               <LegalBasis />
+              <EnforcementFineTip />
             </div>
           </TabsContent>
 
