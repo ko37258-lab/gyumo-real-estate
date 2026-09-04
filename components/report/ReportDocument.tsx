@@ -676,10 +676,11 @@ function RevenuePage({ input, brand }: { input: ReportInputs; brand: BrandConfig
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>7. 분양·임대 수익 추정</PdfText>
+      <View wrap={false}>
+      <PdfText style={styles.h2}>7. 분양·임대 수익 추정</PdfText>
       <View style={styles.h2Underline} />
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>(a) 계획 개요</PdfText>
+      <PdfText style={styles.h3}>(a) 계획 개요</PdfText>
       <TwoColTable
         rows={[
           ["건축물 용도", s.usageLabel ?? rev.usage],
@@ -689,6 +690,7 @@ function RevenuePage({ input, brand }: { input: ReportInputs; brand: BrandConfig
           ["시세 기준", `${rev.baseAddress ?? input.address ?? ""} 인근 · 최근 ${rev.periodMonths}개월 국토교통부 실거래 중앙값`],
         ]}
       />
+      </View>
 
       <PdfText style={[styles.h3, { marginTop: 12 }]} minPresenceAhead={60}>(b) 분양(매각) 시나리오</PdfText>
       {rev.sale ? (
@@ -836,10 +838,11 @@ function SummaryPage({
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>2. 검토 요약 (Executive Summary)</PdfText>
-      <View style={styles.h2Underline} />
-
-      <PlainSummaryBox input={input} brand={brand} />
+      <View wrap={false}>
+        <PdfText style={styles.h2}>2. 검토 요약 (Executive Summary)</PdfText>
+        <View style={styles.h2Underline} />
+        <PlainSummaryBox input={input} brand={brand} />
+      </View>
 
       {/* 2x2 KPI 그리드 — 카드 폭 ~78mm로 긴 한국어 텍스트 잘림 방지 */}
       <View wrap={false} style={{ marginBottom: 14 }}>
@@ -1660,7 +1663,7 @@ function SunlightCompareBlock({
       </View>
       <PdfText style={[styles.muted, { marginTop: 4 }]}>
         ※ 개정 전 = 시행령 제86조①(10m 이하 1.5m · 초과 h/2). 개정 후 = 건축법 제61조①(2026.8.11 개정 · 11.12 시행 — 10m 이하 1.5m · 10~17m 5m 고정 · 17m 초과 h/2). 17m에서 두 규칙이 만나므로 차이는 10~17m 구간(통상 3~4층)에서만 생기며, 개정 후가 불리해지는 높이는 없습니다. 조례가 더 큰 거리를 정할 수 있으니 관할 확인 필요.
-      </PdfText>
+       부칙 제4조(적용례): 개정 기준은 2026.11.12 이후 건축허가 신청(건축위원회 심의 신청 포함)·건축신고분부터 적용되고, 그 전 접수분은 개정 전 기준입니다. 조례로 더 큰 이격을 정할 수 있어 1.5m·5m는 최소치입니다.</PdfText>
     </View>
   );
 }
@@ -2722,10 +2725,11 @@ function AppendixPage({
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>9. 부록</PdfText>
+      <View wrap={false}>
+      <PdfText style={styles.h2}>9. 부록</PdfText>
       <View style={styles.h2Underline} />
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>(a) 적용 법령</PdfText>
+      <PdfText style={styles.h3}>(a) 적용 법령</PdfText>
       <View
         wrap={false}
         style={{
@@ -2750,6 +2754,7 @@ function AppendixPage({
             · {line}
           </PdfText>
         ))}
+      </View>
       </View>
 
       <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(b) 산정 공식</PdfText>

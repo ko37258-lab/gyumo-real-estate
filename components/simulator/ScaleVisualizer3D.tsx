@@ -662,7 +662,7 @@ const CAPTURE_DIRS: Record<"iso" | "south" | "north", [number, number, number]> 
 };
 
 function CaptureRegistrar() {
-  const { gl, camera, scene } = useThree();
+  const { gl, camera, scene, advance } = useThree();
   useEffect(() => {
     const fn = (view: "iso" | "south" | "north" = "iso") => {
       // ── 1) 캡쳐 직전, 매스가 화면을 채우도록 카메라를 잠시 맞춘다 ──
@@ -689,7 +689,9 @@ function CaptureRegistrar() {
       const neighborhood = scene.getObjectByName("neighborhood");
       const neighborhoodWasVisible = neighborhood ? neighborhood.visible : true;
       if (neighborhood) neighborhood.visible = false;
-      gl.render(scene, camera);
+      // ⚠ gl.render만 하면 useFrame이 안 돌아 Billboard 라벨이 이전 카메라 방향을 향한 채 찍힌다
+      //   (북측 컷에서 치수 글자가 거울상으로 보였음). advance()로 한 프레임을 정식으로 돌린다.
+      advance(performance.now(), true);
 
       const src = gl.domElement;
 
@@ -722,14 +724,14 @@ function CaptureRegistrar() {
       if (neighborhood) neighborhood.visible = neighborhoodWasVisible;
       camera.position.copy(prevPos);
       camera.lookAt(target);
-      gl.render(scene, camera);
+      advance(performance.now(), true);
       return data;
     };
     useSimulatorStore.getState().setCapture3D(fn);
     return () => {
       useSimulatorStore.getState().setCapture3D(null);
     };
-  }, [gl, camera, scene]);
+  }, [gl, camera, scene, advance]);
   return null;
 }
 
