@@ -254,6 +254,11 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-09-05** — **☀️ 아파트 일조 보기 `/sunlight`** (운영자: "아파트를 검색해서 아파트단지 햇빛이 드는 것을 시간대별로 보여줘"). 크레딧 차감 없음, 게이트 없음.
+  - 검색: `GET /api/sunlight/search?q=&size=` → `lib/vworld-data.ts searchVworldPlaces`(VWorld search type=place, 아파트 우선 정렬, 없으면 address). VWorld 는 "래미안대치팰리스1단지아파트/112동" 처럼 **동별 POI 좌표**를 주므로 단지 선택 후 size=60 재검색 → 건물 폴리곤(pointInRing, 없으면 30m 최근접)에 동 번호를 붙인다. 국토정보 건물 이름(buld_nm)은 "래미안 대치 팰리스"처럼 동 번호가 없다.
+  - 3D: `/api/vworld?kind=buildings r=300` 압출(아파트 층고 3.0m) + `components/three/GroundImagery.tsx`(ScaleVisualizer3D 에서 분리한 위성 바닥, 두 곳 공유) + sunPosition 태양광 그림자(4096 섀도맵 ±340m). 계절 3종 × 06~19시 슬라이더·재생.
+  - 동별 진단 `lib/calc/aptSunlight.ts`(순수): 변 중점 수광점(1층 1.5m, 0.8m 바깥) → 동지 9~15시 15분 스캔, 다른 건물 프리즘 광선 교차(bbox 기각). 등급 4/2/1h. 단지 동 = 동별 POI ∪ 이름 일치, 없으면 반경(100~250m 선택)·5층 이상.
+  - 검증: tsc/eslint 0, 래미안대치팰리스1단지 17동(101~113동 라벨) 9시/15시 그림자 방향 확인. ⚠ 브라우저 도구의 Enter 키가 폼 제출을 못 해 requestSubmit 로 검증.
 - **2026-09-04 (3)** — **구글 가입자 "자기이름 등록" 게이트 + 동일 전화번호 계정 묶음** (운영자: "구글계정으로 들어온 사람은 이름·전화번호·아이디를 자기이름 등록으로 넣게 하고… 등록 안 되면 사용 불가… 전화번호 동일하면 한 계정처럼").
   - **DB(`supabase/schema_linked_accounts.sql`, 멱등)**: `gyumo_profiles.name_registered_at`(구글은 full_name 이 자동으로 채워져 이름 유무로 판별 불가 → 등록 시각 컬럼) · `phone_norm` 생성 컬럼+인덱스 · 백필(이메일 가입자·전화 있는 구글 가입자는 등록 완료) · `gyumo_linked_user_ids(uid)`(전화 9자리+ 동일 **AND** 이름(공백 제거) 동일 — 남의 번호로 크레딧 끌어쓰기 방지) · 크레딧 RPC 3종(balance/next_expiry/consume)을 묶음 단위로 교체(시그니처 동일, consume 은 묶음 전체 profiles.credits 갱신). ⚠ MCP apply_migration 이 권한 분류기에 막혀 **운영자가 SQL Editor 에서 직접 실행 필요** — 실행 전에도 코드는 안전(컬럼 없으면 proxy·관리자 페이지가 agreed_terms 만 재조회, RPC 없으면 연결 계정 카드 생략).
   - **코드**: `proxy.ts` 동의 게이트 다음에 구글+`name_registered_at` NULL → `/register-name?next=` · `app/(auth)/register-name/page.tsx`(이름·전화·아이디(이메일 읽기전용), "이름이 등록되지 않으면 사용이 불가능합니다.") + `registerName` 액션 · `saveProfileInfo` 가 최초 1회 `name_registered_at` 기록(3크레딧 보너스 그대로) · 동의 화면 구글 가입자 이름·전화 **필수**(agreeTerms 서버 검증) · `lib/linkedAccounts.ts`(DB 규칙과 동일한 순수 함수) → 관리자 회원목록 "👥 N계정" 배지+함께 묶인 이메일·"다계정" 필터·전화 검색 하이픈 무시·"구글 · 이름 미등록(이용 불가)" 배지 · 마이페이지 "연결된 계정" 카드(서버 키로 이메일 조회).

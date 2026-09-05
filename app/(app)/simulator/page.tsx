@@ -76,6 +76,14 @@ export default function SimulatorPage() {
             <ReportDialog />
             <ThemeQuickToggle />
             <Link
+              href="/sunlight"
+              className="text-[18px] text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-secondary"
+              aria-label="아파트 일조 보기"
+              title="아파트 일조 보기 — 단지 검색 → 시간대별 햇빛·그림자"
+            >
+              ☀️
+            </Link>
+            <Link
               href="/settings"
               className="text-[18px] text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-secondary"
               aria-label="설정"

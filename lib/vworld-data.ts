@@ -448,3 +448,68 @@ export async function fetchVworldBuildings(
   }
   return { buildings, total: features.length };
 }
+
+// ─────────────────────────────────────────────────────────────
+// 장소 검색 (아파트 단지명 등) — VWorld search API type=place.
+//   아파트 일조 보기(/sunlight)에서 단지명을 좌표로 바꿀 때 쓴다.
+//   카카오 키워드 검색과 달리 이 키 하나로 로컬·운영 모두 동작한다.
+// ─────────────────────────────────────────────────────────────
+export interface PlaceHit {
+  title: string;
+  category: string;
+  address: string;
+  lon: number;
+  lat: number;
+}
+
+export async function searchVworldPlaces(query: string, size = 10): Promise<PlaceHit[]> {
+  const key = vworldKey();
+  const q = query.trim();
+  if (!key || !q) return [];
+  const domain = vworldDomain();
+  const run = async (type: "place" | "address"): Promise<PlaceHit[]> => {
+    const url =
+      `https://api.vworld.kr/req/search?service=search&request=search&version=2.0` +
+      `&query=${encodeURIComponent(q)}&type=${type}${type === "address" ? "&category=parcel" : ""}` +
+      `&size=${size}&key=${key}&domain=${domain}`;
+    const r = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; gyumo/1.0)",
+        ...(domain ? { Referer: `https://${domain}` } : {}),
+      },
+      cache: "no-store",
+    });
+    if (!r.ok) return [];
+    const data = (await r.json()) as {
+      response?: {
+        status?: string;
+        result?: { items?: Array<{ title?: string; category?: string; address?: { road?: string; parcel?: string } | string; point?: { x: string; y: string } }> };
+      };
+    };
+    if (data.response?.status !== "OK") return [];
+    const items = data.response.result?.items ?? [];
+    return items
+      .map((it) => {
+        const addr = typeof it.address === "string" ? it.address : it.address?.road || it.address?.parcel || "";
+        return {
+          title: String(it.title ?? "").trim(),
+          category: String(it.category ?? "").trim(),
+          address: addr,
+          lon: Number(it.point?.x),
+          lat: Number(it.point?.y),
+        };
+      })
+      .filter((h) => h.title && Number.isFinite(h.lon) && Number.isFinite(h.lat));
+  };
+  const places = await run("place").catch(() => [] as PlaceHit[]);
+  // 아파트·주거 카테고리를 앞으로, 입구·정류장 같은 부속 시설은 뒤로
+  const rank = (h: PlaceHit) => {
+    const t = h.title + " " + h.category;
+    if (/아파트|주택|주거|단지/.test(t) && !/입구|정류장|주차/.test(t)) return 0;
+    if (/입구|정류장|주차/.test(t)) return 2;
+    return 1;
+  };
+  places.sort((a, b) => rank(a) - rank(b));
+  if (places.length > 0) return places;
+  return run("address").catch(() => [] as PlaceHit[]);
+}
