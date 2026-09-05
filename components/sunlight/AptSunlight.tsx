@@ -7,6 +7,7 @@
 // 좌표 규약은 규모검토 3D와 같다: 로컬 x=동, y=북 → 씬 (x, 높이, -북).
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Edges, Html } from "@react-three/drei";
 import * as THREE from "three";
@@ -23,6 +24,16 @@ import {
 import { getBrandConfig } from "@/lib/branding/storage";
 /** 아파트 층고 근사(m) — 규모검토의 FLOOR_HEIGHT_M(3.5, 일반 건축물)보다 낮다 */
 const APT_FLOOR_M = 3.0;
+
+// leaflet 은 window 가 필요해 SSR 제외
+const SunMap = dynamic(() => import("@/components/sunlight/SunMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="rounded-2xl border grid place-items-center text-sm" style={{ height: 380, borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
+      지도 불러오는 중…
+    </div>
+  ),
+});
 
 interface PlaceHit {
   title: string;
@@ -110,6 +121,8 @@ export default function AptSunlight() {
   /** 건물 id → 동 번호 ("112동") — 검색 API의 동별 POI 좌표를 건물 폴리곤에 대응시켜 얻는다 */
   const [dongMap, setDongMap] = useState<Map<string, string>>(() => new Map());
   const [pdfBusy, setPdfBusy] = useState(false);
+  /** 건물 id → 경위도 링 [lat,lng] — 아래 지도 폴리곤용 */
+  const [ringMap, setRingMap] = useState<Map<string, Array<[number, number]>>>(() => new Map());
   /** r3f 캔버스 — PDF 캡처용 (preserveDrawingBuffer 로 toDataURL 가능) */
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -148,10 +161,12 @@ export default function AptSunlight() {
           return;
         }
         const out: SunBuilding[] = [];
+        const rings = new Map<string, Array<[number, number]>>();
         d.buildings.forEach((b, i) => {
           const pts = lonLatRingToLocalAt(b.ring, place.lon, place.lat);
           const [cx, cy] = centroid(pts);
           if (Math.hypot(cx, cy) > RADIUS_M + 20) return;
+          rings.set(`b${i}`, b.ring.map(([lon, lat]) => [lat, lon] as [number, number]));
           out.push({
             id: `b${i}`,
             name: (b.name ?? "").trim(),
@@ -160,6 +175,7 @@ export default function AptSunlight() {
             heightM: Math.max(3, b.floors * APT_FLOOR_M),
           });
         });
+        setRingMap(rings);
         setBuildings(out);
       })
       .catch(() => alive && setError("건물 정보를 불러오지 못했습니다."))
@@ -272,6 +288,19 @@ export default function AptSunlight() {
     setError(null);
     setPlaying(false);
     setDongMap(new Map());
+    setRingMap(new Map());
+  }
+
+  /** 지도 클릭 → 그 지점을 새 검색 지점으로 (역지오코딩 주소를 제목으로) */
+  async function pickFromMap(lat: number, lng: number) {
+    let address = "";
+    try {
+      const r = await fetch(`/api/revgeocode?x=${lng}&y=${lat}`);
+      if (r.ok) address = ((await r.json()) as { address?: string }).address ?? "";
+    } catch {
+      /* 주소는 표시용 */
+    }
+    choosePlace({ title: address || "지도에서 고른 위치", category: "지도 선택", address, lon: lng, lat });
   }
   const effectiveSunMap = complexIds.size > 0 ? sunMap : null;
 
@@ -510,6 +539,30 @@ export default function AptSunlight() {
               <div className="absolute top-3 right-3 rounded-lg px-3 py-1.5 text-xs" style={{ background: "rgba(255,255,255,0.9)", color: "#333" }}>
                 동별 일조 계산 중…
               </div>
+            )}
+          </div>
+
+          {/* 지도 — 3D 아래 (모바일에서는 조작 패널 뒤) */}
+          <div className="lg:col-start-1 lg:row-start-2">
+            {buildings && buildings.length > 0 && (
+              <SunMap
+                center={[place.lat, place.lon]}
+                buildings={buildings.map((b) => {
+                  const s = effectiveSunMap?.get(b.id);
+                  return {
+                    id: b.id,
+                    ring: ringMap.get(b.id) ?? [],
+                    label: dongMap.get(b.id) ?? (b.name ? shortName(b.name) : ""),
+                    isComplex: complexIds.has(b.id),
+                    color: s ? sunGrade(s.best.maxRunH).color : null,
+                    floors: b.floors,
+                    maxRunH: s?.best.maxRunH,
+                  };
+                }).filter((b) => b.ring.length >= 3)}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                onPick={pickFromMap}
+              />
             )}
           </div>
 

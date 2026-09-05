@@ -258,6 +258,7 @@ TOSS_SECRET_KEY=
   - 검색: `GET /api/sunlight/search?q=&size=` → `lib/vworld-data.ts searchVworldPlaces`(VWorld search type=place, 아파트 우선 정렬, 없으면 address). VWorld 는 "래미안대치팰리스1단지아파트/112동" 처럼 **동별 POI 좌표**를 주므로 단지 선택 후 size=60 재검색 → 건물 폴리곤(pointInRing, 없으면 30m 최근접)에 동 번호를 붙인다. 국토정보 건물 이름(buld_nm)은 "래미안 대치 팰리스"처럼 동 번호가 없다.
   - 3D: `/api/vworld?kind=buildings r=300` 압출(아파트 층고 3.0m) + `components/three/GroundImagery.tsx`(ScaleVisualizer3D 에서 분리한 위성 바닥, 두 곳 공유) + sunPosition 태양광 그림자(4096 섀도맵 ±340m). 계절 3종 × 06~19시 슬라이더·재생.
   - 동별 진단 `lib/calc/aptSunlight.ts`(순수): 변 중점 수광점(1층 1.5m, 0.8m 바깥) → 동지 9~15시 15분 스캔, 다른 건물 프리즘 광선 교차(bbox 기각). 등급 4/2/1h. 단지 동 = 동별 POI ∪ 이름 일치, 없으면 반경(100~250m 선택)·5층 이상.
+  - 🗺️ 3D 아래 지도 `components/sunlight/SunMap.tsx`(react-leaflet, dynamic ssr:false): VWorld 위성/일반 + 건물 폴리곤을 동별 등급 색·동 라벨(Tooltip permanent)로, 지도 클릭 → /api/revgeocode 주소로 새 검색 지점(단지명 검색 안 될 때 우회). 브라우저 패널은 스크롤한 상태 캡처가 깨지므로 DOM(폴리곤·라벨·타일 수)으로 검증.
   - 📄 PDF: `components/report/AptSunlightDocument.tsx`(A4 1~2쪽 — KPI 3·동지 9/12/15시 3D 캡처 3컷·동별 표·조건·면책). 캡처는 Canvas `preserveDrawingBuffer` + 시각 바꾸고 450ms 뒤 `toDataURL`(r3f advance 불필요, frameloop always). 동별 표·요약은 useMemo 없이 계산(React 컴파일러 preserve-manual-memoization 에러 회피).
   - 검증: tsc/eslint 0, 래미안대치팰리스1단지 17동(101~113동 라벨) 9시/15시 그림자 방향 확인. ⚠ 브라우저 도구의 Enter 키가 폼 제출을 못 해 requestSubmit 로 검증.
 - **2026-09-04 (3)** — **구글 가입자 "자기이름 등록" 게이트 + 동일 전화번호 계정 묶음** (운영자: "구글계정으로 들어온 사람은 이름·전화번호·아이디를 자기이름 등록으로 넣게 하고… 등록 안 되면 사용 불가… 전화번호 동일하면 한 계정처럼").
