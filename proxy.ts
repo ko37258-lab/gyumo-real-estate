@@ -14,7 +14,14 @@ export async function proxy(request: NextRequest) {
   // 페이지 네비게이션(그 외 경로)에는 세션 쿠키 갱신을 위해 기존 로직을 유지한다.
   {
     const p = request.nextUrl.pathname;
-    if (p.startsWith("/api/") || p.startsWith("/building-law")) {
+    if (p.startsWith("/api/")) {
+      // 자매 앱 CORS — 허용 도메인이 둘 이상이라 next.config 정적 헤더 대신 여기서 Origin 별로 붙인다
+      const origin = request.headers.get("origin") ?? "";
+      const res = NextResponse.next({ request });
+      if (CORS_ORIGINS.has(origin)) res.headers.set("Access-Control-Allow-Origin", origin);
+      return res;
+    }
+    if (p.startsWith("/building-law")) {
       return NextResponse.next({ request });
     }
   }
@@ -126,6 +133,13 @@ export async function proxy(request: NextRequest) {
 
   return supabaseResponse;
 }
+
+/** gyumo 데이터 API를 브라우저에서 직접 부르는 자매 앱 도메인 (공법규제분석 앱) */
+const CORS_ORIGINS = new Set([
+  "https://real-estate-infographic.vercel.app",
+  "https://372law.com",
+  "https://www.372law.com",
+]);
 
 /** 동의해야 쓸 수 있는 경로 (/consent 자체와 로그인·API는 제외해야 무한 루프가 없다) */
 const GATED_PREFIXES = [
