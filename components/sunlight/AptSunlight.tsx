@@ -59,6 +59,7 @@ function complexName(title: string): string {
     .replace(/\/.*$/, "")
     .replace(/\(.*?\)/g, "")
     .replace(/입구|정류장|버스|주차장|정문|후문/g, "")
+    .replace(/\s*\d{1,4}동\s*$/, "") // 도로명 검색 결과 "… 501동"
     .replace(/아파트$/, "")
     .replace(/\s+/g, "")
     .trim();

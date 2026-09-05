@@ -55,6 +55,7 @@ export default function SunMap({
   return (
     <div className="rounded-2xl border overflow-hidden relative" style={{ borderColor: "var(--border)" }}>
       <MapContainer
+        key={`${center[0]},${center[1]}`}
         center={center}
         zoom={17}
         style={{ height: 380, width: "100%" }}

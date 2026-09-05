@@ -467,10 +467,16 @@ export async function searchVworldPlaces(query: string, size = 10): Promise<Plac
   const q = query.trim();
   if (!key || !q) return [];
   const domain = vworldDomain();
-  const run = async (type: "place" | "address"): Promise<PlaceHit[]> => {
+  type Item = {
+    title?: string;
+    category?: string;
+    address?: { road?: string; parcel?: string; bldnm?: string; bldnmdc?: string } | string;
+    point?: { x: string; y: string };
+  };
+  const run = async (type: "place" | "address", category?: "road" | "parcel"): Promise<PlaceHit[]> => {
     const url =
       `https://api.vworld.kr/req/search?service=search&request=search&version=2.0` +
-      `&query=${encodeURIComponent(q)}&type=${type}${type === "address" ? "&category=parcel" : ""}` +
+      `&query=${encodeURIComponent(q)}&type=${type}${category ? `&category=${category}` : ""}` +
       `&size=${size}&key=${key}&domain=${domain}`;
     const r = await fetch(url, {
       headers: {
@@ -480,36 +486,50 @@ export async function searchVworldPlaces(query: string, size = 10): Promise<Plac
       cache: "no-store",
     });
     if (!r.ok) return [];
-    const data = (await r.json()) as {
-      response?: {
-        status?: string;
-        result?: { items?: Array<{ title?: string; category?: string; address?: { road?: string; parcel?: string } | string; point?: { x: string; y: string } }> };
-      };
-    };
+    const data = (await r.json()) as { response?: { status?: string; result?: { items?: Item[] } } };
     if (data.response?.status !== "OK") return [];
     const items = data.response.result?.items ?? [];
     return items
       .map((it) => {
-        const addr = typeof it.address === "string" ? it.address : it.address?.road || it.address?.parcel || "";
+        const ad = typeof it.address === "string" ? { road: it.address } : (it.address ?? {});
+        // 도로명/지번 검색 결과는 title 이 없다 — 건물명(bldnm)+동(bldnmdc)이 있으면 그것을 제목으로
+        const bld = [ad.bldnm, ad.bldnmdc].filter(Boolean).join(" ").trim();
+        const road = (ad.road ?? "").replace(/\s*\(.*\)\s*$/, "").trim();
+        const title = String(it.title ?? "").trim() || bld || road || ad.parcel || "";
         return {
-          title: String(it.title ?? "").trim(),
-          category: String(it.category ?? "").trim(),
-          address: addr,
+          title,
+          category: String(it.category ?? "").trim() || (type === "address" ? (category === "road" ? "도로명주소" : "지번주소") : ""),
+          address: road || ad.parcel || "",
           lon: Number(it.point?.x),
           lat: Number(it.point?.y),
         };
       })
       .filter((h) => h.title && Number.isFinite(h.lon) && Number.isFinite(h.lat));
   };
-  const places = await run("place").catch(() => [] as PlaceHit[]);
+  // 장소(단지명)·도로명·지번을 한꺼번에 — "한빛로 70" 같은 도로명주소는 place 검색에 안 잡힌다
+  const [places, roads, parcels] = await Promise.all([
+    run("place").catch(() => [] as PlaceHit[]),
+    run("address", "road").catch(() => [] as PlaceHit[]),
+    run("address", "parcel").catch(() => [] as PlaceHit[]),
+  ]);
   // 아파트·주거 카테고리를 앞으로, 입구·정류장 같은 부속 시설은 뒤로
   const rank = (h: PlaceHit) => {
     const t = h.title + " " + h.category;
-    if (/아파트|주택|주거|단지/.test(t) && !/입구|정류장|주차/.test(t)) return 0;
-    if (/입구|정류장|주차/.test(t)) return 2;
+    if (/아파트|주택|주거|단지/.test(t) && !/입구|정류장|주차|경로당|관리사무소/.test(t)) return 0;
+    if (/입구|정류장|주차|경로당|관리사무소/.test(t)) return 2;
     return 1;
   };
   places.sort((a, b) => rank(a) - rank(b));
-  if (places.length > 0) return places;
-  return run("address").catch(() => [] as PlaceHit[]);
+  const seen = new Set<string>();
+  const out: PlaceHit[] = [];
+  for (const h0 of [...places, ...roads, ...parcels]) {
+    // 도로명/지번 결과는 "단지명 501동, 502동…"으로 동마다 한 줄씩 나오므로 단지 단위로 접는다
+    const h =
+      /주소$/.test(h0.category) ? { ...h0, title: h0.title.replace(/\s*\d{1,4}동\s*$/, "").trim() || h0.title } : h0;
+    const k = `${h.title}|${h.address}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(h);
+  }
+  return out.slice(0, Math.max(size, 10));
 }
