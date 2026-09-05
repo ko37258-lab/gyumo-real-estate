@@ -21,6 +21,22 @@ export interface AptSunReportInput {
   /** 단지 동 판별 방식 설명 */
   selection: string;
   basis: string;
+  /** 보고서 하단 표기 — 사무소명·담당 (없으면 브랜드 기본값) */
+  office?: { name: string; contact: string };
+  /** 선택 동 상세 */
+  detail?: {
+    label: string;
+    floors: number;
+    heightM: number;
+    bestFace: number;
+    faces: Array<{
+      orientation: string;
+      lengthM: number;
+      levels: Array<{ label: string; heightM: number; totalH: number; maxRunH: number; timeline: boolean[]; blockers: string[] }>;
+    }>;
+    seasons: Array<{ label: string; totalH: number; maxRunH: number }>;
+    slots: number[];
+  };
 }
 
 const F = "Pretendard";
@@ -124,8 +140,94 @@ export function AptSunlightDocument({ input, brand }: { input: AptSunReportInput
           </Text>
         </View>
 
+        {input.detail && (() => {
+          const d = input.detail;
+          const bf = d.faces[d.bestFace];
+          return (
+            <View break>
+              <Text style={s.h3}>3. 선택 동 상세 — {d.label} ({d.floors}층 · 높이 약 {d.heightM.toFixed(0)}m)</Text>
+              {bf && (
+                <View style={{ flexDirection: "row", gap: 8 }} wrap={false}>
+                  <View style={s.kpi}>
+                    <Text style={s.kpiLabel}>가장 유리한 면</Text>
+                    <Text style={s.kpiValue}>{bf.orientation}</Text>
+                    <Text style={s.kpiLabel}>길이 {bf.lengthM.toFixed(0)}m</Text>
+                  </View>
+                  <View style={s.kpi}>
+                    <Text style={s.kpiLabel}>1층 동지 연속 일조</Text>
+                    <Text style={[s.kpiValue, { color: bf.levels[0].maxRunH >= 2 ? "#2e7d32" : "#B91C1C" }]}>{bf.levels[0].maxRunH.toFixed(2)}h</Text>
+                    <Text style={s.kpiLabel}>총 {bf.levels[0].totalH.toFixed(2)}h</Text>
+                  </View>
+                  <View style={s.kpi}>
+                    <Text style={s.kpiLabel}>그림자 원인 (1층)</Text>
+                    <Text style={[s.body, { marginTop: 3 }]}>{bf.levels[0].blockers.length ? bf.levels[0].blockers.join(", ") : "없음 — 9~15시 내내 햇빛"}</Text>
+                  </View>
+                </View>
+              )}
+
+              {bf && (
+                <View wrap={false} style={{ marginTop: 10 }}>
+                  <Text style={[s.body, { fontWeight: 700, marginBottom: 3 }]}>층별 타임라인 (최적면 · 동지 09~15시, 15분 단위 · 노랑=햇빛 회색=그림자)</Text>
+                  <View style={{ flexDirection: "row", marginLeft: 46, marginBottom: 2 }}>
+                    {[9, 10, 11, 12, 13, 14, 15].map((h) => (
+                      <Text key={h} style={[s.muted, { flex: 1 }]}>{h}시</Text>
+                    ))}
+                  </View>
+                  {bf.levels.map((lv) => (
+                    <View key={lv.label} style={{ flexDirection: "row", alignItems: "center", marginBottom: 3 }}>
+                      <Text style={[s.body, { width: 46 }]}>{lv.label}</Text>
+                      <View style={{ flex: 1, flexDirection: "row", gap: 1 }}>
+                        {lv.timeline.map((lit, i) => (
+                          <View key={i} style={{ flex: 1, height: 9, borderRadius: 1, backgroundColor: lit ? "#f5b431" : "#94a3b8" }} />
+                        ))}
+                      </View>
+                      <Text style={[s.body, { width: 52, textAlign: "right" }]}>{lv.maxRunH.toFixed(2)}h</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <View wrap={false} style={{ marginTop: 10 }}>
+                <Text style={[s.body, { fontWeight: 700, marginBottom: 3 }]}>면(방향)별 최장 연속 일조 — 1층 / 중간층 / 최상층</Text>
+                <View style={s.table}>
+                  <View style={s.row}>
+                    <Text style={[s.th, { width: "28%" }]}>면</Text>
+                    <Text style={[s.th, { width: "16%", textAlign: "right" }]}>길이</Text>
+                    <Text style={[s.th, { width: "18%", textAlign: "right" }]}>1층</Text>
+                    <Text style={[s.th, { width: "19%", textAlign: "right" }]}>중간층</Text>
+                    <Text style={[s.th, { width: "19%", textAlign: "right" }]}>최상층</Text>
+                  </View>
+                  {d.faces.map((f, i) => (
+                    <View key={i} style={[s.row, i === d.faces.length - 1 ? { borderBottomWidth: 0 } : {}]}>
+                      <Text style={[s.td, { width: "28%", fontWeight: i === d.bestFace ? 700 : 400 }]}>{f.orientation}{i === d.bestFace ? " ★" : ""}</Text>
+                      <Text style={[s.td, { width: "16%", textAlign: "right" }]}>{f.lengthM.toFixed(0)}m</Text>
+                      {f.levels.map((lv) => (
+                        <Text key={lv.label} style={[s.td, { width: lv.label === "1층" ? "18%" : "19%", textAlign: "right" }]}>{lv.maxRunH.toFixed(2)}h</Text>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              <View wrap={false} style={{ marginTop: 10 }}>
+                <Text style={[s.body, { fontWeight: 700, marginBottom: 3 }]}>계절 비교 (1층 최적면 · 09~15시)</Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {d.seasons.map((sn) => (
+                    <View key={sn.label} style={s.kpi}>
+                      <Text style={s.kpiLabel}>{sn.label}</Text>
+                      <Text style={[s.kpiValue, { fontSize: 13 }]}>연속 {sn.maxRunH.toFixed(2)}h</Text>
+                      <Text style={s.kpiLabel}>총 {sn.totalH.toFixed(2)}h</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={[s.muted, { marginTop: 3 }]}>※ 면 = 건물 외곽선의 각 변, 값은 그 면 중앙의 창 높이에서 본 최장 연속 일조. 중간층·최상층은 같은 면의 높이만 바꾼 값.</Text>
+              </View>
+            </View>
+          );
+        })()}
+
         <View wrap={false}>
-          <Text style={s.h3}>3. 검토 조건 · 방법</Text>
+          <Text style={s.h3}>{input.detail ? "4" : "3"}. 검토 조건 · 방법</Text>
           <Text style={s.body}>· 단지 동 판별: {input.selection}</Text>
           <Text style={s.body}>· 건물 형상: 국토정보 건물 폴리곤 + 지상 층수 × 3.0m(아파트 층고 근사). 위성 바닥은 VWorld.</Text>
           <Text style={s.body}>· 태양 위치: 동지 적위 −23.44°, 한국표준시 기준 경도 보정, 균시차 생략(±15분).</Text>
@@ -135,12 +237,17 @@ export function AptSunlightDocument({ input, brand }: { input: AptSunReportInput
 
         <View wrap={false} style={{ marginTop: 12, padding: 9, backgroundColor: COLORS.CREAM, borderLeftWidth: 3, borderLeftColor: brand.primaryColor, borderLeftStyle: "solid" }}>
           <Text style={s.muted}>
-            본 보고서는 {brand.companyName} 부동산공법 시뮬레이터가 공개 공간정보로 산정한 참고 자료입니다. 지형·수목·발코니·창 위치·실제 층고를 반영하지 않으며, 일조권 분쟁·인허가·감정의 근거가 아닙니다. 정밀 판단은 전문 일조 시뮬레이션과 현장 측정이 필요합니다. 작성: {brand.brandTagline} {brand.authorName} · 법률자문: {brand.legalAdvisor}
+            본 보고서는 {brand.companyName} 부동산공법 시뮬레이터가 공개 공간정보로 산정한 참고 자료입니다. 지형·수목·발코니·창 위치·실제 층고를 반영하지 않으며, 일조권 분쟁·인허가·감정의 근거가 아닙니다. 정밀 판단은 전문 일조 시뮬레이션과 현장 측정이 필요합니다.{" "}
+            {input.office
+              ? `작성: ${input.office.name}${input.office.contact ? ` · ${input.office.contact}` : ""} (분석 도구: ${brand.brandTagline})`
+              : `작성: ${brand.brandTagline} ${brand.authorName} · 법률자문: ${brand.legalAdvisor}`}
           </Text>
         </View>
 
         <View style={s.footer} fixed>
-          <Text style={s.muted}>{brand.corporationName} · 아파트 일조 검토 보고서 · {input.reviewDate}</Text>
+          <Text style={s.muted}>
+            {input.office ? `${input.office.name}${input.office.contact ? ` · ${input.office.contact}` : ""}` : brand.corporationName} · 아파트 일조 검토 보고서 · {input.reviewDate}
+          </Text>
           <Text style={s.muted} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
         </View>
       </Page>

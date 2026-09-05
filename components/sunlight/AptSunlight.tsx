@@ -16,17 +16,28 @@ import { lonLatRingToLocalAt, type Pt } from "@/lib/geo/parcel";
 import { sunPosition, sunVector, SEASON_LABEL, type SunSeason } from "@/lib/calc/sunPosition";
 import {
   computeBuildingSun,
+  computeBuildingDetail,
   sunGrade,
   SUN_CHECK,
+  SUN_SLOTS,
   type SunBuilding,
   type BuildingSun,
+  type BuildingDetail,
 } from "@/lib/calc/aptSunlight";
+
+/** 보고서 하단 표기(사무소명·담당) — 기기별 localStorage 저장 */
+const OFFICE_KEY = "gyumo_sunlight_office";
+export interface OfficeInfo {
+  name: string;
+  contact: string;
+}
+const SEASON_KO: Record<SunSeason, string> = { winter: "동지", equinox: "춘·추분", summer: "하지" };
 import { getBrandConfig } from "@/lib/branding/storage";
 /** 아파트 층고 근사(m) — 규모검토의 FLOOR_HEIGHT_M(3.5, 일반 건축물)보다 낮다 */
 const APT_FLOOR_M = 3.0;
 
-// leaflet 은 window 가 필요해 SSR 제외
-const SunMap = dynamic(() => import("@/components/sunlight/SunMap"), {
+// 카카오맵 우선 → 안 되면 VWorld(leaflet). 둘 다 window 가 필요해 SSR 제외
+const SunMap = dynamic(() => import("@/components/sunlight/SunMapAuto"), {
   ssr: false,
   loading: () => (
     <div className="rounded-2xl border grid place-items-center text-sm" style={{ height: 380, borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
@@ -122,6 +133,50 @@ export default function AptSunlight() {
   /** 건물 id → 동 번호 ("112동") — 검색 API의 동별 POI 좌표를 건물 폴리곤에 대응시켜 얻는다 */
   const [dongMap, setDongMap] = useState<Map<string, string>>(() => new Map());
   const [pdfBusy, setPdfBusy] = useState(false);
+  /** 선택 동 상세(면·층별 타임라인) */
+  const [detail, setDetail] = useState<BuildingDetail | null>(null);
+  const [office, setOffice] = useState<OfficeInfo>({ name: "", contact: "" });
+
+  // 사무소 표기 불러오기 (SSR 불일치를 피하려 마운트 뒤 비동기로)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const raw = localStorage.getItem(OFFICE_KEY);
+        if (raw) setOffice(JSON.parse(raw) as OfficeInfo);
+      } catch {
+        /* 저장값 없음 */
+      }
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+  function updateOffice(patch: Partial<OfficeInfo>) {
+    setOffice((o) => {
+      const next = { ...o, ...patch };
+      try {
+        localStorage.setItem(OFFICE_KEY, JSON.stringify(next));
+      } catch {
+        /* 사생활 모드 등 */
+      }
+      return next;
+    });
+  }
+
+  // 선택 동 상세 계산 — 면(방향)별 × 1층/중간층/최상층 타임라인 + 그림자 원인 + 계절 비교
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (!selectedId || !buildings || !place) {
+        setDetail(null);
+        return;
+      }
+      const subject = buildings.find((b) => b.id === selectedId);
+      if (!subject) {
+        setDetail(null);
+        return;
+      }
+      setDetail(computeBuildingDetail({ subject, occluders: buildings, latDeg: place.lat, lonDeg: place.lon }));
+    }, 30);
+    return () => clearTimeout(t);
+  }, [selectedId, buildings, place]);
   /** 건물 id → 경위도 링 [lat,lng] — 아래 지도 폴리곤용 */
   const [ringMap, setRingMap] = useState<Map<string, Array<[number, number]>>>(() => new Map());
   /** r3f 캔버스 — PDF 캡처용 (preserveDrawingBuffer 로 toDataURL 가능) */
@@ -313,7 +368,9 @@ export default function AptSunlight() {
       setHour(h);
       setTimeout(() => {
         try {
-          resolve(canvasRef.current ? canvasRef.current.toDataURL("image/jpeg", 0.85) : null);
+          const d = canvasRef.current ? canvasRef.current.toDataURL("image/jpeg", 0.85) : null;
+          // 탭이 숨겨져 캔버스가 그려지지 않았으면(빈 300×150) 캡처를 싣지 않는다
+          resolve(d && d.length > 8000 ? d : null);
         } catch {
           resolve(null);
         }
@@ -357,6 +414,30 @@ export default function AptSunlight() {
               ? "국토정보 동별 위치(POI)·건물 이름이 단지명과 일치하는 건물"
               : `단지명이 건물 자료에 없어 검색 지점 반경 ${radiusM}m 안 5층 이상 건물`,
             basis: SUN_CHECK.basis,
+            office: office.name.trim() ? { name: office.name.trim(), contact: office.contact.trim() } : undefined,
+            detail:
+              detail && selectedBuilding
+                ? {
+                    label: labelOfId(selectedBuilding.id),
+                    floors: selectedBuilding.floors,
+                    heightM: selectedBuilding.heightM,
+                    bestFace: detail.bestFace,
+                    faces: detail.faces.map((f) => ({
+                      orientation: f.orientation,
+                      lengthM: f.lengthM,
+                      levels: f.levels.map((lv) => ({
+                        label: lv.label,
+                        heightM: lv.heightM,
+                        totalH: lv.totalH,
+                        maxRunH: lv.maxRunH,
+                        timeline: lv.timeline,
+                        blockers: lv.blockers.slice(0, 3).map((bk) => `${labelOfId(bk.id)}(${(bk.slots * SUN_CHECK.stepH).toFixed(2)}h)`),
+                      })),
+                    })),
+                    seasons: detail.seasons.map((sn) => ({ label: SEASON_KO[sn.season], totalH: sn.totalH, maxRunH: sn.maxRunH })),
+                    slots: SUN_SLOTS,
+                  }
+                : undefined,
           }}
           brand={getBrandConfig()}
         />,
@@ -408,6 +489,12 @@ export default function AptSunlight() {
             label: dongMap.get(b.id) ?? (b.name ? shortName(b.name) : `건물 ${b.id.slice(1)}`),
           }))
           .sort((a, c) => a.label.localeCompare(c.label, "ko", { numeric: true }));
+
+  const selectedBuilding = selectedId && buildings ? buildings.find((b) => b.id === selectedId) ?? null : null;
+  const labelOfId = (id: string) => {
+    const b = buildings?.find((x) => x.id === id);
+    return dongMap.get(id) ?? (b?.name ? shortName(b.name) : `건물 ${id.slice(1)}`);
+  };
 
   const summary =
     rows.length === 0
@@ -729,8 +816,140 @@ export default function AptSunlight() {
                 className="w-full rounded-lg py-2.5 text-sm font-bold transition-opacity hover:opacity-85 disabled:opacity-50"
                 style={{ background: "#993C1D", color: "#fff" }}
               >
-                {pdfBusy ? "보고서 만드는 중… (동지 9·12·15시 캡처)" : "📄 일조 검토 보고서 PDF 다운로드"}
+                {pdfBusy
+                  ? "보고서 만드는 중… (동지 9·12·15시 캡처)"
+                  : selectedBuilding
+                    ? `📄 보고서 PDF (단지 + ${labelOfId(selectedBuilding.id)} 상세)`
+                    : "📄 일조 검토 보고서 PDF 다운로드"}
               </button>
+            </div>
+
+            {/* 선택 동 상세 — 표·3D·지도 어디서든 동을 누르면 */}
+            {selectedBuilding && (
+              <div className="rounded-2xl border p-4 space-y-3" style={{ background: "var(--card)", borderColor: "rgba(255,207,13,0.6)" }}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-semibold">🏢 {labelOfId(selectedBuilding.id)} 상세</div>
+                  <button type="button" onClick={() => setSelectedId(null)} className="text-[11px] px-2 py-1 rounded border" style={{ borderColor: "var(--border)" }}>
+                    닫기
+                  </button>
+                </div>
+                <div className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+                  {selectedBuilding.floors}층 · 높이 약 {selectedBuilding.heightM.toFixed(0)}m
+                  {selectedBuilding.name ? ` · ${selectedBuilding.name}` : ""}
+                </div>
+                {!detail ? (
+                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>상세 계산 중…</p>
+                ) : (
+                  <>
+                    {(() => {
+                      const bf = detail.faces[detail.bestFace];
+                      if (!bf) return null;
+                      const g = sunGrade(bf.levels[0].maxRunH);
+                      return (
+                        <div className="rounded-lg px-3 py-2 text-xs" style={{ background: `${g.color}22`, border: `1px solid ${g.color}` }}>
+                          <b>{bf.orientation} 면(1층)</b> 동지 연속 <b>{bf.levels[0].maxRunH.toFixed(2)}h</b> · 총 {bf.levels[0].totalH.toFixed(2)}h → <b style={{ color: g.color }}>{g.label}</b>
+                          {bf.levels[0].blockers.length > 0 && (
+                            <div className="mt-1" style={{ color: "var(--muted-foreground)" }}>
+                              그림자 원인: {bf.levels[0].blockers.slice(0, 3).map((bk) => `${labelOfId(bk.id)} ${(bk.slots * SUN_CHECK.stepH).toFixed(2)}h`).join(" · ")}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* 층별 타임라인 (최적면) */}
+                    <div className="space-y-1">
+                      <div className="flex text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+                        <span className="w-12 shrink-0" />
+                        {[9, 10, 11, 12, 13, 14, 15].map((h) => (
+                          <span key={h} className="flex-1 text-left">{h}시</span>
+                        ))}
+                      </div>
+                      {detail.faces[detail.bestFace]?.levels.map((lv) => (
+                        <div key={lv.label} className="flex items-center gap-1">
+                          <span className="w-12 shrink-0 text-[11px] font-medium">{lv.label}</span>
+                          <div className="flex-1 flex gap-px">
+                            {lv.timeline.map((lit, i) => (
+                              <span
+                                key={i}
+                                title={`${fmtHour(SUN_SLOTS[i])} ${lit ? "햇빛" : "그림자"}`}
+                                className="flex-1 h-3 rounded-[2px]"
+                                style={{ background: lit ? "#f5b431" : "#94a3b8" }}
+                              />
+                            ))}
+                          </div>
+                          <span className="w-14 shrink-0 text-[11px] text-right tabular-nums">{lv.maxRunH.toFixed(2)}h</span>
+                        </div>
+                      ))}
+                      <div className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+                        노랑 = 햇빛, 회색 = 그림자 (동지, 15분 단위). 오른쪽 = 최장 연속 일조.
+                      </div>
+                    </div>
+
+                    {/* 면별 표 */}
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr style={{ color: "var(--muted-foreground)" }}>
+                          <th className="text-left py-1 font-medium">면</th>
+                          <th className="text-right py-1 font-medium">길이</th>
+                          <th className="text-right py-1 font-medium">1층</th>
+                          <th className="text-right py-1 font-medium">중간층</th>
+                          <th className="text-right py-1 font-medium">최상층</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detail.faces.map((f, i) => (
+                          <tr key={f.edgeIdx} style={{ borderTop: "1px solid var(--border)", fontWeight: i === detail.bestFace ? 700 : 400 }}>
+                            <td className="py-1">{f.orientation}{i === detail.bestFace ? " ★" : ""}</td>
+                            <td className="py-1 text-right tabular-nums">{f.lengthM.toFixed(0)}m</td>
+                            {f.levels.map((lv) => (
+                              <td key={lv.label} className="py-1 text-right tabular-nums" style={{ color: sunGrade(lv.maxRunH).color }}>
+                                {lv.maxRunH.toFixed(2)}h
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {/* 계절 비교 */}
+                    <div className="flex gap-1.5 text-[11px]">
+                      {detail.seasons.map((sn) => (
+                        <div key={sn.season} className="flex-1 rounded-lg px-2 py-1.5 text-center" style={{ background: "var(--secondary)" }}>
+                          <div style={{ color: "var(--muted-foreground)" }}>{SEASON_KO[sn.season]}</div>
+                          <div className="font-semibold tabular-nums">연속 {sn.maxRunH.toFixed(2)}h</div>
+                          <div className="tabular-nums" style={{ color: "var(--muted-foreground)" }}>총 {sn.totalH.toFixed(2)}h</div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+                      면 = 건물 외곽선의 각 변(★ 가장 유리한 면). 값은 해당 면 중앙의 창 높이에서 본 9~15시 최장 연속 일조. 계절 비교는 1층 최적면 기준.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 보고서 표기 — 사무소명·담당 */}
+            <div className="rounded-2xl border p-4 space-y-2" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+              <div className="text-sm font-semibold">보고서 하단 표기</div>
+              <p className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+                입력하면 PDF 맨 아래 작성자 줄과 면책 문구에 사무소명이 들어갑니다. 비워 두면 기본 브랜드로 나갑니다. (이 기기에 저장)
+              </p>
+              <input
+                value={office.name}
+                onChange={(e) => updateOffice({ name: e.target.value })}
+                placeholder="사무소명 (예: OO공인중개사사무소)"
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none"
+                style={{ background: "var(--secondary)", borderColor: "var(--border)" }}
+              />
+              <input
+                value={office.contact}
+                onChange={(e) => updateOffice({ contact: e.target.value })}
+                placeholder="담당자·연락처 (예: 홍길동 대표 010-0000-0000)"
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none"
+                style={{ background: "var(--secondary)", borderColor: "var(--border)" }}
+              />
             </div>
           </div>
         </div>

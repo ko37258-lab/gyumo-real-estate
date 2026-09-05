@@ -1,4 +1,4 @@
-// 아파트 단지 일조 진단 — 동(棟)별 "동지 9~15시 1층 연속 일조" 스캔.
+// 아파트 단지 일조 진단 — 동(棟)별 "동지 9~15시 1층 연속 일조" 스캔 + 선택 동 상세(면·층별 타임라인).
 //
 // 왜: 일조 분쟁·판례의 수인한도 기준은 "동짓날 9시~15시 사이 연속 2시간 이상"이다
 // (lib/calc/shadowCheck.ts 와 같은 기준). 단지 안 각 동의 외벽면 중 가장 유리한 면(보통 남향)이
@@ -49,6 +49,13 @@ export const SUN_CHECK = {
     "동지 9~15시 15분 간격 스캔 · 수광점 1층 창 높이 1.5m · 다른 건물의 그림자만 반영(지형·수목 제외) · 층수×3m 높이 근사 · 판례 수인한도 = 연속 2시간",
 };
 
+/** 스캔 시각 목록(9.0, 9.25, …, 15.0) — 타임라인 표시용 */
+export const SUN_SLOTS: number[] = (() => {
+  const out: number[] = [];
+  for (let h = SUN_CHECK.fromH; h <= SUN_CHECK.toH + 1e-9; h += SUN_CHECK.stepH) out.push(Math.round(h * 100) / 100);
+  return out;
+})();
+
 function signedArea(pts: Pt[]): number {
   let a = 0;
   for (let i = 0; i < pts.length; i++) {
@@ -59,10 +66,19 @@ function signedArea(pts: Pt[]): number {
   return a / 2;
 }
 
+interface FaceSample {
+  edgeIdx: number;
+  at: Pt;
+  /** 바깥 법선 (단위) */
+  nx: number;
+  ny: number;
+  lengthM: number;
+}
+
 /** 변 중점을 바깥으로 띄운 수광점들 (3m 미만 짧은 변은 제외) */
-function faceSamples(pts: Pt[]): Array<{ edgeIdx: number; at: Pt }> {
+function faceSamples(pts: Pt[]): FaceSample[] {
   const ccw = signedArea(pts) > 0;
-  const out: Array<{ edgeIdx: number; at: Pt }> = [];
+  const out: FaceSample[] = [];
   for (let i = 0; i < pts.length; i++) {
     const [x1, y1] = pts[i];
     const [x2, y2] = pts[(i + 1) % pts.length];
@@ -80,12 +96,23 @@ function faceSamples(pts: Pt[]): Array<{ edgeIdx: number; at: Pt }> {
     out.push({
       edgeIdx: i,
       at: [(x1 + x2) / 2 + nx * SUN_CHECK.offsetM, (y1 + y2) / 2 + ny * SUN_CHECK.offsetM],
+      nx,
+      ny,
+      lengthM: len,
     });
   }
   return out;
 }
 
+/** 바깥 법선 → 8방위 ("남향" 등) */
+export function faceOrientation(nx: number, ny: number): string {
+  const deg = ((Math.atan2(nx, ny) * 180) / Math.PI + 360) % 360; // 북=0 시계방향
+  const names = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"];
+  return names[Math.round(deg / 45) % 8] + "향";
+}
+
 interface Occluder {
+  id: string;
   pts: Pt[];
   h: number;
   cx: number;
@@ -93,16 +120,24 @@ interface Occluder {
   r: number;
 }
 
+function toOccluders(list: SunBuilding[]): Occluder[] {
+  return list.map((b) => {
+    let cx = 0;
+    let cy = 0;
+    for (const [x, y] of b.pts) {
+      cx += x;
+      cy += y;
+    }
+    cx /= b.pts.length;
+    cy /= b.pts.length;
+    let r = 0;
+    for (const [x, y] of b.pts) r = Math.max(r, Math.hypot(x - cx, y - cy));
+    return { id: b.id, pts: b.pts, h: b.heightM, cx, cy, r: r + 1 };
+  });
+}
+
 /** 수광점 P(높이 pz)에서 태양 방향 d로 나간 광선이 프리즘(폴리곤×높이)에 막히는가 */
-function rayHitsPrism(
-  px: number,
-  py: number,
-  pz: number,
-  dx: number,
-  dy: number,
-  dz: number,
-  o: Occluder,
-): boolean {
+function rayHitsPrism(px: number, py: number, pz: number, dx: number, dy: number, dz: number, o: Occluder): boolean {
   // 빠른 기각: 광선 뒤쪽이거나 궤적에서 멀리 떨어진 건물
   const vx = o.cx - px;
   const vy = o.cy - py;
@@ -132,6 +167,65 @@ function rayHitsPrism(
   return false;
 }
 
+interface SunStep {
+  h: number;
+  /** 로컬 (동, 북, 상) 단위 벡터 */
+  v: [number, number, number];
+}
+
+function sunSteps(latDeg: number, lonDeg: number, season: SunSeason): SunStep[] {
+  const steps: SunStep[] = [];
+  for (const h of SUN_SLOTS) {
+    const p = sunPosition({ latDeg, lonDeg, season, hourKST: h });
+    if (p.altitudeDeg <= 0) {
+      steps.push({ h, v: [0, 0, -1] }); // 해가 없는 시각 — 항상 그림자
+      continue;
+    }
+    const [e, up, sz] = sunVector(p); // 씬 벡터: x=동, y=상, z=남
+    steps.push({ h, v: [e, -sz, up] });
+  }
+  return steps;
+}
+
+/** 한 수광점의 시각별 일조 여부 + 가린 건물 */
+function scanPoint(
+  at: Pt,
+  z: number,
+  selfId: string,
+  occ: Occluder[],
+  steps: SunStep[],
+): { timeline: boolean[]; blockers: Map<string, number>; totalH: number; maxRunH: number } {
+  const timeline: boolean[] = [];
+  const blockers = new Map<string, number>();
+  let total = 0;
+  let run = 0;
+  let maxRun = 0;
+  for (const st of steps) {
+    const [dx, dy, dz] = st.v;
+    let lit = dz > 0;
+    if (lit) {
+      for (const o of occ) {
+        if (o.id === selfId) continue;
+        if (rayHitsPrism(at[0], at[1], z, dx, dy, dz, o)) {
+          lit = false;
+          blockers.set(o.id, (blockers.get(o.id) ?? 0) + 1);
+          break;
+        }
+      }
+    }
+    timeline.push(lit);
+    if (lit) {
+      total += SUN_CHECK.stepH;
+      run += SUN_CHECK.stepH;
+      maxRun = Math.max(maxRun, run);
+    } else {
+      run = 0;
+    }
+  }
+  // 마지막 슬롯(15:00)은 구간 끝점이라 시간 합산에서 한 칸 빼지 않는다 — 9~15시 = 6h 를 25칸으로 셈(끝점 포함, 최대 6.25h)
+  return { timeline, blockers, totalH: total, maxRunH: maxRun };
+}
+
 /**
  * 대상 동들의 면별 일조를 계산한다. occluders 는 대상 포함 주변 전체 건물.
  * subjects 가 많을수록 오래 걸리므로 호출부는 단지 동만 넘긴다.
@@ -144,56 +238,15 @@ export function computeBuildingSun(params: {
   season?: SunSeason;
 }): BuildingSun[] {
   const { subjects, occluders, latDeg, lonDeg } = params;
-  const season = params.season ?? "winter";
-
-  const occ: Array<Occluder & { id: string }> = occluders.map((b) => {
-    let cx = 0;
-    let cy = 0;
-    for (const [x, y] of b.pts) {
-      cx += x;
-      cy += y;
-    }
-    cx /= b.pts.length;
-    cy /= b.pts.length;
-    let r = 0;
-    for (const [x, y] of b.pts) r = Math.max(r, Math.hypot(x - cx, y - cy));
-    return { id: b.id, pts: b.pts, h: b.heightM, cx, cy, r: r + 1 };
-  });
-
-  const steps: Array<{ h: number; v: [number, number, number] }> = [];
-  for (let h = SUN_CHECK.fromH; h <= SUN_CHECK.toH + 1e-9; h += SUN_CHECK.stepH) {
-    const p = sunPosition({ latDeg, lonDeg, season, hourKST: h });
-    if (p.altitudeDeg <= 0) continue;
-    const [e, up, sz] = sunVector(p); // 씬 벡터: x=동, y=상, z=남
-    steps.push({ h, v: [e, -sz, up] }); // 로컬 (동, 북, 상)
-  }
+  const occ = toOccluders(occluders);
+  const steps = sunSteps(latDeg, lonDeg, params.season ?? "winter");
 
   const out: BuildingSun[] = [];
   for (const b of subjects) {
     const faces: FaceSun[] = [];
     for (const f of faceSamples(b.pts)) {
-      let total = 0;
-      let run = 0;
-      let maxRun = 0;
-      for (const st of steps) {
-        const [dx, dy, dz] = st.v;
-        let lit = true;
-        for (const o of occ) {
-          if (o.id === b.id) continue;
-          if (rayHitsPrism(f.at[0], f.at[1], SUN_CHECK.windowH, dx, dy, dz, o)) {
-            lit = false;
-            break;
-          }
-        }
-        if (lit) {
-          total += SUN_CHECK.stepH;
-          run += SUN_CHECK.stepH;
-          maxRun = Math.max(maxRun, run);
-        } else {
-          run = 0;
-        }
-      }
-      faces.push({ edgeIdx: f.edgeIdx, at: f.at, totalH: total, maxRunH: maxRun });
+      const r = scanPoint(f.at, SUN_CHECK.windowH, b.id, occ, steps);
+      faces.push({ edgeIdx: f.edgeIdx, at: f.at, totalH: r.totalH, maxRunH: r.maxRunH });
     }
     if (faces.length === 0) continue;
     const best = faces.reduce((a, c) =>
@@ -202,6 +255,88 @@ export function computeBuildingSun(params: {
     out.push({ id: b.id, best, faces });
   }
   return out;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 선택 동 상세 — 면(방향)별 × 층(1층·중간층·최상층) 타임라인 + 그림자 원인 + 계절 비교
+// ─────────────────────────────────────────────────────────────
+
+export interface LevelDetail {
+  label: string;
+  heightM: number;
+  timeline: boolean[];
+  totalH: number;
+  maxRunH: number;
+  /** 가린 건물 id → 가린 슬롯 수 (많은 순) */
+  blockers: Array<{ id: string; slots: number }>;
+}
+
+export interface FaceDetail {
+  edgeIdx: number;
+  orientation: string;
+  lengthM: number;
+  at: Pt;
+  levels: LevelDetail[];
+}
+
+export interface BuildingDetail {
+  id: string;
+  faces: FaceDetail[];
+  /** 1층 기준 가장 유리한 면 index (faces[]) */
+  bestFace: number;
+  /** 계절별 1층·최적면 일조 (동지·춘추분·하지) */
+  seasons: Array<{ season: SunSeason; totalH: number; maxRunH: number }>;
+}
+
+export function computeBuildingDetail(params: {
+  subject: SunBuilding;
+  occluders: SunBuilding[];
+  latDeg: number;
+  lonDeg: number;
+}): BuildingDetail {
+  const { subject, occluders, latDeg, lonDeg } = params;
+  const occ = toOccluders(occluders);
+  const winter = sunSteps(latDeg, lonDeg, "winter");
+  const levelsSpec = [
+    { label: "1층", heightM: SUN_CHECK.windowH },
+    { label: "중간층", heightM: Math.max(SUN_CHECK.windowH, subject.heightM / 2) },
+    { label: "최상층", heightM: Math.max(SUN_CHECK.windowH, subject.heightM - 1.5) },
+  ];
+
+  const faces: FaceDetail[] = faceSamples(subject.pts).map((f) => ({
+    edgeIdx: f.edgeIdx,
+    orientation: faceOrientation(f.nx, f.ny),
+    lengthM: f.lengthM,
+    at: f.at,
+    levels: levelsSpec.map((lv) => {
+      const r = scanPoint(f.at, lv.heightM, subject.id, occ, winter);
+      return {
+        label: lv.label,
+        heightM: lv.heightM,
+        timeline: r.timeline,
+        totalH: r.totalH,
+        maxRunH: r.maxRunH,
+        blockers: [...r.blockers.entries()].map(([id, slots]) => ({ id, slots })).sort((a, b) => b.slots - a.slots),
+      };
+    }),
+  }));
+
+  let bestFace = 0;
+  faces.forEach((f, i) => {
+    const a = faces[bestFace].levels[0];
+    const c = f.levels[0];
+    if (c.maxRunH > a.maxRunH || (c.maxRunH === a.maxRunH && c.totalH > a.totalH)) bestFace = i;
+  });
+
+  const seasons = (["winter", "equinox", "summer"] as SunSeason[]).map((season) => {
+    const steps = season === "winter" ? winter : sunSteps(latDeg, lonDeg, season);
+    const f = faces[bestFace];
+    if (!f) return { season, totalH: 0, maxRunH: 0 };
+    const r = scanPoint(f.at, SUN_CHECK.windowH, subject.id, occ, steps);
+    return { season, totalH: r.totalH, maxRunH: r.maxRunH };
+  });
+
+  return { id: subject.id, faces, bestFace, seasons };
 }
 
 /** 등급 — 연속 일조 시간 기준 (판례 2시간 / 4시간 이상이면 매우 양호) */
