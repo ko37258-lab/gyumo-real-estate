@@ -20,6 +20,7 @@ import {
   type SunBuilding,
   type BuildingSun,
 } from "@/lib/calc/aptSunlight";
+import { getBrandConfig } from "@/lib/branding/storage";
 /** 아파트 층고 근사(m) — 규모검토의 FLOOR_HEIGHT_M(3.5, 일반 건축물)보다 낮다 */
 const APT_FLOOR_M = 3.0;
 
@@ -108,6 +109,9 @@ export default function AptSunlight() {
   const [radiusM, setRadiusM] = useState(150);
   /** 건물 id → 동 번호 ("112동") — 검색 API의 동별 POI 좌표를 건물 폴리곤에 대응시켜 얻는다 */
   const [dongMap, setDongMap] = useState<Map<string, string>>(() => new Map());
+  const [pdfBusy, setPdfBusy] = useState(false);
+  /** r3f 캔버스 — PDF 캡처용 (preserveDrawingBuffer 로 toDataURL 가능) */
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // ── 검색 ──
   async function runSearch(e?: React.FormEvent) {
@@ -224,8 +228,6 @@ export default function AptSunlight() {
     return { complexIds: near, byName: false };
   }, [buildings, place, radiusM, dongMap]);
 
-  const labelOf = (b: SunBuilding) => dongMap.get(b.id) ?? (b.name ? shortName(b.name) : `건물 ${b.id.slice(1)}`);
-
   // ── 동별 동지 일조 스캔 (UI 그린 뒤 계산) ──
   useEffect(() => {
     if (!buildings || !place || complexIds.size === 0) return;
@@ -273,6 +275,80 @@ export default function AptSunlight() {
   }
   const effectiveSunMap = complexIds.size > 0 ? sunMap : null;
 
+  /** 동지 특정 시각으로 맞춘 뒤 한두 프레임 기다려 캔버스를 JPEG 로 */
+  function captureAt(h: number): Promise<string | null> {
+    return new Promise((resolve) => {
+      setPlaying(false);
+      setSeason("winter");
+      setHour(h);
+      setTimeout(() => {
+        try {
+          resolve(canvasRef.current ? canvasRef.current.toDataURL("image/jpeg", 0.85) : null);
+        } catch {
+          resolve(null);
+        }
+      }, 450);
+    });
+  }
+
+  /** 📄 일조 검토 보고서 PDF — 동지 9·12·15시 3D 캡처 + 동별 표 (이행강제금 PDF 와 같은 blob 패턴) */
+  async function handleDownloadPdf() {
+    if (!place || rows.length === 0 || pdfBusy) return;
+    setPdfBusy(true);
+    const prevSeason = season;
+    const prevHour = hour;
+    let url: string | null = null;
+    try {
+      const snapshots: Array<{ label: string; dataUrl: string }> = [];
+      for (const h of [9, 12, 15]) {
+        const d = await captureAt(h);
+        if (d) snapshots.push({ label: `동지 ${fmtHour(h)}`, dataUrl: d });
+      }
+      setSeason(prevSeason);
+      setHour(prevHour);
+      const [{ pdf }, { AptSunlightDocument }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/report/AptSunlightDocument"),
+      ]);
+      const reviewDate = new Date().toISOString().slice(0, 10);
+      const blob = await pdf(
+        <AptSunlightDocument
+          input={{
+            placeTitle: place.title,
+            address: place.address,
+            reviewDate,
+            snapshots,
+            rows: rows.map(({ b, s, label }) => {
+              const g = sunGrade(s.best.maxRunH);
+              return { label, floors: b.floors, maxRunH: s.best.maxRunH, totalH: s.best.totalH, grade: g.label, color: g.color };
+            }),
+            summary: summary ?? { pass: 0, total: 0, avg: 0 },
+            selection: byName
+              ? "국토정보 동별 위치(POI)·건물 이름이 단지명과 일치하는 건물"
+              : `단지명이 건물 자료에 없어 검색 지점 반경 ${radiusM}m 안 5층 이상 건물`,
+            basis: SUN_CHECK.basis,
+          }}
+          brand={getBrandConfig()}
+        />,
+      ).toBlob();
+      url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `아파트일조검토_${place.title.replace(/[\\/:*?"<>|\s]/g, "_").slice(0, 30)}_${reviewDate.replace(/-/g, "")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error("[아파트 일조 PDF] 생성 실패:", e);
+      alert("PDF 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setPdfBusy(false);
+      setTimeout(() => {
+        if (url) URL.revokeObjectURL(url);
+      }, 500);
+    }
+  }
+
   // ── 재생 ──
   useEffect(() => {
     if (!playing) return;
@@ -290,21 +366,27 @@ export default function AptSunlight() {
     [place, season, hour],
   );
 
-  const rows = useMemo(() => {
-    if (!buildings || !effectiveSunMap) return [];
-    return buildings
-      .filter((b) => effectiveSunMap.has(b.id))
-      .map((b) => ({ b, s: effectiveSunMap.get(b.id)!, label: labelOf(b) }))
-      .sort((a, c) => a.label.localeCompare(c.label, "ko", { numeric: true }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- labelOf 는 dongMap 에만 의존
-  }, [buildings, effectiveSunMap, dongMap]);
+  // 동별 표 행 — 60행 이하라 매 렌더 계산해도 가볍다 (React 컴파일러가 알아서 메모)
+  const rows =
+    !buildings || !effectiveSunMap
+      ? []
+      : buildings
+          .filter((b) => effectiveSunMap.has(b.id))
+          .map((b) => ({
+            b,
+            s: effectiveSunMap.get(b.id)!,
+            label: dongMap.get(b.id) ?? (b.name ? shortName(b.name) : `건물 ${b.id.slice(1)}`),
+          }))
+          .sort((a, c) => a.label.localeCompare(c.label, "ko", { numeric: true }));
 
-  const summary = useMemo(() => {
-    if (rows.length === 0) return null;
-    const pass = rows.filter((r) => r.s.best.maxRunH >= SUN_CHECK.passRunH).length;
-    const avg = rows.reduce((a, r) => a + r.s.best.maxRunH, 0) / rows.length;
-    return { pass, total: rows.length, avg };
-  }, [rows]);
+  const summary =
+    rows.length === 0
+      ? null
+      : {
+          pass: rows.filter((r) => r.s.best.maxRunH >= SUN_CHECK.passRunH).length,
+          total: rows.length,
+          avg: rows.reduce((a, r) => a + r.s.best.maxRunH, 0) / rows.length,
+        };
 
   return (
     <div className="space-y-4">
@@ -385,7 +467,10 @@ export default function AptSunlight() {
                   shadows
                   dpr={[1, 1.5]}
                   camera={{ position: [220, 180, 260], fov: 40, near: 0.5, far: 3000 }}
-                  gl={{ antialias: true }}
+                  gl={{ antialias: true, preserveDrawingBuffer: true }}
+                  onCreated={(st) => {
+                    canvasRef.current = st.gl.domElement;
+                  }}
                 >
                   <color attach="background" args={["#dfe7ee"]} />
                   <Scene
@@ -583,6 +668,15 @@ export default function AptSunlight() {
               <p className="text-[11px] leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
                 {SUN_CHECK.basis}. 인허가·소송 판단이 아닌 참고용입니다.
               </p>
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={rows.length === 0 || computing || pdfBusy}
+                className="w-full rounded-lg py-2.5 text-sm font-bold transition-opacity hover:opacity-85 disabled:opacity-50"
+                style={{ background: "#993C1D", color: "#fff" }}
+              >
+                {pdfBusy ? "보고서 만드는 중… (동지 9·12·15시 캡처)" : "📄 일조 검토 보고서 PDF 다운로드"}
+              </button>
             </div>
           </div>
         </div>
