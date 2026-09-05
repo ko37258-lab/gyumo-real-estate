@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { probeKakao, type MapEngine } from "@/lib/kakaoMap";
+import { probeKakaoDetail, type MapEngine } from "@/lib/kakaoMap";
 import type { SunMapBuilding } from "@/components/sunlight/SunMap";
 
 const Loading = () => (
@@ -24,15 +24,18 @@ export default function SunMapAuto(props: {
   onPick: (lat: number, lng: number) => void;
 }) {
   const [engine, setEngine] = useState<MapEngine>("loading");
+  const [reason, setReason] = useState("");
   useEffect(() => {
     let alive = true;
-    probeKakao().then((e) => {
-      if (alive) setEngine(e);
+    probeKakaoDetail().then((r) => {
+      if (!alive) return;
+      setEngine(r.engine);
+      setReason(r.reason);
     });
     return () => {
       alive = false;
     };
   }, []);
   if (engine === "loading") return <Loading />;
-  return engine === "ok" ? <KakaoMap {...props} /> : <LeafletMap {...props} />;
+  return engine === "ok" ? <KakaoMap {...props} /> : <LeafletMap {...props} fallbackReason={reason} />;
 }

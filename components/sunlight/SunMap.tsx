@@ -43,12 +43,15 @@ export default function SunMap({
   selectedId,
   onSelect,
   onPick,
+  fallbackReason,
 }: {
   center: [number, number];
   buildings: SunMapBuilding[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onPick: (lat: number, lng: number) => void;
+  /** 카카오맵 대신 이 지도를 쓰게 된 이유 (SunMapAuto) */
+  fallbackReason?: string;
 }) {
   const [satellite, setSatellite] = useState(true);
 
@@ -113,7 +116,7 @@ export default function SunMap({
         })}
       </div>
       <div className="absolute bottom-2 left-2 z-[1000] text-[11px] px-2 py-1 rounded" style={{ background: "rgba(255,255,255,0.9)", color: "#333" }}>
-        색 = 동지 9~15시 연속 일조 등급 · 지도를 누르면 그 지점 주변 단지를 다시 불러옵니다
+        브이월드 지도{fallbackReason ? ` (카카오맵 불가: ${fallbackReason})` : ""} · 색 = 동지 9~15시 연속 일조 등급 · 지도를 누르면 그 지점 주변 단지를 다시 불러옵니다
       </div>
       <style jsx global>{`
         .sunmap-label {

@@ -68,3 +68,10 @@ export function probeKakao(): Promise<MapEngine> {
     .then((): MapEngine => "ok")
     .catch((): MapEngine => "free");
 }
+
+/** 폴백 이유까지 — 화면에 "왜 카카오맵이 아닌지" 표시해 원인(키·도메인·한도)을 바로 알 수 있게 */
+export function probeKakaoDetail(): Promise<{ engine: MapEngine; reason: string }> {
+  return loadKakaoMaps()
+    .then(() => ({ engine: "ok" as MapEngine, reason: "" }))
+    .catch((e: unknown) => ({ engine: "free" as MapEngine, reason: e instanceof Error ? e.message : String(e) }));
+}
