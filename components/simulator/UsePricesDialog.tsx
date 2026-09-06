@@ -71,7 +71,7 @@ export function UsePricesDialog({
               color: "var(--info)",
             }}
           >
-            📊 용도별 분양가·임대료 전체 보기 (플렉시티식 표)
+            📊 용도별 분양가·임대료 전체 보기
           </button>
         }
       />
