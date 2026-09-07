@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 // leaflet은 window 필수 — SSR 제외 lazy 로드
-const MapPicker = dynamic(() => import("@/components/simulator/MapPicker"), {
+const MapPicker = dynamic(() => import("@/components/simulator/MapPickerAuto"), {
   ssr: false,
   loading: () => (
     <div className="h-[320px] flex items-center justify-center text-[12px] text-muted-foreground bg-card border border-border rounded-md">

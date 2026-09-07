@@ -254,6 +254,7 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-09-06** — **① 토지가치분석 지도 카카오맵 우선** (운영자: "지도가 카카오맵을 먼저 사용하고 안되면 무료 지도로"). `MapPickerAuto`(probeKakaoDetail) → `KakaoMapPicker`(ROADMAP/HYBRID, 지적편집도는 카카오 내장 USE_DISTRICT 오버레이, 폴리곤 클릭도 지도 클릭으로 전달) / 실패 시 기존 `MapPicker`(leaflet+VWorld). 클릭 확정(`resolveParcelAt`)·선택 상태(`useParcelPick`)·토글+하단 바(`MapPickerChrome`)는 `mapPickerShared.tsx` 로 빼서 두 엔진이 공유. 우측 상단에 엔진 라벨(카카오맵/브이월드). 로컬은 revgeocode 가 카카오 REST 키 placeholder 라 401→클릭 확정이 안 되니 운영에서 검증.
 - **2026-09-05** — **☀️ 아파트 일조 보기 `/sunlight`** (운영자: "아파트를 검색해서 아파트단지 햇빛이 드는 것을 시간대별로 보여줘"). 크레딧 차감 없음, 게이트 없음.
   - 검색: `GET /api/sunlight/search?q=&size=` → `lib/vworld-data.ts searchVworldPlaces`(VWorld search type=place, 아파트 우선 정렬, 없으면 address). VWorld 는 "래미안대치팰리스1단지아파트/112동" 처럼 **동별 POI 좌표**를 주므로 단지 선택 후 size=60 재검색 → 건물 폴리곤(pointInRing, 없으면 30m 최근접)에 동 번호를 붙인다. 국토정보 건물 이름(buld_nm)은 "래미안 대치 팰리스"처럼 동 번호가 없다.
   - 3D: `/api/vworld?kind=buildings r=300` 압출(아파트 층고 3.0m) + `components/three/GroundImagery.tsx`(ScaleVisualizer3D 에서 분리한 위성 바닥, 두 곳 공유) + sunPosition 태양광 그림자(4096 섀도맵 ±340m). 계절 3종 × 06~19시 슬라이더·재생.
