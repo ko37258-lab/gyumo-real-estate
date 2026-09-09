@@ -298,6 +298,8 @@ function Scene({
   const covPct = useSimulatorStore((s) => s.covPct);
   const farPct = useSimulatorStore((s) => s.farPct);
   const roadM = useSimulatorStore((s) => s.roadM);
+  // 실형상일 때 연속지적도 도로 필지(지목 도)를 실제 모양대로 깔면, 남쪽 고정 직사각형 도로는 숨긴다
+  const [roadPolyCount, setRoadPolyCount] = useState(0);
   const sunOnRaw = useSimulatorStore((s) => s.sunOn);
   const sunlightRule = useSimulatorStore((s) => s.sunlightRule);
   const parkingUsage = useSimulatorStore((s) => s.parkingUsage);
@@ -456,6 +458,8 @@ function Scene({
         <GroundImagery centerLon={parcelShape.centerLon} centerLat={parcelShape.centerLat} halfM={190} />
       )}
       {parcelShape && showNeighbors && <Neighborhood shape={parcelShape} />}
+      {/* 🛣️ 실제 도로면 — 지목 도 필지 폴리곤 (실형상일 때만) */}
+      {parcelShape && <RoadSurfaces shape={parcelShape} roadM={roadM} onLoaded={setRoadPolyCount} />}
 
       {/* 대지 — 실형상 폴리곤 있으면 실제 지적 모양으로 */}
       {parcelShape ? (
@@ -528,6 +532,9 @@ function Scene({
         return <group>{items}</group>;
       })()}
 
+      {/* 남쪽 합성 도로 — 실형상 도로 필지를 못 받았을 때(박스 모드·조회 실패)만 */}
+      {!(parcelShape && roadPolyCount > 0) && (
+        <>
       {/* 인도 (대지-도로 사이) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, southZ + 0.7]} receiveShadow>
         <planeGeometry args={[lotSide + 6, 1.4]} />
@@ -558,6 +565,8 @@ function Scene({
         />
       )}
       <RoadLabel side={lotSide} z={roadZ + 1.4} text={`전면도로 ${roadM}m`} />
+        </>
+      )}
 
       {/* 가로수 */}
       {lotSide > 10 && (
@@ -2136,6 +2145,114 @@ function CoreTower({
 interface NeighborLocal {
   pts: Pt[];
   floors: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 🛣️ 실제 도로면 — 연속지적도에서 지목이 '도'인 필지 폴리곤을 대상 필지 좌표계에 깔아
+// 도로가 실제 위치·방향·폭 그대로 보이게 한다. (전에는 대지 외곽상자 남쪽에 직사각형을
+// 고정으로 붙여, 회전·비정형 필지에서는 옆 건물 위에 떠 보였다 — 2026-09-09 운영자 지적)
+// 라벨 "전면도로 Nm" 은 대지에 가장 가까운 도로 조각 위에 놓는다.
+// ─────────────────────────────────────────────────────────────
+function RoadSurfaces({
+  shape,
+  roadM,
+  onLoaded,
+}: {
+  shape: ParcelShape;
+  roadM: number;
+  onLoaded: (count: number) => void;
+}) {
+  const [items, setItems] = useState<Array<{ pts: Pt[]; near: number }> | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/vworld?kind=roadpolys&x=${shape.centerLon}&y=${shape.centerLat}&r=140`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { roads?: Array<{ ring: Array<[number, number]> }> } | null) => {
+        if (!alive) return;
+        const out: Array<{ pts: Pt[]; near: number }> = [];
+        for (const rd of d?.roads ?? []) {
+          const pts = lonLatRingToLocalAt(rd.ring, shape.centerLon, shape.centerLat);
+          // 대지 외곽선과의 최단 거리(꼭짓점 기준 근사) — 라벨 위치·먼 조각 제외용
+          let near = Infinity;
+          for (const [x, y] of pts) {
+            for (const [px, py] of shape.pts) near = Math.min(near, Math.hypot(x - px, y - py));
+          }
+          if (near > 150) continue;
+          out.push({ pts, near });
+        }
+        setItems(out);
+        onLoaded(out.length);
+      })
+      .catch(() => {
+        if (alive) {
+          setItems([]);
+          onLoaded(0);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [shape.centerLon, shape.centerLat, shape.pts, onLoaded]);
+
+  const geoms = useMemo(() => {
+    if (!items) return [];
+    return items.map((r) => {
+      let signed = 0;
+      for (let i = 0; i < r.pts.length; i++) {
+        const [x1, y1] = r.pts[i];
+        const [x2, y2] = r.pts[(i + 1) % r.pts.length];
+        signed += x1 * y2 - x2 * y1;
+      }
+      const pts = signed < 0 ? [...r.pts].reverse() : r.pts;
+      const sh = new THREE.Shape();
+      pts.forEach(([x, y], i) => (i === 0 ? sh.moveTo(x, y) : sh.lineTo(x, y)));
+      return new THREE.ShapeGeometry(sh);
+    });
+  }, [items]);
+  useEffect(() => () => geoms.forEach((g) => g.dispose()), [geoms]);
+
+  // 라벨: 대지에 가장 가까운 도로 조각의 무게중심
+  const label = useMemo(() => {
+    if (!items || items.length === 0) return null;
+    const best = items.reduce((a, c) => (c.near < a.near ? c : a));
+    if (best.near > 40) return null;
+    let cx = 0;
+    let cy = 0;
+    for (const [x, y] of best.pts) {
+      cx += x;
+      cy += y;
+    }
+    cx /= best.pts.length;
+    cy /= best.pts.length;
+    return { x: cx, z: -cy };
+  }, [items]);
+
+  if (!items || items.length === 0) return null;
+  return (
+    <group name="roads">
+      {geoms.map((g, i) => (
+        // Shape(x=동, y=북) → X축 -90° 회전 = 씬 (x, 높이, -북). 위성 바닥(-0.15)보다 살짝 위에 깔아 z-fighting 방지
+        <mesh key={i} geometry={g} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+          <meshStandardMaterial color={ROAD_COLOR} roughness={0.95} transparent opacity={0.92} />
+        </mesh>
+      ))}
+      {label && (
+        <Text
+          position={[label.x, 0.05, label.z]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={1.6}
+          color="#f4f4f4"
+          outlineWidth={0.08}
+          outlineColor="#3a3a3a"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {`전면도로 ${roadM}m`}
+        </Text>
+      )}
+    </group>
+  );
 }
 
 function Neighborhood({ shape }: { shape: ParcelShape }) {

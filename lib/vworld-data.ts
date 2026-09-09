@@ -405,6 +405,51 @@ export interface NeighborBuilding {
   name: string;
 }
 
+/** 지목 '도'(도로) 필지 폴리곤 — 3D 에 실제 도로 모양을 깔기 위해. 반경 halfM 상자 안 연속지적도에서 지목이 도로인 필지만 */
+export interface RoadParcel {
+  ring: Array<[number, number]>;
+  jibun: string;
+}
+
+export async function fetchVworldRoadParcels(
+  lon: number,
+  lat: number,
+  halfM = 120,
+): Promise<{ roads: RoadParcel[] } | null> {
+  const key = vworldKey();
+  if (!key) return null;
+  const dLat = halfM / 111000;
+  const dLon = halfM / (111000 * Math.cos((lat * Math.PI) / 180));
+  const box = `BOX(${(lon - dLon).toFixed(7)},${(lat - dLat).toFixed(7)},${(lon + dLon).toFixed(7)},${(lat + dLat).toFixed(7)})`;
+  const url =
+    `${VWORLD_DATA_ENDPOINT}?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN` +
+    `&key=${key}&format=json&geomFilter=${box}&geometry=true&attribute=true` +
+    `&crs=EPSG:4326&size=400&domain=${vworldDomain()}`;
+  const data = await callVworldData(url).catch(() => null);
+  if (!data || data.response?.status !== "OK") return null;
+  const features = data.response.result?.featureCollection?.features ?? [];
+  const roads: RoadParcel[] = [];
+  for (const f of features) {
+    const jibun = String((f.properties ?? {}).jibun ?? "");
+    if (jimokFromJibun(jibun) !== "도") continue;
+    const g = f.geometry;
+    if (!g?.coordinates) continue;
+    const polys: unknown[] =
+      g.type === "MultiPolygon" ? (g.coordinates as unknown[]) :
+      g.type === "Polygon" ? [g.coordinates] : [];
+    for (const poly of polys) {
+      const ring = (poly as number[][][])[0];
+      if (!Array.isArray(ring) || ring.length < 4) continue;
+      const pts = ring.map((pt) => [Number(pt[0]), Number(pt[1])] as [number, number]);
+      const [fx, fy] = pts[0];
+      const [lx, ly] = pts[pts.length - 1];
+      if (Math.abs(fx - lx) < 1e-9 && Math.abs(fy - ly) < 1e-9) pts.pop();
+      if (pts.length >= 3) roads.push({ ring: pts, jibun });
+    }
+  }
+  return { roads };
+}
+
 export async function fetchVworldBuildings(
   lon: number,
   lat: number,

@@ -9,6 +9,7 @@
 //   GET /api/vworld?kind=parcel&pnu=<19자리>       → 연속지적도 필지 폴리곤 (실형상)
 //   GET /api/vworld?kind=parcelat&x=<경도>&y=<위도> → 좌표가 속한 필지 (지도 클릭 정밀 선택)
 //   GET /api/vworld?kind=buildings&x=<경도>&y=<위도>&r=<반경m> → 주변 건물 폴리곤+층수 (3D 컨텍스트)
+//   GET /api/vworld?kind=roadpolys&x=<경도>&y=<위도>&r=<반경m> → 지목 도(道) 필지 폴리곤 (3D 실제 도로면)
 import { NextResponse } from "next/server";
 import {
   fetchVworldLandChar,
@@ -18,6 +19,7 @@ import {
   fetchVworldParcelAtPoint,
   fetchVworldBuildings,
   hasVworldDataKey,
+  fetchVworldRoadParcels,
 } from "@/lib/vworld-data";
 
 export async function GET(request: Request) {
@@ -95,6 +97,22 @@ export async function GET(request: Request) {
       return NextResponse.json(data);
     }
 
+    if (kind === "roadpolys") {
+      const x = Number(searchParams.get("x"));
+      const y = Number(searchParams.get("y"));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return NextResponse.json({ error: "x,y 좌표 필요" }, { status: 400 });
+      }
+      const r = Math.min(250, Math.max(50, Number(searchParams.get("r")) || 120));
+      const data = await fetchVworldRoadParcels(x, y, r);
+      if (!data) {
+        return NextResponse.json({ error: "도로 필지 정보 없음" }, { status: 404 });
+      }
+      return NextResponse.json(data, {
+        headers: { "Cache-Control": "public, s-maxage=86400, max-age=3600" },
+      });
+    }
+
     if (kind === "buildings") {
       const x = Number(searchParams.get("x"));
       const y = Number(searchParams.get("y"));
@@ -114,7 +132,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "kind는 landchar|zone|roads|parcel|parcelat|buildings 중 하나여야 합니다" },
+      { error: "kind는 landchar|zone|roads|parcel|parcelat|buildings|roadpolys 중 하나여야 합니다" },
       { status: 400 },
     );
   } catch (e) {
