@@ -692,16 +692,22 @@ function CaptureRegistrar() {
         ? Math.max(ps.bounds.maxX - ps.bounds.minX, ps.bounds.maxY - ps.bounds.minY)
         : Math.sqrt(Math.max(lotSqm, 1));
       const hM = planFromState(st).heightM;
-      // 좁은(세로형) 캔버스에서도 상부·대지가 잘리지 않게 화면비로 보정
+      // 출력은 캔버스 가운데 4:3 영역만 잘라 쓴다(아래 2단계). 세로형 캔버스면 위·아래가 잘리므로
+      // "잘린 뒤 보이는 시야"로 거리를 잡아야 고층 상부가 PDF에서 잘리지 않는다.
       const cw = gl.domElement.clientWidth || 1;
       const ch = gl.domElement.clientHeight || 1;
-      const narrow = Math.max(1, 1.2 / Math.max(cw / ch, 0.3));
-      const size = Math.max(lotSide * 1.15 * narrow, hM * 1.3, 14);
+      const canvasAspect = cw / ch;
+      const CROP = 4 / 3;
+      const fovDeg = (camera as THREE.PerspectiveCamera).fov ?? 35;
+      const t = Math.tan(((fovDeg / 2) * Math.PI) / 180);
+      const tv = canvasAspect >= CROP ? t : t * (canvasAspect / CROP); // 잘린 영역의 세로 반시야
+      const th = canvasAspect >= CROP ? t * CROP : t * canvasAspect; // 잘린 영역의 가로 반시야
+      const dist = Math.max((hM * 0.62) / tv, (lotSide * 0.9) / th, 28) * (view === "iso" ? 1.0 : 1.08);
 
       const prevPos = camera.position.clone();
-      const target = new THREE.Vector3(0, Math.min(hM * 0.4, 14), 0);
+      const target = new THREE.Vector3(0, hM * 0.45, 0);
       const dir = new THREE.Vector3(...CAPTURE_DIRS[view]).normalize();
-      camera.position.copy(target.clone().add(dir.multiplyScalar(size * (view === "iso" ? 2.0 : 2.2))));
+      camera.position.copy(target.clone().add(dir.multiplyScalar(dist)));
       camera.lookAt(target);
       // 도심 밀집지는 이웃 건물이 카메라를 가려 대상 매스가 안 보인다(성내동 실측) —
       // 캡처 프레임에서만 주변 건물을 숨기고, 화면에서는 그대로 둔다.
@@ -734,6 +740,11 @@ function CaptureRegistrar() {
       out.width = outW;
       out.height = outH;
       const ctx = out.getContext("2d");
+      // 투명 배경이 JPEG 에서 검정으로 찍혀 인쇄 잉크가 많이 들던 것 — 옅은 하늘색으로 채운다
+      if (ctx) {
+        ctx.fillStyle = "#E8EEF4";
+        ctx.fillRect(0, 0, outW, outH);
+      }
       const data = ctx
         ? (ctx.drawImage(src, cx, cy, cropW, cropH, 0, 0, outW, outH),
           out.toDataURL("image/jpeg", 0.85))

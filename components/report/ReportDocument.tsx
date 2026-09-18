@@ -323,10 +323,10 @@ function CoverPage({
                 <View style={{ flex: input.locationMap ? 1.7 : 1 }}>
                   <PdfImage
                     src={input.visualization3D}
-                    style={{ width: "100%", height: 168, objectFit: "cover", borderRadius: 3 }}
+                    style={{ width: "100%", height: 168, objectFit: "contain", borderRadius: 3 }}
                   />
                   <PdfText style={{ fontSize: 8, color: COLORS.GRAY, marginTop: 3, fontFamily: "Pretendard" }}>
-                    3D 매스 — 건폐율·용적률·정북 일조사선·주차 반영 (치수 m)
+                    3D 매스 — 건폐율·용적률{input.scale.sunlightApplied ? "·정북 일조사선" : ""}·주차 반영 (치수 m · 입력 조건 기준 이론상 규모)
                   </PdfText>
                 </View>
               ) : null}
@@ -601,13 +601,13 @@ function OverviewPage({ input, brand }: { input: ReportInputs; brand: BrandConfi
         <View wrap={false} style={{ marginTop: 12, flexDirection: "row", gap: 8 }}>
           {input.visualization3DViews?.south ? (
             <View style={{ flex: 1 }}>
-              <PdfImage src={input.visualization3DViews.south} style={{ width: "100%", height: 96, objectFit: "cover", borderRadius: 2 }} />
+              <PdfImage src={input.visualization3DViews.south} style={{ width: "100%", height: 96, objectFit: "contain", borderRadius: 2 }} />
               <PdfText style={[styles.muted, { marginTop: 2, textAlign: "center" }]}>남측(도로) 정면</PdfText>
             </View>
           ) : null}
           {input.visualization3DViews?.north ? (
             <View style={{ flex: 1 }}>
-              <PdfImage src={input.visualization3DViews.north} style={{ width: "100%", height: 96, objectFit: "cover", borderRadius: 2 }} />
+              <PdfImage src={input.visualization3DViews.north} style={{ width: "100%", height: 96, objectFit: "contain", borderRadius: 2 }} />
               <PdfText style={[styles.muted, { marginTop: 2, textAlign: "center" }]}>{s.sunlightApplied ? "북측 정면 — 일조사선 후퇴" : "북측 정면"}</PdfText>
             </View>
           ) : null}
@@ -1407,7 +1407,7 @@ function ScalePage({
                   <View style={{ flex: 1 }}>
                     <PdfImage
                       src={input.visualization3DViews.south}
-                      style={{ width: "100%", height: 105, objectFit: "cover", borderRadius: 2 }}
+                      style={{ width: "100%", height: 105, objectFit: "contain", borderRadius: 2 }}
                     />
                     <PdfText style={[styles.muted, { marginTop: 3, textAlign: "center" }]}>남측(도로) 정면 — 층 번호·높이</PdfText>
                   </View>
@@ -1416,7 +1416,7 @@ function ScalePage({
                   <View style={{ flex: 1 }}>
                     <PdfImage
                       src={input.visualization3DViews.north}
-                      style={{ width: "100%", height: 105, objectFit: "cover", borderRadius: 2 }}
+                      style={{ width: "100%", height: 105, objectFit: "contain", borderRadius: 2 }}
                     />
                     <PdfText style={[styles.muted, { marginTop: 3, textAlign: "center" }]}>{s.sunlightApplied ? "북측 정면 — 정북 일조사선 후퇴(계단)" : "북측 정면"}</PdfText>
                   </View>
