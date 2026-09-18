@@ -1,27 +1,12 @@
 "use client";
 
 import { useSimulatorStore } from "@/store/simulator";
+import { useLandInfoStore } from "@/store/landinfo";
 import { ZONES } from "@/lib/zones";
-import { FLOOR_HEIGHT_M, PY_TO_SQM } from "@/lib/constants";
-import { buildingFootprintSqm, lotPyToSqm } from "@/lib/calc/coverage";
-import {
-  floorsFromFarAndCov,
-  legalGfaSqm,
-  totalHeightM,
-} from "@/lib/calc/far";
-import { sunlightLossPct } from "@/lib/calc/sunlight";
-import { actualGfaPrecise } from "@/lib/report/floorTable";
-import {
-  applyPilotiDeduction,
-  calculateFloor1Indoor,
-  calculateGroundParking,
-} from "@/lib/calc/groundParking";
-import { PARKING_STANDARDS } from "@/lib/parking-standards";
-import {
-  calcArea,
-  calcProgressive,
-  calcTieredHousehold,
-} from "@/lib/calc/parking";
+import { PY_TO_SQM } from "@/lib/constants";
+import { usePlan } from "@/lib/plan/usePlan";
+import { floorLabel } from "@/lib/plan/computePlan";
+import { scaleConstraintsFrom, ALWAYS_UNVERIFIED } from "@/lib/plan/scaleConstraints";
 import { formatArea } from "@/lib/utils/area";
 
 const fmt = (n: number, d = 0) =>
@@ -61,118 +46,101 @@ function Card({
 }
 
 export function ResultMetrics() {
-  const lotPy = useSimulatorStore((s) => s.lotPy);
-  const covPct = useSimulatorStore((s) => s.covPct);
-  const farPct = useSimulatorStore((s) => s.farPct);
-  const sunOn = useSimulatorStore((s) => s.sunOn);
+  const plan = usePlan();
   const zone = useSimulatorStore((s) => s.zone);
-  const parkingUsage = useSimulatorStore((s) => s.parkingUsage);
-  const parkingAreaPerSpace = useSimulatorStore((s) => s.parkingAreaPerSpace);
-  const parkingProgressiveSpec = useSimulatorStore(
-    (s) => s.parkingProgressiveSpec,
-  );
-  const parkingHouseholds = useSimulatorStore((s) => s.parkingHouseholds);
-  const parkingTierRatios = useSimulatorStore((s) => s.parkingTierRatios);
-  const parkingMode = useSimulatorStore((s) => s.parkingMode);
-  const parkingGroundRatio = useSimulatorStore((s) => s.parkingGroundRatio);
-  const parkingUnitArea = useSimulatorStore((s) => s.parkingUnitArea);
-  const parkingPilotiMode = useSimulatorStore((s) => s.parkingPilotiMode);
-  const parcelShape = useSimulatorStore((s) => s.parcelShape);
-  const sunlightRule = useSimulatorStore((s) => s.sunlightRule);
-
+  const sunOn = useSimulatorStore((s) => s.sunOn);
+  const address = useSimulatorStore((s) => s.address);
+  const lotAreaSource = useSimulatorStore((s) => s.lotAreaSource);
+  const land = useLandInfoStore((s) => s.data);
   const z = ZONES[zone];
-  const lotSqm = lotPyToSqm(lotPy);
-  const bldArea = buildingFootprintSqm(lotSqm, covPct);
-  const gfa = legalGfaSqm(lotSqm, farPct);
-  const floors = floorsFromFarAndCov(farPct, covPct);
-  const heightM = totalHeightM(floors);
-  // 실형상(지적 폴리곤)이 있으면 경계선 기준 절대 이격으로 정밀 계산 —
-  // PDF 층별표·3D와 같은 수식(lib/report/floorTable 단일 계산원).
-  const actualGfa = actualGfaPrecise({
-    bldAreaSqm: bldArea,
-    floors,
-    floorHeightM: FLOOR_HEIGHT_M,
-    sunlightOn: sunOn && z.sunlight,
-    shape: parcelShape
-      ? { pts: parcelShape.pts, northY: parcelShape.bounds.maxY }
-      : null,
-    rule: sunlightRule,
-  });
-  const loss = sunlightLossPct(gfa, actualGfa);
-
-  // Day 10: 주차 대수 → 1층 영업 가능 + 필로티 효과 (연면적 차감)
-  const std = PARKING_STANDARDS[parkingUsage];
-  const spaces =
-    std.mode === "area"
-      ? calcArea(gfa, parkingAreaPerSpace).spaces
-      : std.mode === "progressive"
-        ? calcProgressive(gfa, parkingProgressiveSpec).spaces
-        : calcTieredHousehold(
-            std.seoulTiers,
-            parkingHouseholds,
-            parkingTierRatios,
-          ).spaces;
-  const gp = calculateGroundParking({
-    placement: parkingMode,
-    spaces,
-    unitArea: parkingUnitArea,
-    pilotiMode: parkingPilotiMode,
-    groundRatioPct: parkingGroundRatio,
-  });
-  const floor1Usable = calculateFloor1Indoor(bldArea, gp.groundParkingArea);
-  const actualGfaShown = applyPilotiDeduction(
-    actualGfa,
-    gp.groundParkingArea,
-    gp.isReducingFloor1,
-  );
-  const isLockedOut = gp.groundParkingArea > 0 && floor1Usable <= 0;
+  const p = plan.parking;
+  const isLockedOut = p.groundAreaSqm > 0 && plan.floor1NonParkingSqm <= 0;
+  const landForThis = land && land.address === address ? land : null;
+  const cons = scaleConstraintsFrom(landForThis ? landForThis.useAttrs ?? [] : undefined);
 
   return (
-    <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(140px,1fr))]">
-      <Card
-        label="대지면적"
-        value={formatArea(lotSqm)}
-        sub={`${lotPy}평`}
+    <div className="space-y-2">
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(140px,1fr))]">
+        <Card
+          label="대지면적 (산정)"
+          value={formatArea(plan.lotSqm, 2)}
+          sub={`${fmt(plan.lotPy, 2)}평 · ${lotAreaSource === "official" ? "공부상 면적" : lotAreaSource === "input" ? "사용자 입력" : "예시값"}`}
+        />
+        <Card
+          label="1층 총바닥면적"
+          value={formatArea(plan.floor1GrossSqm)}
+          sub={`${fmt(plan.floor1GrossSqm / PY_TO_SQM, 1)}평 · 건폐율 입력값 기준`}
+        />
+        <Card
+          label="1층 주차 외 바닥면적"
+          value={formatArea(plan.floor1NonParkingSqm)}
+          sub={
+            p.groundAreaSqm > 0
+              ? isLockedOut
+                ? "1층 전체 주차 — 다른 용도 공간 없음"
+                : `지상주차 ${p.groundSpaces}대(${fmt(p.groundAreaSqm, 0)}㎡) 제외 · 코어·공용 미반영`
+              : "지상주차 없음 · 코어·공용·설비 미반영"
+          }
+          tone={isLockedOut ? "danger" : "info"}
+        />
+        <Card
+          label="용적률 산정 연면적 상한"
+          value={formatArea(plan.farCapSqm, 0)}
+          sub={`${fmt(plan.farCapSqm / PY_TO_SQM, 0)}평 · 대지 × 용적률 (산술값)`}
+        />
+        <Card
+          label="입력 조건 기준 추정 연면적"
+          value={formatArea(plan.estimatedFarAreaSqm, 0)}
+          sub={
+            p.groundAreaSqm > 0
+              ? `지상 부속주차 ${fmt(p.groundAreaSqm, 0)}㎡ 제외 (영 119조①4호 나목)`
+              : sunOn && z.sunlight
+                ? `정북 일조 반영 · 손실 ${plan.sunlightLossPct.toFixed(1)}%`
+                : "정북 일조 비적용 용도지역"
+          }
+          tone="success"
+        />
+        <Card
+          label="층수 · 높이"
+          value={`지상 ${plan.floorCount}층`}
+          sub={`${plan.topFloorPortion < 0.999 ? `최상층 부분층 ${Math.round(plan.topFloorPortion * 100)}% · ` : ""}H ${fmt(plan.heightM, 1)}m · 환산 ${fmt(plan.floorsEquivalent, 1)}층`}
+        />
+        <Card
+          label="총연면적 (지상+지하 추정)"
+          value={formatArea(plan.totalFloorAreaSqm, 0)}
+          sub={`지하 ${plan.basement.levels.length}개 층 ${fmt(plan.basement.totalSqm, 0)}㎡ 포함`}
+        />
+      </div>
+      <ScaleStatusNote
+        fetched={cons.fetched}
+        items={cons.items.map((c) => `${c.label} — ${c.effect}`)}
+        floorText={floorLabel(plan)}
       />
-      <Card
-        label="건축면적 (1F)"
-        value={formatArea(bldArea)}
-        sub={`${fmt(bldArea / PY_TO_SQM, 0)}평`}
-      />
-      <Card
-        label="1층 영업 가능 면적"
-        value={formatArea(floor1Usable)}
-        sub={
-          gp.groundParkingArea > 0
-            ? isLockedOut
-              ? "1층 전체 주차 — 영업 공간 없음"
-              : `주차 ${gp.groundSpaces}대 (${fmt(gp.groundParkingArea, 0)}㎡) 제외`
-            : "주차 미배치 — 전체 1층 사용"
-        }
-        tone={isLockedOut ? "danger" : "info"}
-      />
-      <Card
-        label="법정 연면적"
-        value={formatArea(gfa, 0)}
-        sub={`${fmt(gfa / PY_TO_SQM, 0)}평`}
-      />
-      <Card
-        label="실제 가능 연면적"
-        value={formatArea(actualGfaShown, 0)}
-        sub={
-          gp.isReducingFloor1
-            ? `일조권+필로티 차감 (1층 주차 ${fmt(gp.groundParkingArea, 0)}㎡ 제외)`
-            : sunOn && z.sunlight
-              ? `일조권 손실 ${loss.toFixed(1)}%`
-              : "일조권 미적용"
-        }
-        tone="success"
-      />
-      <Card
-        label="층수 · 높이"
-        value={`${(Math.round(floors * 10) / 10).toLocaleString("ko-KR")}층`}
-        sub={`${fmt(heightM, 1)}m · 층고 ${FLOOR_HEIGHT_M}m 가정`}
-      />
+    </div>
+  );
+}
+
+/** 결과가 어떤 단계의 수치인지, 무엇이 미확인인지 — 수치 바로 아래에 고정 표시 */
+function ScaleStatusNote({ fetched, items, floorText }: { fetched: boolean; items: string[]; floorText: string }) {
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50/70 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+      <div className="font-semibold">
+        입력 조건에 따른 이론상 규모 ({floorText}) — 인허가 가능 규모가 아닙니다
+      </div>
+      {!fetched ? (
+        <div>토지이용계획 미조회 — 지번 조회 전에는 규제 반영 여부를 판단할 수 없습니다.</div>
+      ) : items.length > 0 ? (
+        <ul className="list-disc pl-4">
+          {items.map((t) => (
+            <li key={t}>미확인: {t}</li>
+          ))}
+        </ul>
+      ) : (
+        <div>토지이용계획 조회 결과 높이·용적률을 바꾸는 지역·지구는 나오지 않았습니다.</div>
+      )}
+      <div className="text-amber-800/80">
+        항상 별도 확인: {ALWAYS_UNVERIFIED.map((c) => c.label).join(" · ")}
+      </div>
     </div>
   );
 }

@@ -35,7 +35,6 @@ import {
 } from "@/lib/vworld";
 import { buildParcelShape, buildMergedParcelShape } from "@/lib/geo/parcel";
 import { findZoneCodeByName, ZONES, isLikelyCBD } from "@/lib/zones";
-import { useCostStore } from "@/store/cost";
 import { useProfitStore } from "@/store/profit";
 import {
   getJimokInfo,
@@ -178,6 +177,8 @@ type ApiResult = {
   newbuild: NewbuildPrice | null;
   /** 기존 건물 추정가 (원) + 산정 방식. null = 건물 없음/조회 실패 */
   buildingPrice: { value: number; method: string } | null;
+  /** 건축물대장 조회 상태 — 빈 응답·실패를 '나대지'로 바꾸지 않기 위해 구분 */
+  buildingStatus?: "found" | "empty" | "failed";
   /** 합필 조회 결과 (2필지 이상) */
   merged?: {
     parcels: MergedParcelRow[];
@@ -201,7 +202,7 @@ export function LandLookup({
   const applyLotInfo = useSimulatorStore((s) => s.applyLotInfo);
   const setZone = useSimulatorStore((s) => s.setZone);
   const setIsCBD = useSimulatorStore((s) => s.setIsCBD);
-  const setLotPy = useSimulatorStore((s) => s.setLotPy);
+  const setOfficialLotSqm = useSimulatorStore((s) => s.setOfficialLotSqm);
   const setRoadM = useSimulatorStore((s) => s.setRoadM);
   const setMergedParcels = useSimulatorStore((s) => s.setMergedParcels);
   const setParcelShape = useSimulatorStore((s) => s.setParcelShape);
@@ -390,6 +391,7 @@ export function LandLookup({
         const parts = geo.refined.split(" ").filter(Boolean);
         return parts.length >= 2 ? parts[parts.length - 2] : "";
       })();
+      let bldStatus: "found" | "empty" | "failed" = "failed";
       const [landTrades, newbuild, buildingPrice] = await Promise.all([
         fetch(
           `/api/land-trades?pnu=${geo.pnu}&umd=${encodeURIComponent(umdName)}` +
@@ -406,7 +408,10 @@ export function LandLookup({
         // ② 없으면 연식 감가 추정: 연면적 × 구조별 재조달원가 × 잔가율(내용연수 40년, 잔존 10%)
         fetch(`/api/building?pnu=${geo.pnu}`)
           .then(async (r) => {
-            if (!r.ok) return null;
+            if (!r.ok) {
+              bldStatus = "failed";
+              return null;
+            }
             const d = (await r.json()) as {
               buildings?: Array<{
                 totArea?: number;
@@ -415,7 +420,11 @@ export function LandLookup({
                 priceHistory?: Array<{ year: string; price: number }>;
               }>;
             };
-            if (!d.buildings?.length) return null;
+            if (!d.buildings?.length) {
+              bldStatus = "empty";
+              return null;
+            }
+            bldStatus = "found";
             const stdTotal = d.buildings.reduce((sum, b) => {
               const hist = (b.priceHistory ?? []).filter((h) => h.price > 0);
               if (!hist.length) return sum;
@@ -465,6 +474,7 @@ export function LandLookup({
         landTrades,
         newbuild,
         buildingPrice,
+        buildingStatus: bldStatus,
         merged,
       };
       setResult(out);
@@ -479,7 +489,8 @@ export function LandLookup({
 
       // 합필이면 합산 면적으로 시뮬레이션
       const areaSqm = merged ? merged.totalSqm : primaryArea;
-      if (areaSqm > 0) setLotPy(Math.round(areaSqm / 3.305785));
+      // 정밀 ㎡ 그대로 — 예전엔 정수 평으로 반올림해 394.8㎡ 가 393.39㎡ 로 줄었다
+      if (areaSqm > 0) setOfficialLotSqm(areaSqm);
 
       // 2D/3D 필지 경계 표시용
       setMergedParcels(
@@ -517,7 +528,7 @@ export function LandLookup({
       const directRoad = roads?.hasRoad ?? false;
       const presumed = !directRoad && jimokName ? isBuiltJimok(jimokName) : false;
       const roadM = directRoad || presumed ? 6 : 0;
-      setRoadM(roadM);
+      setRoadM(roadM, "assumed");
 
       // 공시지가: 합필 시 면적 가중 평균
       const pricedParcels = merged
@@ -628,10 +639,7 @@ export function LandLookup({
           publicPricePerSqm: effectivePrice,
           publicPriceYear: landAreaRes?.priceYear ?? undefined,
         });
-        // 비용 탭 연면적 자동 동기화 (lotPy × defFar)
-        const z = ZONES[zoneCode];
-        const gfaPy = Math.round((areaSqm / 3.305785) * z.defFar / 100);
-        if (gfaPy > 0) useCostStore.getState().set("abovePyeong", gfaPy);
+        // 비용 탭 수량(지상·지하·주차)은 lib/plan/finance 가 규모검토에 자동 연결 — 여기서 덮어쓰지 않는다
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 실패");
@@ -984,7 +992,13 @@ export function LandLookup({
                   ? " (gyumo 미지원 용도지역)"
                   : ""}
             </div>
-            <div className="mt-0.5 text-[10px] opacity-80">PNU: {result.pnu}</div>
+            <div className="mt-0.5 text-[10px] opacity-80">
+              {/* 지오코더·건축물대장은 11번째 자리 대지=0/산=1, 표준 PNU(토지대장·VWorld)는 일반=1/산=2 — 섞어 쓰지 않는다 */}
+              PNU(표준): {result.pnu && result.pnu.length === 19
+                ? result.pnu.slice(0, 10) + (result.pnu[10] === "0" ? "1" : result.pnu[10] === "1" ? "2" : result.pnu[10]) + result.pnu.slice(11)
+                : result.pnu}
+              <span className="ml-1 opacity-70">· 건축물대장 조회코드 {result.pnu}</span>
+            </div>
           </div>
 
           {/* 합필 결과 카드 */}
@@ -1055,7 +1069,7 @@ export function LandLookup({
                         <b className="text-foreground">
                           {VALUE_LABEL[getJimokInfo(jimokName).value]}
                         </b>{" "}
-                        · 리스크 {RISK_LABEL[getJimokInfo(jimokName).risk]}
+                        · 지목 기준 리스크 {RISK_LABEL[getJimokInfo(jimokName).risk]} (지목만 본 판정 — 지역·지구 규제·도로·권리는 별도)
                       </div>
                     </div>
                   </div>
@@ -1312,7 +1326,11 @@ export function LandLookup({
                   <div className="text-[9.5px] text-muted-foreground">
                     {result.buildingPrice
                       ? result.buildingPrice.method
-                      : "건물 없음(나대지)"}
+                      : result.buildingStatus === "failed"
+                        ? "건축물대장 조회 실패 — 건물 유무 미확인"
+                        : result.buildingStatus === "empty"
+                          ? "표제부 조회 결과 없음 — 나대지 여부·대표지번(외필지) 확인 필요"
+                          : "미확인"}
                   </div>
                 </div>
               </div>
@@ -1377,7 +1395,7 @@ export function LandLookup({
                       result.landTrades!.estimatedPrice / py / 10000,
                     );
                     if (manPerPy > 0) {
-                      useProfitStore.getState().set("landPricePerPyeong", manPerPy);
+                      useProfitStore.getState().set("landPricePerPyeong", manPerPy, "estimate-land-trades");
                       setApplied((p) => ({ ...p, land: true }));
                     }
                   }}
@@ -1553,7 +1571,7 @@ export function LandLookup({
                         (result.newbuild!.residential.tradeUnitWon * 3.305785) / 10000,
                       );
                       if (manPerPy > 0) {
-                        useProfitStore.getState().set("salesPricePerPyeong", manPerPy);
+                        useProfitStore.getState().set("salesPricePerPyeong", manPerPy, "estimate-newbuild-res");
                         setApplied((p) => ({ ...p, sales: true }));
                       }
                     }}

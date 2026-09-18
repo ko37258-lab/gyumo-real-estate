@@ -26,8 +26,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { useSimulatorStore } from "@/store/simulator";
-import { useCostStore } from "@/store/cost";
 import { useLandInfoStore } from "@/store/landinfo";
 
 export default function SimulatorPage() {
@@ -36,11 +34,7 @@ export default function SimulatorPage() {
 
   // 탭 전환 시 simulator → cost store 동기화
   const handleTabChange = (next: string) => {
-    if (next === "cost") {
-      const { lotPy, farPct } = useSimulatorStore.getState();
-      const gfaPy = Math.round(lotPy * farPct / 100);
-      if (gfaPy > 0) useCostStore.getState().set("abovePyeong", gfaPy);
-    }
+    // 비용 탭 수량은 규모검토와 자동 연결(lib/plan/finance) — 탭 전환 때 덮어쓰지 않는다
     setTab(next);
   };
 

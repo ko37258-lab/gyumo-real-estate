@@ -2,10 +2,9 @@
 
 import dynamic from "next/dynamic";
 import { useSimulatorStore } from "@/store/simulator";
+import { usePlan } from "@/lib/plan/usePlan";
 import { ZONES } from "@/lib/zones";
 import { FLOOR_HEIGHT_M, PY_TO_SQM } from "@/lib/constants";
-import { buildingFootprintSqm, lotPyToSqm } from "@/lib/calc/coverage";
-import { floorsFromFarAndCov, totalHeightM } from "@/lib/calc/far";
 import { requiredSetbackM, extraSetbackM, envelopeProfile } from "@/lib/calc/sunlight";
 import {
   calcArea,
@@ -14,7 +13,7 @@ import {
   groundParkingSqm,
 } from "@/lib/calc/parking";
 import { calculateGroundParking } from "@/lib/calc/groundParking";
-import { PARKING_STANDARDS, SQM_PER_SPACE } from "@/lib/parking-standards";
+import { PARKING_STANDARDS } from "@/lib/parking-standards";
 import { getUseStyle, type FacadeStyle } from "@/lib/building-use";
 import {
   scalePolygon,
@@ -222,7 +221,6 @@ function renderFacade(
 
 export function ScaleVisualizer() {
   const zone = useSimulatorStore((s) => s.zone);
-  const lotPy = useSimulatorStore((s) => s.lotPy);
   const covPct = useSimulatorStore((s) => s.covPct);
   const farPct = useSimulatorStore((s) => s.farPct);
   const roadM = useSimulatorStore((s) => s.roadM);
@@ -249,10 +247,11 @@ export function ScaleVisualizer() {
   const useStyle = getUseStyle(parkingUsage);
   const massEdge = useStyle.edge;
 
-  const lotSqm = lotPyToSqm(lotPy);
-  const bldArea = buildingFootprintSqm(lotSqm, covPct);
-  const floors = floorsFromFarAndCov(farPct, covPct);
-  const heightM = totalHeightM(floors);
+  // 단일 계산원(computePlan) — 층수·높이·주차·지하층이 화면 KPI·3D·PDF 와 같은 값
+  const plan = usePlan();
+  const lotSqm = plan.lotSqm;
+  const bldArea = plan.footprintSqm;
+  const heightM = plan.heightM;
 
   // 실형상 footprint (건폐율 √배 축소 근사) — 있으면 입면 깊이도 실형상 기준
   const bldScaleFactor = Math.sqrt(Math.max(covPct, 1) / 100);
@@ -277,15 +276,18 @@ export function ScaleVisualizer() {
             parkingHouseholds,
             parkingTierRatios,
           ).spaces;
-  const totalParkingArea = spaces * SQM_PER_SPACE;
+  // 주차 면적 계수는 사용자 설정 1대당 면적 하나만 쓴다(예전: 여기만 25㎡ 고정 → PDF 30㎡와 불일치)
+  const totalParkingArea = plan.parking.planAreaSqm;
   const groundPark = groundParkingSqm(
     totalParkingArea,
     parkingMode,
     parkingGroundRatio,
   );
-  const basementPark = totalParkingArea - groundPark;
   const pilotisFr = bldArea > 0 ? groundPark / bldArea : 0;
-  const basementLv = bldArea > 0 ? basementPark / bldArea : 0;
+  const basementLv = plan.basement.levels.reduce(
+    (a, l) => a + (plan.basement.levelCapacitySqm > 0 ? l.areaSqm / plan.basement.levelCapacitySqm : 0),
+    0,
+  );
 
   // Day 10: 1F 분해 (30㎡/대, 필로티 분기)
   const day10 = calculateGroundParking({
@@ -417,19 +419,24 @@ export function ScaleVisualizer() {
   })();
 
   const elevFloors: React.ReactNode[] = [];
-  const ceilFloors = Math.ceil(floors);
-  for (let i = 0; i < ceilFloors; i++) {
-    const fH = (i + 1) * FLOOR_HEIGHT_M;
+  const ceilFloors = plan.floorCount;
+  for (let i = 0; i < plan.floors.length; i++) {
+    const pf = plan.floors[i];
+    const fH = pf.topM;
     // 층 상단 높이 기준 절대 이격(1.5m 포함)을 px로 — 2D 입면은 경계선을 eBldL에 둔다
     const setbackPx = sunOn ? requiredSetbackM(fH, sunlightRule) * mPx : 0;
-    const fL = sunOn ? eBldL + setbackPx : eBldL;
+    let fL = sunOn ? eBldL + setbackPx : eBldL;
     let fW = eBldR - fL;
     if (fW < 0) fW = 0;
-    const portion = i + 1 <= floors ? 1 : floors - i;
-    if (portion <= 0) break;
-    const actualH = phPx * portion;
-    const actualY = baseY - i * phPx - actualH;
-    const isPartial = portion < 1;
+    // 부분층: 바닥면적 비율만큼 폭을 줄이고(남측 기준) 높이는 층고 전체 — 높이를 줄이지 않는다
+    const portion = pf.portion;
+    const isPartial = portion < 0.999;
+    if (isPartial) {
+      fW = fW * portion;
+      fL = eBldR - fW;
+    }
+    const actualH = pf.storyHeightM * mPx;
+    const actualY = baseY - pf.topM * mPx;
     elevFloors.push(
       <g key={i}>
         <rect
@@ -503,13 +510,14 @@ export function ScaleVisualizer() {
     const groundHatchH = 14;
     const startY = baseY + groundHatchH + 2;
     const maxBoxH = 14;
-    const boxH = Math.min(phPx, maxBoxH);
     const ceilBs = Math.ceil(basementLv);
+    // 모든 지하층이 viewBox(하단 358) 안에 들어가도록 칸 높이를 줄인다 — 예전엔 끝에서 잘려 B1·B2만 보였다
+    const fitH = ceilBs > 0 ? (358 - startY) / ceilBs - 1 : maxBoxH;
+    const boxH = Math.max(3, Math.min(phPx, maxBoxH, fitH));
     for (let i = 0; i < ceilBs; i++) {
       const portion = i + 1 <= basementLv ? 1 : basementLv - i;
       if (portion <= 0) break;
       const y = startY + i * (boxH + 1);
-      if (y + boxH > 358) break; // viewBox 끝
       basementBoxes.push({
         y,
         h: boxH * portion,
@@ -1465,6 +1473,15 @@ export function ScaleVisualizer() {
             )}
           </g>
         ))}
+        {basementBoxes.length > 0 && basementBoxes.some((b) => b.h < 9) && (
+          <text
+            x={eBldR + 4}
+            y={basementBoxes[0].y + 7}
+            style={{ fontSize: 8, fontWeight: 600, fill: "#1F2937" }}
+          >
+            {`B1~B${basementBoxes.length} 주차`}
+          </text>
+        )}
 
         {dimX < 660 && (
           <>

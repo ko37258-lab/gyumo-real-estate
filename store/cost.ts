@@ -3,8 +3,16 @@
 import { create } from "zustand";
 import type { CostInputs } from "@/lib/calc/cost";
 
+/** 규모검토(computePlan)와 연결되는 수량 — true면 규모검토 값을 그대로 쓰고, 사용자가 바꾸면 false */
+export type CostLinkKey = "abovePyeong" | "basementPyeong" | "parkingSpaces";
+export type CostLinks = Record<CostLinkKey, boolean>;
+const INITIAL_LINKS: CostLinks = { abovePyeong: true, basementPyeong: true, parkingSpaces: true };
+
 type CostState = CostInputs & {
+  linked: CostLinks;
   set: <K extends keyof CostInputs>(key: K, value: CostInputs[K]) => void;
+  /** 규모검토 값으로 다시 연결 */
+  relink: (key: CostLinkKey) => void;
   reset: () => void;
 };
 
@@ -48,11 +56,17 @@ const INITIAL: CostInputs = {
   devRate: 25,
 };
 
-export const useCostStore = create<CostState>((set) => ({
+export const useCostStore = create<CostState>((set, get) => ({
   ...INITIAL,
+  linked: { ...INITIAL_LINKS },
   set: (key, value) => {
     if (typeof value === "number" && !Number.isFinite(value)) return;
-    set({ [key]: value } as Partial<CostState>);
+    const next = { [key]: value } as Partial<CostState>;
+    if (key === "abovePyeong" || key === "basementPyeong" || key === "parkingSpaces") {
+      next.linked = { ...get().linked, [key]: false };
+    }
+    set(next);
   },
-  reset: () => set({ ...INITIAL }),
+  relink: (key) => set({ linked: { ...get().linked, [key]: true } }),
+  reset: () => set({ ...INITIAL, linked: { ...INITIAL_LINKS } }),
 }));

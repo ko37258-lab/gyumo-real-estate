@@ -53,7 +53,7 @@ export function LoanCalculator({
       </header>
 
       <SliderInputPair
-        label="LTV (총 사업비 대비 대출 비율)"
+        label="LTC (토지비 포함 총사업비 대비 대출 비율)"
         value={s.ltvRatio}
         onChange={onLtvChange}
         min={40}
@@ -75,8 +75,8 @@ export function LoanCalculator({
         unit="억원"
         hint={
           s.loanAmountOverride === null
-            ? "🔄 LTV로 자동 산정 중 — 슬라이더 조작 시 사용자 직접 입력 모드로 전환"
-            : "✋ 사용자 직접 입력 모드 — LTV는 표시값"
+            ? "🔄 LTC로 자동 산정 중 — 슬라이더 조작 시 사용자 직접 입력 모드로 전환"
+            : "✋ 사용자 직접 입력 모드 — LTC는 표시값"
         }
         inputMin={0}
         inputMax={10000}

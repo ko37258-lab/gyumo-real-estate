@@ -1,11 +1,28 @@
 "use client";
 
-import { useCostStore } from "@/store/cost";
+import { useCostStore, type CostLinkKey } from "@/store/cost";
+import { useCostSnapshot } from "@/lib/plan/useSnapshots";
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
 import { pyeongToSqmDisplay } from "@/lib/utils/area";
 
 export function BasicCostInputs() {
   const s = useCostStore();
+  const snap = useCostSnapshot();
+  const eff = snap.inputs; // 연결 상태면 규모검토 값, 끊겼으면 사용자 값
+  const link = (k: CostLinkKey) => (
+    <span className="text-[10px]">
+      {s.linked[k] ? (
+        <span className="text-emerald-700">🔗 규모검토 연동</span>
+      ) : (
+        <>
+          <span className="text-amber-700">✋ 수동 입력</span>{" "}
+          <button type="button" onClick={() => s.relink(k)} className="text-[var(--info)] hover:underline">
+            규모검토 값으로
+          </button>
+        </>
+      )}
+    </span>
+  );
   return (
     <section className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-center gap-2 mb-3">
@@ -17,25 +34,27 @@ export function BasicCostInputs() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         <SliderInputPair
           label="지상 연면적"
-          value={s.abovePyeong}
+          hint={link("abovePyeong")}
+          value={Math.round(eff.abovePyeong * 10) / 10}
           onChange={(v) => s.set("abovePyeong", v)}
           min={0}
           max={3000}
           step={10}
           unit="평"
-          conversion={pyeongToSqmDisplay(s.abovePyeong)}
+          conversion={pyeongToSqmDisplay(eff.abovePyeong)}
           inputMin={0}
           inputMax={10000}
         />
         <SliderInputPair
           label="지하 연면적"
-          value={s.basementPyeong}
+          hint={link("basementPyeong")}
+          value={Math.round(eff.basementPyeong * 10) / 10}
           onChange={(v) => s.set("basementPyeong", v)}
           min={0}
           max={1500}
           step={10}
           unit="평"
-          conversion={pyeongToSqmDisplay(s.basementPyeong)}
+          conversion={pyeongToSqmDisplay(eff.basementPyeong)}
           inputMin={0}
           inputMax={5000}
         />
@@ -76,8 +95,16 @@ export function BasicCostInputs() {
           inputMax={100}
         />
         <SliderInputPair
-          label="주차대수"
-          value={s.parkingSpaces}
+          label="주차 설치비 대상 대수"
+          hint={
+            <>
+              {link("parkingSpaces")}
+              <span className="block text-muted-foreground">
+                지하가 연동되면 지하 주차는 지하층 공사비(구조·램프 포함 가정)에 들어가므로 여기선 지상 대수만 셉니다 — 중복 계상 방지
+              </span>
+            </>
+          }
+          value={eff.parkingSpaces}
           onChange={(v) => s.set("parkingSpaces", v)}
           min={0}
           max={200}

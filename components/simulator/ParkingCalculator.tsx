@@ -8,6 +8,7 @@ import {
   type ReductionContext,
 } from "@/lib/parking/reduction";
 import { useSimulatorStore } from "@/store/simulator";
+import { usePlan } from "@/lib/plan/usePlan";
 import {
   Select,
   SelectContent,
@@ -22,7 +23,6 @@ import { ParkingLearnSheet } from "@/components/simulator/ParkingLearnSheet";
 import {
   PARKING_STANDARDS,
   PARKING_USAGE_LIST,
-  SQM_PER_SPACE,
   type ParkingUsageCode,
   tierLabel,
 } from "@/lib/parking-standards";
@@ -30,7 +30,6 @@ import {
   calcArea,
   calcProgressive,
   calcTieredHousehold,
-  parkingAreaSqm,
   parkingToFootprintRatio,
   groundParkingSqm,
   salableGfaSqm,
@@ -124,7 +123,9 @@ export function ParkingCalculator() {
     };
   })();
 
-  const parkArea = parkingAreaSqm(result.applied.spaces);
+  // 주차 면적 계수 = 사용자 설정 1대당 면적 하나(화면·2D·3D·PDF 공통). 예전: 여기만 25㎡ 고정.
+  const parkArea = result.applied.spaces * parkingUnitArea;
+  const plan = usePlan();
   const footprintRatio = parkingToFootprintRatio(parkArea, footprint);
 
   // 주차 배치 형식 → 분양 가능 연면적 (건축법 시행령 119조 1항 4호)
@@ -264,7 +265,7 @@ export function ParkingCalculator() {
                 {result.applied.spaces}대
               </div>
               <div className="text-[10.5px] text-muted-foreground">
-                원시값 {result.applied.rawSpaces.toFixed(2)} → 절상
+                산정값 {result.applied.rawSpaces.toFixed(2)}대 → {roundRuleLabel(std.mode)}
               </div>
             </Card>
           </div>
@@ -398,7 +399,7 @@ export function ParkingCalculator() {
                 {result.decree.spaces}대
               </div>
               <div className="text-[10.5px] text-muted-foreground">
-                원시값 {result.decree.rawSpaces.toFixed(1)} → 절상
+                산정값 {result.decree.rawSpaces.toFixed(2)}대 → {roundRuleLabel(std.mode)}
               </div>
             </Card>
             <Card title="적용 기준 (서울조례)" highlight>
@@ -406,7 +407,7 @@ export function ParkingCalculator() {
                 {result.applied.spaces}대
               </div>
               <div className="text-[10.5px] text-muted-foreground">
-                원시값 {result.applied.rawSpaces.toFixed(1)} → 절상
+                산정값 {result.applied.rawSpaces.toFixed(2)}대 → {roundRuleLabel(std.mode)}
               </div>
             </Card>
           </div>
@@ -420,7 +421,7 @@ export function ParkingCalculator() {
             주차장 배치 형식
           </div>
           <div className="text-[10px] text-muted-foreground/70">
-            지하는 연면적에서 제외 · 시행령 119조 1항 4호
+            지하층·지상 부속주차는 용적률 산정에서 제외(총연면적엔 포함) · 영 119조①4호
           </div>
         </div>
         <ModeToggle value={parkingMode} onChange={setParkingMode} />
@@ -479,7 +480,7 @@ export function ParkingCalculator() {
                   : "bg-background border-border"
               }`}
             >
-              필로티 (연면적 제외)
+              필로티 (요건 충족 시 바닥면적 불산입)
             </button>
             <button
               type="button"
@@ -490,7 +491,7 @@ export function ParkingCalculator() {
                   : "bg-background border-border"
               }`}
             >
-              벽체식 (연면적 산입)
+              벽체식 (바닥면적 산입 · 용적률 산정 제외)
             </button>
           </div>
           <div className="text-[10.5px] text-muted-foreground -mt-1">
@@ -537,12 +538,27 @@ export function ParkingCalculator() {
         </div>
       )}
 
+      {/* 법정 필요 대수 ↔ 배치 가정 — 같은 계산원(computePlan) */}
+      <div className="mt-3 rounded-md border border-amber-300 bg-amber-50/70 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+        <div className="font-semibold">
+          법정 필요 {plan.parking.requiredSpaces}대 · 배치 가정 지상 {plan.parking.groundSpaces}대 / 지하 {plan.parking.basementSpaces}대
+          {plan.basement.levels.length > 0 && ` → 지하 ${plan.basement.levels.length}개 층 ${fmt(plan.basement.totalSqm, 0)}㎡ (비용 탭 지하 연면적에 자동 연결)`}
+        </div>
+        <div>{plan.parking.roundingNote}</div>
+        <ul className="list-disc pl-4">
+          {plan.parking.warnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+          <li>{plan.basement.note}</li>
+        </ul>
+      </div>
+
       {/* 결과 요약 */}
       <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
         <SummaryCard
-          label="필요 주차면적"
+          label="주차장 계획면적 (계수 추정)"
           value={`${fmt(parkArea, 0)}㎡`}
-          sub={`${fmt(parkArea / PY_TO_SQM, 0)}평 · 1대 ${SQM_PER_SPACE}㎡`}
+          sub={`${fmt(parkArea / PY_TO_SQM, 0)}평 · 1대 ${parkingUnitArea}㎡ × ${result.applied.spaces}대`}
         />
         <SummaryCard
           label="1층 건축면적 대비"
@@ -553,12 +569,12 @@ export function ParkingCalculator() {
           }
         />
         <SummaryCard
-          label="분양 가능 연면적"
+          label="지상주차 차감 후 연면적 (추정)"
           value={`${fmt(salableGfa, 0)}㎡`}
           sub={
             groundPark > 0
               ? `지상주차 ${fmt(groundPark, 0)}㎡ 차감`
-              : "지하주차 (연면적 제외)"
+              : "지하주차 (용적률 산정 제외)"
           }
           tone="success"
         />
@@ -898,8 +914,8 @@ function ModeToggle({
 }) {
   const options: { v: ParkingMode; label: string; hint: string }[] = [
     { v: "none", label: "없음", hint: "주차 없는 가정" },
-    { v: "basement", label: "지하", hint: "연면적 제외" },
-    { v: "ground", label: "지상", hint: "필로티 · 연면적 산입" },
+    { v: "basement", label: "지하", hint: "용적률 산정 제외" },
+    { v: "ground", label: "지상", hint: "용적률 산정 제외 · 1층 잠식" },
     { v: "mixed", label: "혼합", hint: "지상+지하 안분" },
   ];
   return (
@@ -932,4 +948,11 @@ function ModeToggle({
       })}
     </div>
   );
+}
+
+/** 끝수 처리 문구 — 계산 코드(legalRoundSpaces / calcTieredHousehold)와 같은 규칙 */
+function roundRuleLabel(mode: "area" | "progressive" | "tieredHousehold"): string {
+  return mode === "tieredHousehold"
+    ? "올림 (세대 기준 — 주택건설기준 관행, 적용 조례 확인)"
+    : "0.5 이상만 1대 (별표1 비고 6 · 총 1대 미만은 0대)";
 }

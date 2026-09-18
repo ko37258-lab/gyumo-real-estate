@@ -151,8 +151,33 @@ export interface ReportInputs {
     totalUnits?: number;
     /** ⑥ 가설계 유닛 전용면적 ㎡ */
     unitExclusiveSqm?: number;
-    /** 건물 총 높이 m (층수 × 층고) */
+    /** 건물 총 높이 m — 층별 층고 합(1층 + 기준층 × (n−1)), 지표면 기준 */
     heightM?: number;
+    /* ── 단일 계산원(computePlan) 결과 (2026-09-18) ── */
+    /** 실제 층수(지상) */
+    floorCount?: number;
+    /** "지상 14층 (최상층 부분층 33%)" */
+    floorLabel?: string;
+    floor1HeightM?: number;
+    heightNote?: string;
+    /** 대지면적 출처 */
+    lotAreaSource?: "official" | "input" | "default";
+    officialLotSqm?: number | null;
+    /** 지적도 도형면적(참고) */
+    shapeAreaSqm?: number | null;
+    roadWidthSource?: "assumed" | "input";
+    /** 일조 규칙 기준일(신청 예정일 또는 검토일) */
+    ruleBasisDate?: string;
+    ruleBasisIsPermitDate?: boolean;
+    parkingRoundingNote?: string;
+    parkingWarnings?: string[];
+    basementLevels?: Array<{ level: number; areaSqm: number }>;
+    basementNote?: string;
+    /** 총연면적(지상+지하 추정) */
+    totalFloorArea?: number;
+    /** 규모에 영향을 주는 미확인 규제 — fetched=false 면 토지이용계획 미조회 */
+    constraints?: { fetched: boolean; items: Array<{ label: string; effect: string; where: string }> };
+    alwaysUnverified?: Array<{ label: string; effect: string; where: string }>;
   };
   cost: {
     abovePyeong: number;
@@ -171,7 +196,11 @@ export interface ReportInputs {
     devCharge: number;
     total: number;
     totalArea: number;
+    /** 규모검토 연결 상태 설명 */
+    linkNotes?: string[];
   };
+  /** 전문 종합 분석 상태 — 보고서가 실행하지 않은 분석을 실행한 것처럼 쓰지 않게 */
+  aiStatus?: "skipped" | "failed" | "done";
 
   /** Day 12-B: 사업성 분석 데이터 — 사용자가 사업성 탭을 조작한 적 있을 때만 포함. */
   profit?: {
@@ -215,6 +244,13 @@ export interface ReportInputs {
     marginPercent: number;
     isLoss: boolean;
     isHighRisk: boolean;
+    /** 판정 (보류/손실/위험/이익) — 주요 가정 확인 전에는 보류 */
+    verdict?: { kind: "hold" | "loss" | "risk" | "ok"; title: string; reasons: string[] };
+    ltcPct?: number;
+    pretaxMarginOnRevenuePct?: number;
+    definitions?: { margin: string; irr: string; interest: string; tax: string; saleableArea: string };
+    landPriceSource?: string;
+    salesPriceSource?: string;
   };
 
   /** 주변 시세·임대료 (국토교통부 실거래가, 시군구 단위) — 사업성 탭에서 조회된 경우 포함. */

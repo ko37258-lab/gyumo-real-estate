@@ -9,9 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useSimulatorStore } from "@/store/simulator";
 import { ZONES } from "@/lib/zones";
 import { FLOOR_HEIGHT_M } from "@/lib/constants";
+import { usePlan, planFromState } from "@/lib/plan/usePlan";
 import { GroundImagery } from "@/components/three/GroundImagery";
-import { buildingFootprintSqm, lotPyToSqm } from "@/lib/calc/coverage";
-import { floorsFromFarAndCov, totalHeightM } from "@/lib/calc/far";
 import {
   requiredSetbackM,
   envelopeProfile,
@@ -31,7 +30,7 @@ import {
   groundParkingSqm,
 } from "@/lib/calc/parking";
 import { calculateGroundParking } from "@/lib/calc/groundParking";
-import { PARKING_STANDARDS, SQM_PER_SPACE } from "@/lib/parking-standards";
+import { PARKING_STANDARDS } from "@/lib/parking-standards";
 import { getUseStyle } from "@/lib/building-use";
 import { calculateSchematic, RESIDENTIAL_USAGES } from "@/lib/calc/schematic";
 import {
@@ -294,7 +293,6 @@ function Scene({
   quality: "high" | "low";
 }) {
   const zone = useSimulatorStore((s) => s.zone);
-  const lotPy = useSimulatorStore((s) => s.lotPy);
   const covPct = useSimulatorStore((s) => s.covPct);
   const farPct = useSimulatorStore((s) => s.farPct);
   const roadM = useSimulatorStore((s) => s.roadM);
@@ -321,10 +319,12 @@ function Scene({
   const z = ZONES[zone];
   const sunOn = sunOnRaw && z.sunlight;
 
-  const lotSqm = lotPyToSqm(lotPy);
-  const bldArea = buildingFootprintSqm(lotSqm, covPct);
-  const floors = floorsFromFarAndCov(farPct, covPct);
-  const heightM = totalHeightM(floors);
+  // 단일 계산원 — 층수·높이·주차·지하층이 화면 KPI·2D·PDF 와 같은 값
+  const plan = usePlan();
+  const lotSqm = plan.lotSqm;
+  const bldArea = plan.footprintSqm;
+  const floors = plan.floorsEquivalent;
+  const heightM = plan.heightM;
 
   const lotSide = Math.sqrt(lotSqm); // 정사각형 대지 단순화
   const bldSide = Math.sqrt(bldArea);
@@ -348,15 +348,18 @@ function Scene({
             parkingHouseholds,
             parkingTierRatios,
           ).spaces;
-  const totalParkingArea = spaces * SQM_PER_SPACE;
+  // 주차 면적 계수 = 사용자 설정 1대당 면적 하나(예전: 25㎡ 고정 → PDF 30㎡와 불일치)
+  const totalParkingArea = plan.parking.planAreaSqm;
   const groundPark = groundParkingSqm(
     totalParkingArea,
     parkingMode,
     parkingGroundRatio,
   );
-  const basementPark = totalParkingArea - groundPark;
   const pilotisFloors = bldArea > 0 ? groundPark / bldArea : 0;
-  const basementLv = bldArea > 0 ? basementPark / bldArea : 0;
+  const basementLv = plan.basement.levels.reduce(
+    (a, l) => a + (plan.basement.levelCapacitySqm > 0 ? l.areaSqm / plan.basement.levelCapacitySqm : 0),
+    0,
+  );
 
   // Day 10: 1F 분해 — 30㎡/대 + 필로티 분기 (시행령 119조 1항 2호 가목 4)
   const gp = calculateGroundParking({
@@ -429,7 +432,7 @@ function Scene({
       <directionalLight position={[-15, 20, -15]} intensity={0.22} />
       {sunPath && <SunPath data={sunPath} />}
 
-      <CameraRig preset={preset} autoRotate={autoRotate} />
+      <CameraRig preset={preset} autoRotate={autoRotate} heightM={heightM} lotSide={parcelShape ? Math.max(parcelShape.bounds.maxX - parcelShape.bounds.minX, parcelShape.bounds.maxY - parcelShape.bounds.minY) : lotSide} />
 
       {showGrid && !(showImagery && parcelShape) && (
         <Grid
@@ -653,7 +656,7 @@ function Scene({
         dampingFactor={0.08}
         autoRotate={autoRotate}
         autoRotateSpeed={1.0}
-        target={[0, Math.min(heightM * 0.4, 12), 0]}
+        target={[0, heightM * 0.42, 0]}
         minDistance={10}
         maxDistance={500}
         maxPolarAngle={Math.PI / 2 - 0.02}
@@ -683,12 +686,12 @@ function CaptureRegistrar() {
       // 캡쳐하고, 카메라는 원위치로 되돌린다. gl.render는 동기 호출이라
       // rAF가 멈춘 숨은 탭에서도 확실히 찍힌다.
       const st = useSimulatorStore.getState();
-      const lotSqm = lotPyToSqm(st.lotPy);
+      const lotSqm = st.lotSqm;
       const ps = st.parcelShape;
       const lotSide = ps
         ? Math.max(ps.bounds.maxX - ps.bounds.minX, ps.bounds.maxY - ps.bounds.minY)
         : Math.sqrt(Math.max(lotSqm, 1));
-      const hM = totalHeightM(floorsFromFarAndCov(st.farPct, st.covPct));
+      const hM = planFromState(st).heightM;
       const size = Math.max(lotSide * 1.15, hM * 0.95, 14);
 
       const prevPos = camera.position.clone();
@@ -945,22 +948,36 @@ function RoofSlab({ pts, y, color }: { pts: Pt[]; y: number; color: string }) {
   );
 }
 
+/** 프리셋 위치를 건물 높이·대지 크기에 맞춰 늘린다 — 고층일 때 상부가 화면 밖으로 잘리던 문제.
+ *  fov 35° 기준: 높이 h 를 여유 있게 담으려면 거리 ≈ 1.9h, 대지 폭 w 는 ≈ 1.7w. */
+function fittedPreset(preset: PresetKey, heightM: number, lotSide: number): [number, number, number] {
+  const [x, y, z] = PRESETS[preset];
+  const base = Math.hypot(x, y, z);
+  const need = Math.max(1.9 * heightM, 1.7 * lotSide, base);
+  const k = need / base;
+  return [x * k, y * k, z * k];
+}
+
 function CameraRig({
   preset,
   autoRotate,
+  heightM,
+  lotSide,
 }: {
   preset: PresetKey;
   autoRotate: boolean;
+  heightM: number;
+  lotSide: number;
 }) {
   const { camera, invalidate } = useThree();
-  const target = useRef(new THREE.Vector3(...PRESETS[preset]));
+  const target = useRef(new THREE.Vector3(...fittedPreset(preset, heightM, lotSide)));
   const lerping = useRef(false);
 
   useEffect(() => {
-    target.current.set(...PRESETS[preset]);
+    target.current.set(...fittedPreset(preset, heightM, lotSide));
     lerping.current = true;
     invalidate(); // frameloop="demand" 모드에서 lerp 시작 트리거
-  }, [preset, invalidate]);
+  }, [preset, heightM, lotSide, invalidate]);
 
   useFrame(() => {
     if (autoRotate) return; // OrbitControls가 회전 중일 때는 우리가 손대지 않음
@@ -1099,6 +1116,12 @@ function BuildingMass({
   const ceilFloors = Math.ceil(floors);
   const boxes: React.ReactNode[] = [];
   const bldCenterZ = offsetZ;
+  // 층고: 1층·기준층 분리 (computePlan 과 같은 규칙)
+  const h1 = useSimulatorStore((s) => s.floor1HeightM);
+  const ht = useSimulatorStore((s) => s.typicalFloorHeightM);
+  const baseOf = (i: number) => (i === 0 ? 0 : h1 + (i - 1) * ht);
+  const hOf = (i: number) => (i === 0 ? h1 : ht);
+  const massTopM = ceilFloors > 0 ? baseOf(ceilFloors - 1) + hOf(ceilFloors - 1) : 0;
   const labelStep = floorLabelStep(ceilFloors);
   let topDepth = bldSide;
   let topCz = bldCenterZ;
@@ -1106,21 +1129,26 @@ function BuildingMass({
   let topSetback = 0;
 
   for (let i = 0; i < ceilFloors; i++) {
-    const fH = (i + 1) * FLOOR_HEIGHT_M;
+    const fH = baseOf(i) + hOf(i);
     // 박스 북측 변 = 정북 인접 대지경계선. 층 상단 높이 기준 절대 이격만큼 깎는다.
     const setback = sunOn ? requiredSetbackM(fH, rule) : 0;
 
-    const depth = Math.max(0, bldSide - setback);
+    let depth = Math.max(0, bldSide - setback);
     if (depth <= 0) continue;
 
     const portion = i + 1 <= floors ? 1 : floors - i;
     if (portion <= 0) break;
-    const floorH = FLOOR_HEIGHT_M * portion;
-    const y = i * FLOOR_HEIGHT_M + floorH / 2;
-    const cz = bldCenterZ + setback / 2;
+    // 부분층은 바닥면적 비율만큼 깊이를 줄이고(남측 기준) 높이는 층고 전체
+    let cz = bldCenterZ + setback / 2;
+    if (portion < 0.999) {
+      depth = depth * portion;
+      cz = bldCenterZ + bldSide / 2 - depth / 2;
+    }
+    const floorH = hOf(i);
+    const y = baseOf(i) + floorH / 2;
     topDepth = depth;
     topCz = cz;
-    topY = i * FLOOR_HEIGHT_M + floorH;
+    topY = baseOf(i) + floorH;
     topSetback = setback;
     if (i % labelStep === 0 || i === ceilFloors - 1) {
       boxes.push(
@@ -1275,7 +1303,7 @@ function BuildingMass({
 
   // 용도 배지 (건물 상단)
   if (floors > 0) {
-    const hM = floors * FLOOR_HEIGHT_M;
+    const hM = massTopM;
     boxes.push(
       <Html
         key="use-label"
@@ -1304,7 +1332,7 @@ function BuildingMass({
 
   // 옥탑 (2층 이상일 때)
   if (floors >= 2) {
-    const hM = floors * FLOOR_HEIGHT_M;
+    const hM = massTopM;
     const sb = sunOn ? requiredSetbackM(hM, rule) : 0;
     const depthTop = Math.max(0, bldSide - sb);
     if (depthTop > 3) {
@@ -1325,7 +1353,7 @@ function BuildingMass({
 
   // 지붕 슬래브 + 📏 치수선
   if (floors > 0 && topDepth > 1) {
-    const hM = floors * FLOOR_HEIGHT_M;
+    const hM = massTopM;
     const southZ = bldCenterZ + bldSide / 2;
     boxes.push(
       <mesh key="roof" position={[0, topY + 0.06, topCz]}>
@@ -1896,6 +1924,11 @@ function ParcelMass({
 
   const items: React.ReactNode[] = [];
   const ceilFloors = Math.ceil(floors);
+  const h1 = useSimulatorStore((s) => s.floor1HeightM);
+  const ht = useSimulatorStore((s) => s.typicalFloorHeightM);
+  const baseOf = (i: number) => (i === 0 ? 0 : h1 + (i - 1) * ht);
+  const hOf = (i: number) => (i === 0 ? h1 : ht);
+  const massTopM = ceilFloors > 0 ? baseOf(ceilFloors - 1) + hOf(ceilFloors - 1) : 0;
   let topPts: Pt[] = fp;
   let topY = 0;
   let topRequired = 0;
@@ -1905,14 +1938,16 @@ function ParcelMass({
   const labelZ = se ? -(se.mid[1] + se.ny * 0.16) : -fpBounds.minY + 0.14;
   const labelRot = se ? se.rotY : 0;
   for (let i = 0; i < ceilFloors; i++) {
-    const fH = (i + 1) * FLOOR_HEIGHT_M; // 층 상단 높이 기준(층 내 최엄격 지점) — 보수적 근사
+    const fH = baseOf(i) + hOf(i); // 층 상단 높이 기준(층 내 최엄격 지점) — 보수적 근사
     const required = requiredSetbackM(fH, rule);
-    const pts = sunOn ? clipPolygonBelowY(fp, northY - required) : fp;
-    if (pts.length < 3) break;
+    const clipped = sunOn ? clipPolygonBelowY(fp, northY - required) : fp;
+    if (clipped.length < 3) break;
     const portion = i + 1 <= floors ? 1 : floors - i;
+    // 부분층: 바닥면적 비율만큼 도형을 축소, 높이는 층고 전체
+    const pts = portion > 0 && portion < 0.999 ? scalePolygon(clipped, Math.sqrt(portion)) : clipped;
     if (portion > 0) {
       topPts = pts;
-      topY = i * FLOOR_HEIGHT_M + FLOOR_HEIGHT_M * portion;
+      topY = baseOf(i) + hOf(i);
       topRequired = sunOn ? required : 0;
       if (i % labelStep === 0 || i === ceilFloors - 1) {
         items.push(
@@ -1921,12 +1956,12 @@ function ParcelMass({
       }
     }
     if (portion <= 0) break;
-    const floorH = FLOOR_HEIGHT_M * portion;
+    const floorH = hOf(i);
     items.push(
       <ExtrudedFloor
         key={i}
         pts={pts}
-        baseY={i * FLOOR_HEIGHT_M}
+        baseY={baseOf(i)}
         h={floorH}
         color={massColor}
         glassColor={glassColor}
@@ -1936,7 +1971,7 @@ function ParcelMass({
     );
   }
 
-  const hM = floors * FLOOR_HEIGHT_M;
+  const hM = massTopM;
 
   // 1층 지상주차 — 실형상 footprint 남측 밴드에 반투명 표시 + 자동차 배치.
   // 박스 모드(BuildingMass Day10)와 동일한 시각 문법: 필로티는 더 투명하게.

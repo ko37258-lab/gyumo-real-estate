@@ -58,11 +58,16 @@ export function floorAreas(p: {
   bldAreaSqm: number;
   floors: number;
   floorHeightM: number;
+  /** 1층 층고(m) — 생략 시 기준층 층고와 같음 */
+  floor1HeightM?: number;
   sunlightOn: boolean;
   shape?: ShapeForGfa | null;
   rule?: SunlightRule;
 }): Array<{ floor: number; areaSqm: number; portion: number; legalSetbackM: number }> {
   const { bldAreaSqm, floors, floorHeightM, sunlightOn, shape } = p;
+  const h1 = p.floor1HeightM && p.floor1HeightM > 0 ? p.floor1HeightM : floorHeightM;
+  // i번째(0부터) 층 상단 높이 = 1층 층고 + 기준층 층고 × i
+  const topOf = (i: number) => h1 + i * floorHeightM;
   const rule = p.rule ?? DEFAULT_SUNLIGHT_RULE;
   const out: Array<{ floor: number; areaSqm: number; portion: number; legalSetbackM: number }> = [];
   const ceil = Math.ceil(floors);
@@ -73,7 +78,7 @@ export function floorAreas(p: {
     const k = Math.sqrt(Math.max(bldAreaSqm, 0.01) / Math.max(shapeArea, 0.01));
     const fp = scalePolygon(shape.pts, Math.min(1, k));
     for (let i = 0; i < ceil; i++) {
-      const fH = (i + 1) * floorHeightM;
+      const fH = topOf(i);
       const req = sunlightOn ? requiredSetbackM(fH, rule) : 0;
       const pts = req > 0 ? clipPolygonBelowY(fp, shape.northY - req) : fp;
       const portion = Math.min(1, floors - i);
@@ -88,7 +93,7 @@ export function floorAreas(p: {
   // 근사(박스): calcActualGfaSqm과 동일 — 북측 벽 1.5m 가정의 상대 후퇴
   const northDepth = Math.sqrt(Math.max(bldAreaSqm, 0.01));
   for (let i = 0; i < ceil; i++) {
-    const fH = (i + 1) * floorHeightM;
+    const fH = topOf(i);
     const extra = sunlightOn ? extraSetbackM(fH, rule) : 0;
     const ratio = Math.max(0, (northDepth - extra) / northDepth);
     const portion = Math.min(1, floors - i);
@@ -119,12 +124,15 @@ export function computeFloorTable(p: {
   usageLabel: string;
   shape?: ShapeForGfa | null;
   rule?: SunlightRule;
+  floor1HeightM?: number;
+  /** computePlan 의 지하층 배열 — 주면 그대로 쓴다(화면·2D·비용과 같은 값) */
+  basementLevels?: Array<{ level: number; areaSqm: number }>;
 }): FloorTableResult {
   const areas = floorAreas(p);
   const rows: FloorRow[] = areas.map((a) => {
     let note = p.usageLabel;
     if (a.floor === 1 && p.groundParkingArea > 0) {
-      note = `${p.usageLabel} + 주차 ${Math.round(p.groundParkingArea)}㎡ (${p.pilotiMode ? "필로티 — 연면적 제외" : "벽체식 — 연면적 산입"})`;
+      note = `${p.usageLabel} + 주차 ${Math.round(p.groundParkingArea)}㎡ (${p.pilotiMode ? "필로티 — 요건 충족 시 바닥면적 불산입" : "벽체식 — 바닥면적 산입, 용적률 산정에선 제외"})`;
     }
     if (a.portion < 1) note += ` · 부분층 ${(a.portion * 100).toFixed(0)}%`;
     return { ...a, note };
@@ -132,6 +140,11 @@ export function computeFloorTable(p: {
   const sum = rows.reduce((s, r) => s + r.areaSqm, 0);
 
   const basement: BasementRow[] = [];
+  const BASEMENT_NOTE = "주차장 — 용적률 산정 연면적 제외, 총연면적에는 포함 (건축법 시행령 제119조①4)";
+  if (p.basementLevels) {
+    for (const l of p.basementLevels) basement.push({ level: l.level, areaSqm: l.areaSqm, note: BASEMENT_NOTE });
+    return { rows, basement, sumGroundSqm: sum, precise: Boolean(p.shape && p.shape.pts.length >= 3) };
+  }
   let rem = Math.max(0, p.basementParkingArea);
   let lv = 1;
   while (rem > 0.5 && lv <= 5) {
@@ -139,7 +152,7 @@ export function computeFloorTable(p: {
     basement.push({
       level: lv,
       areaSqm: a,
-      note: "주차장 — 용적률 산정 연면적 제외 (건축법 시행령 제119조①4)",
+      note: BASEMENT_NOTE,
     });
     rem -= a;
     lv++;

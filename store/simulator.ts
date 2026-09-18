@@ -9,7 +9,8 @@ import {
 } from "@/lib/parking-standards";
 import { resolveAreaPerSpace } from "@/lib/parking-regions";
 import type { ParkingMode } from "@/lib/calc/parking";
-import { DEFAULT_SUNLIGHT_RULE, type SunlightRule } from "@/lib/calc/sunlight";
+import { DEFAULT_SUNLIGHT_RULE, sunlightRuleForDate, todayYmd, type SunlightRule } from "@/lib/calc/sunlight";
+import { SQM_PER_PYEONG } from "@/lib/utils/area";
 import type { ParcelShape } from "@/lib/geo/parcel";
 import { findOrdinanceLimit, type OrdinanceLimit } from "@/lib/ordinance-db";
 
@@ -31,16 +32,38 @@ export type MergedParcel = {
   areaSqm: number;
 };
 
+/** 대지면적의 출처 — 공부상 면적(조회) / 사용자 입력 / 초기 예시값 */
+export type LotAreaSource = "official" | "input" | "default";
+
 type SimulatorState = {
   address: string;
   lotInfo: LotInfo | null;
   zone: ZoneCode;
+  /**
+   * 산정에 쓰는 대지면적(㎡, 정밀값) — 모든 계산의 원본.
+   * 평은 표시용으로만 lotSqm ÷ 3.305785 를 쓴다(반올림해 되돌려 넣지 않는다).
+   */
+  lotSqm: number;
+  /** 표시용 평(= lotSqm ÷ 3.305785, 반올림하지 않은 값) */
   lotPy: number;
+  lotAreaSource: LotAreaSource;
+  /** 조회된 공부상 면적(㎡) — 사용자가 산정면적을 바꿔도 보존 */
+  officialLotSqm: number | null;
+  /** 1층 층고(m) */
+  floor1HeightM: number;
+  /** 기준층 층고(m) */
+  typicalFloorHeightM: number;
+  /** 허가·신고 신청 예정일(YYYY-MM-DD). null = 검토일(오늘) 기준 */
+  permitDate: string | null;
+  /** 사용자가 일조 규칙을 직접 골랐는지(true면 신청일 변경으로 자동 전환하지 않음) */
+  sunlightRuleManual: boolean;
   covPct: number;
   farPct: number;
   roadM: number;
+  /** 전면도로 폭 출처 — assumed: 조회 시 인접 도로 유무만 보고 넣은 가정값 */
+  roadMSource: "assumed" | "input";
   sunOn: boolean;
-  /** 정북 일조 규칙 버전 — 원칙은 개정 후(2026.11.12 시행). 개정 전은 비교용 */
+  /** 정북 일조 규칙 버전 — 기본은 신청 예정일(없으면 검토일)에 적용되는 규칙. 부칙: 2026.11.12 이후 신청분부터 개정 후 */
   sunlightRule: SunlightRule;
   /** 서울도심(사대문 안) 특례 적용 — zone.floorRatioCBD 사용 */
   isCBD: boolean;
@@ -91,9 +114,15 @@ type SimulatorState = {
   applyLotInfo: (info: LotInfo) => void;
   setZone: (z: ZoneCode) => void;
   setLotPy: (v: number) => void;
+  setLotSqm: (v: number) => void;
+  /** 지번 조회로 받은 공부상 면적 — 산정 대지면적도 이 값으로 */
+  setOfficialLotSqm: (v: number) => void;
+  setFloor1HeightM: (v: number) => void;
+  setTypicalFloorHeightM: (v: number) => void;
+  setPermitDate: (v: string | null) => void;
   setCovPct: (v: number) => void;
   setFarPct: (v: number) => void;
-  setRoadM: (v: number) => void;
+  setRoadM: (v: number, source?: "assumed" | "input") => void;
   setSunOn: (v: boolean) => void;
   setSunlightRule: (v: SunlightRule) => void;
   setIsCBD: (v: boolean) => void;
@@ -140,10 +169,18 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   address: "서울특별시 강남구 역삼동 825-3",
   lotInfo: null,
   zone: "2il",
+  lotSqm: 200 * SQM_PER_PYEONG,
   lotPy: 200,
+  lotAreaSource: "default",
+  officialLotSqm: null,
+  floor1HeightM: 3.5,
+  typicalFloorHeightM: 3.5,
+  permitDate: null,
+  sunlightRuleManual: false,
   covPct: ZONES["2il"].maxCov,
   farPct: ZONES["2il"].defFar,
   roadM: 6,
+  roadMSource: "assumed",
   sunOn: ZONES["2il"].sunlight,
   sunlightRule: DEFAULT_SUNLIGHT_RULE,
   isCBD: false,
@@ -171,10 +208,15 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
       address: info.address,
       lotInfo: info,
       zone: info.zone,
-      lotPy: Math.round(info.lotSqm / 3.305785),
+      // ⚠️ 정수 평으로 반올림하지 않는다 — 394.8㎡ 가 119평(393.39㎡)으로 줄던 원인
+      lotSqm: info.lotSqm,
+      lotPy: info.lotSqm / SQM_PER_PYEONG,
+      lotAreaSource: "official",
+      officialLotSqm: info.lotSqm,
       covPct: covMax,
       farPct: Math.min(z.defFar, farMax),
       roadM: info.roadM,
+      roadMSource: "assumed",
       sunOn: z.sunlight,
       parkingLawdCd: lawdCd,
       ordinance: ord,
@@ -206,7 +248,26 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   },
 
   setLotPy: (v) => {
-    if (Number.isFinite(v)) set({ lotPy: v });
+    if (Number.isFinite(v) && v >= 0) set({ lotPy: v, lotSqm: v * SQM_PER_PYEONG, lotAreaSource: "input" });
+  },
+  setLotSqm: (v) => {
+    if (Number.isFinite(v) && v >= 0) set({ lotSqm: v, lotPy: v / SQM_PER_PYEONG, lotAreaSource: "input" });
+  },
+  setOfficialLotSqm: (v) => {
+    if (Number.isFinite(v) && v > 0)
+      set({ lotSqm: v, lotPy: v / SQM_PER_PYEONG, lotAreaSource: "official", officialLotSqm: v });
+  },
+  setFloor1HeightM: (v) => {
+    if (Number.isFinite(v)) set({ floor1HeightM: Math.max(2.4, Math.min(10, v)) });
+  },
+  setTypicalFloorHeightM: (v) => {
+    if (Number.isFinite(v)) set({ typicalFloorHeightM: Math.max(2.4, Math.min(8, v)) });
+  },
+  setPermitDate: (v) => {
+    const date = v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+    const next: Partial<SimulatorState> = { permitDate: date };
+    if (!get().sunlightRuleManual) next.sunlightRule = sunlightRuleForDate(date ?? todayYmd());
+    set(next);
   },
   setCovPct: (v) => {
     if (Number.isFinite(v)) set({ covPct: v });
@@ -214,11 +275,11 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   setFarPct: (v) => {
     if (Number.isFinite(v)) set({ farPct: v });
   },
-  setRoadM: (v) => {
-    if (Number.isFinite(v)) set({ roadM: v });
+  setRoadM: (v, source = "input") => {
+    if (Number.isFinite(v)) set({ roadM: v, roadMSource: source });
   },
   setSunOn: (v) => set({ sunOn: v }),
-  setSunlightRule: (v) => set({ sunlightRule: v }),
+  setSunlightRule: (v) => set({ sunlightRule: v, sunlightRuleManual: true }),
   setIsCBD: (v) => set({ isCBD: v }),
 
   // 주차장 — 용도 변경 시 해당 지자체(미조회 시 서울) 기준값으로 user-editable 필드 리셋
