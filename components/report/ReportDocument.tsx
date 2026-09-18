@@ -12,6 +12,7 @@ import {
   Text as SvgText,
   View,
 } from "@react-pdf/renderer";
+import { createContext, useContext } from "react";
 import { ensurePdfFonts } from "@/lib/pdf/fonts";
 import { COLORS } from "@/lib/pdf/tokens";
 import type { AIAnalysis, ReportInputs } from "@/lib/ai/types";
@@ -107,6 +108,27 @@ const styles = StyleSheet.create({
   brand: { fontSize: 8, color: COLORS.CORAL_DARK, fontWeight: 700 },
 });
 
+/** 섹션 번호 — 선택된 항목에 따라 1..N 으로 다시 매긴다 (예전: 5. 비용 다음 9. 부록) */
+const SecCtx = createContext<Record<string, string>>({});
+const useSec = () => useContext(SecCtx);
+
+function sectionNumbers(input: ReportInputs, hasAnalysis: boolean): Record<string, string> {
+  const out: Record<string, string> = {};
+  let n = 0;
+  const next = () => String(++n);
+  out.overview = next();
+  out.summary = next();
+  out.scale = next();
+  if (input.scale.parkingSpaces > 0) out.parking = next();
+  if (input.includeCostPage !== false) out.cost = next();
+  if (input.profit) out.profit = next();
+  if (input.revenue) out.revenue = next();
+  if (input.usePrices) out.usePrices = input.revenue ? `${out.revenue}-1` : next();
+  if (hasAnalysis) out.ai = next();
+  out.appendix = next();
+  return out;
+}
+
 interface Props {
   input: ReportInputs;
   analysis: AIAnalysis | null;
@@ -125,6 +147,7 @@ export function ReportDocument({ input, analysis, brand }: Props) {
       {/* 표지 이후는 하나의 흐르는 페이지 — 섹션이 이어 붙어 인쇄 시 빈 공간이 생기지 않는다.
           (섹션마다 <Page>를 쓰면 짧은 섹션 뒤에 반 페이지씩 공백이 남았다 — 2026-09-04 정리) */}
       <Page size="A4" style={styles.innerPage} wrap>
+        <SecCtx.Provider value={sectionNumbers(input, Boolean(analysis))}>
         <FixedHeader input={input} brand={b} />
         <FixedFooter input={input} />
         <OverviewPage input={input} brand={b} />
@@ -138,6 +161,7 @@ export function ReportDocument({ input, analysis, brand }: Props) {
         {input.usePrices && <UsePricesPage input={input} brand={b} />}
         {analysis && <AIPage input={input} analysis={analysis} brand={b} />}
         <AppendixPage input={input} brand={b} />
+        </SecCtx.Provider>
       </Page>
     </Document>
   );
@@ -299,10 +323,10 @@ function CoverPage({
                 <View style={{ flex: input.locationMap ? 1.7 : 1 }}>
                   <PdfImage
                     src={input.visualization3D}
-                    style={{ width: "100%", height: 168, objectFit: "cover", borderRadius: 3 }}
+                    style={{ width: "100%", height: 168, objectFit: "contain", borderRadius: 3 }}
                   />
                   <PdfText style={{ fontSize: 8, color: COLORS.GRAY, marginTop: 3, fontFamily: "Pretendard" }}>
-                    3D 매스 — 건폐율·용적률·정북 일조사선·주차 반영 (치수 m)
+                    3D 매스 — 건폐율·용적률{input.scale.sunlightApplied ? "·정북 일조사선" : ""}·주차 반영 (치수 m · 입력 조건 기준 이론상 규모)
                   </PdfText>
                 </View>
               ) : null}
@@ -322,6 +346,8 @@ function CoverPage({
 
           {/* KPI 4타일 — 표지에서 규모·수익을 한눈에 */}
           <CoverKpiRow input={input} brand={brand} />
+          {/* 핵심 미확인 사항 — 표지에서 바로 보이게 (면책 각주로 숨기지 않는다) */}
+          <UnverifiedBox input={input} compact />
 
           {analysis?.oneLiner ? (
             <View
@@ -359,12 +385,12 @@ function CoverPage({
           }}
         >
           <PdfText style={{ fontSize: 9, color: COLORS.GRAY, fontFamily: "Pretendard" }}>
-            작성: {brand.brandTagline} {brand.authorName} · 법률자문: {brand.legalAdvisor}
+            발행: {brand.brandTagline} {brand.authorName} · {brand.corporationName}
           </PdfText>
           <PdfText
             style={{ fontSize: 9, color: COLORS.GRAY, marginTop: 2, fontFamily: "Pretendard" }}
           >
-            {brand.corporationName} · {brand.ceoTitle} · 1차 보고서
+            검수 상태: 자동 산정 보고서 — 건축사·법률 자문({brand.legalAdvisor}) 검토를 거치지 않음 · 전문 종합 분석 {input.aiStatus === "done" ? "포함" : input.aiStatus === "failed" ? "실패(미포함)" : "미실행"} · 검토일 {input.reviewDate}
           </PdfText>
         </View>
       </View>
@@ -426,25 +452,23 @@ function KpiTile({
 function CoverKpiRow({ input, brand }: { input: ReportInputs; brand: BrandConfig }) {
   const s = input.scale;
   const py = (sqm: number) => Math.round(sqm / 3.305785).toLocaleString("ko-KR");
-  const floorsTxt = s.floorsExact
-    ? Number.isInteger(s.floorsExact)
-      ? `${s.floorsExact}층`
-      : `${s.floorsExact.toFixed(1)}층`
-    : "-";
+  const floorsTxt = s.floorCount ? `지상 ${s.floorCount}층` : "-";
   const rev = input.revenue;
   const thirdTile = s.totalUnits
     ? { label: "가설계 세대수", value: `${s.totalUnits}세대`, sub: `전용 ${s.unitExclusiveSqm ?? "-"}㎡ · ${floorsTxt}` }
-    : { label: "층수 · 높이", value: floorsTxt, sub: s.heightM ? `H ${s.heightM.toFixed(1)}m · 주차 ${s.parkingSpaces}대` : `주차 ${s.parkingSpaces}대` };
+    : { label: "층수 · 높이 (이론상)", value: floorsTxt, sub: `${s.floorLabel && s.floorLabel.includes("부분층") ? "최상층 부분층 · " : ""}H ${(s.heightM ?? 0).toFixed(1)}m · 법정 주차 ${s.parkingSpaces}대` };
   const fourth = rev?.sale
     ? { label: "예상 분양 총수입", value: fmtEok(rev.sale.totalWon), sub: `세대당 ${fmtEok(rev.sale.perUnitWon)} · 인근 실거래 기준` }
-    : { label: "예상 총 사업비", value: fmtEok(input.cost.total), sub: "토지비 제외 · 비용 탭 기준" };
+    : input.profit
+      ? { label: "토지비 포함 총사업비", value: fmtEok(input.profit.totalProjectCost), sub: `토지 ${fmtEok(input.profit.landCost)} · 금융비 포함` }
+      : { label: "건축·부대비 소계", value: fmtEok(input.cost.total), sub: "토지비·금융비 미포함" };
   return (
     <View wrap={false} style={{ flexDirection: "row", gap: 6, marginTop: 12 }}>
-      <KpiTile label="대지면적" value={`${py(s.landAreaSqm)}평`} sub={`${fmtNum(s.landAreaSqm, 1)}㎡ · ${s.zoneName}`} />
+      <KpiTile label="대지면적" value={`${fmtNum(s.landAreaSqm, 2)}㎡`} sub={`${(s.landAreaSqm / 3.305785).toFixed(2)}평 · ${s.zoneName}`} />
       <KpiTile
-        label="실제 가능 연면적"
+        label="입력 조건 기준 추정 연면적"
         value={`${py(s.actualFloorArea)}평`}
-        sub={`법정 ${py(s.legalFloorArea)}평 · 건폐 ${s.coverRatio}% / 용적 ${s.floorRatio}%`}
+        sub={`상한 산술값 ${py(s.legalFloorArea)}평 · 건폐 ${s.coverRatio}% / 용적 ${s.floorRatio}%`}
       />
       <KpiTile label={thirdTile.label} value={thirdTile.value} sub={thirdTile.sub} />
       <KpiTile label={fourth.label} value={fourth.value} sub={fourth.sub} accent accentColor={brand.primaryColor} />
@@ -454,6 +478,7 @@ function CoverKpiRow({ input, brand }: { input: ReportInputs; brand: BrandConfig
 
 /* ─────────────────────────── 1. 사업 개요 ─────────────────────────── */
 function OverviewPage({ input, brand }: { input: ReportInputs; brand: BrandConfig }) {
+  const sec = useSec();
   const s = input.scale;
   const land = input.land;
   const py = (sqm: number) => Math.round(sqm / 3.305785).toLocaleString("ko-KR");
@@ -466,7 +491,7 @@ function OverviewPage({ input, brand }: { input: ReportInputs; brand: BrandConfi
 
   const landRows: [string, string][] = [
     ["소재지", input.address || "(미입력)"],
-    ["대지면적", `${fmtNum(s.landAreaSqm, 1)}㎡ (${py(s.landAreaSqm)}평)${land?.mergedCount && land.mergedCount > 1 ? ` · 합필 ${land.mergedCount}필지` : ""}`],
+    ["대지면적", `${fmtNum(s.landAreaSqm, 2)}㎡ (${(s.landAreaSqm / 3.305785).toFixed(2)}평) · ${s.lotAreaSource === "official" ? "공부상 면적(조회)" : s.lotAreaSource === "input" ? "사용자 입력" : "예시값"}${s.shapeAreaSqm ? ` · 지적도 도형 ${fmtNum(s.shapeAreaSqm, 2)}㎡(참고)` : ""}${land?.mergedCount && land.mergedCount > 1 ? ` · 합필 ${land.mergedCount}필지` : ""}`],
     [
       "용도지역 · 법정 상한",
       `${s.zoneName} — 건폐율 ${s.legalCovMax ?? "-"}% · 용적률 ${s.legalFarMax ?? "-"}%${s.sunlightApplied ? " · 정북 일조 적용" : ""}`,
@@ -499,20 +524,20 @@ function OverviewPage({ input, brand }: { input: ReportInputs; brand: BrandConfi
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>1. 사업 개요</PdfText>
+      <PdfText style={styles.h2} minPresenceAhead={170}>{sec.overview}. 사업 개요</PdfText>
       <View style={styles.h2Underline} />
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>(a) 대상 토지</PdfText>
+      <PdfText style={styles.h3} minPresenceAhead={100}>(a) 대상 토지</PdfText>
       <TwoColTable rows={landRows} />
 
-      <PdfText style={[styles.h3, { marginTop: 12 }]} minPresenceAhead={60}>(b) 계획 규모</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 12 }]} minPresenceAhead={100}>(b) 계획 규모</PdfText>
       <View wrap={false} style={{ flexDirection: "row", gap: 6 }}>
         <KpiTile label="1층 건축면적" value={`${py(s.buildingArea)}평`} sub={`${fmtNum(s.buildingArea, 1)}㎡ · 건폐율 ${s.coverRatio}%`} />
-        <KpiTile label="층수 · 높이" value={floorsTxt} sub={s.heightM ? `H ${s.heightM.toFixed(1)}m (층고 ${s.floorHeightM ?? 3.5}m)` : undefined} />
+        <KpiTile label="층수 · 높이" value={s.floorCount ? `지상 ${s.floorCount}층` : floorsTxt} sub={`${s.floorLabel?.includes("부분층") ? "최상층 부분층 · " : ""}H ${(s.heightM ?? 0).toFixed(1)}m · 1층 ${s.floor1HeightM ?? 3.5}m/기준층 ${s.floorHeightM ?? 3.5}m`} />
         <KpiTile
-          label="실제 가능 연면적"
+          label="입력 조건 기준 추정 연면적"
           value={`${py(s.actualFloorArea)}평`}
-          sub={`용적률 실현 ${realizedFar.toFixed(0)}% / 법정 ${s.floorRatio}%`}
+          sub={`용적률 ${realizedFar.toFixed(0)}% / 입력 ${s.floorRatio}% · 인허가 미확인`}
           accent
           accentColor={brand.primaryColor}
         />
@@ -525,7 +550,7 @@ function OverviewPage({ input, brand }: { input: ReportInputs; brand: BrandConfi
 
       {s.floorTable ? (
         <View wrap={false} style={{ marginTop: 12 }}>
-          <PdfText style={styles.h3} minPresenceAhead={60}>(c) 층별 면적 구성</PdfText>
+          <PdfText style={styles.h3} minPresenceAhead={100}>(c) 층별 면적 구성</PdfText>
           <View
             style={{
               borderWidth: 1,
@@ -546,7 +571,7 @@ function OverviewPage({ input, brand }: { input: ReportInputs; brand: BrandConfi
 
       {rev ? (
         <View wrap={false} style={{ marginTop: 12 }}>
-          <PdfText style={styles.h3} minPresenceAhead={60}>(d) 수익 요약 — 인근 실거래 기준</PdfText>
+          <PdfText style={styles.h3} minPresenceAhead={100}>(d) 수익 요약 — 인근 실거래 기준</PdfText>
           <View style={{ flexDirection: "row", gap: 6 }}>
             <KpiTile
               label="분양(매각) 총수입"
@@ -576,14 +601,14 @@ function OverviewPage({ input, brand }: { input: ReportInputs; brand: BrandConfi
         <View wrap={false} style={{ marginTop: 12, flexDirection: "row", gap: 8 }}>
           {input.visualization3DViews?.south ? (
             <View style={{ flex: 1 }}>
-              <PdfImage src={input.visualization3DViews.south} style={{ width: "100%", height: 96, objectFit: "cover", borderRadius: 2 }} />
+              <PdfImage src={input.visualization3DViews.south} style={{ width: "100%", height: 96, objectFit: "contain", borderRadius: 2 }} />
               <PdfText style={[styles.muted, { marginTop: 2, textAlign: "center" }]}>남측(도로) 정면</PdfText>
             </View>
           ) : null}
           {input.visualization3DViews?.north ? (
             <View style={{ flex: 1 }}>
-              <PdfImage src={input.visualization3DViews.north} style={{ width: "100%", height: 96, objectFit: "cover", borderRadius: 2 }} />
-              <PdfText style={[styles.muted, { marginTop: 2, textAlign: "center" }]}>북측 정면 — 일조사선 후퇴</PdfText>
+              <PdfImage src={input.visualization3DViews.north} style={{ width: "100%", height: 96, objectFit: "contain", borderRadius: 2 }} />
+              <PdfText style={[styles.muted, { marginTop: 2, textAlign: "center" }]}>{s.sunlightApplied ? "북측 정면 — 일조사선 후퇴" : "북측 정면"}</PdfText>
             </View>
           ) : null}
         </View>
@@ -658,6 +683,7 @@ function FloorStackDiagram({
 
 /* ─────────────────────────── 7. 분양·임대 수익 추정 ─────────────────────────── */
 function RevenuePage({ input, brand }: { input: ReportInputs; brand: BrandConfig }) {
+  const sec = useSec();
   const rev = input.revenue!;
   const s = input.scale;
   const costTotal = input.cost.total;
@@ -677,7 +703,7 @@ function RevenuePage({ input, brand }: { input: ReportInputs; brand: BrandConfig
     <View style={styles.section}>
 
       <View wrap={false}>
-      <PdfText style={styles.h2}>7. 분양·임대 수익 추정</PdfText>
+      <PdfText style={styles.h2}>{sec.revenue}. 분양·임대 수익 추정</PdfText>
       <View style={styles.h2Underline} />
 
       <PdfText style={styles.h3}>(a) 계획 개요</PdfText>
@@ -692,7 +718,7 @@ function RevenuePage({ input, brand }: { input: ReportInputs; brand: BrandConfig
       />
       </View>
 
-      <PdfText style={[styles.h3, { marginTop: 12 }]} minPresenceAhead={60}>(b) 분양(매각) 시나리오</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 12 }]} minPresenceAhead={100}>(b) 분양(매각) 시나리오</PdfText>
       {rev.sale ? (
         <TwoColTable
           rows={[
@@ -707,7 +733,7 @@ function RevenuePage({ input, brand }: { input: ReportInputs; brand: BrandConfig
 
       {rev.sale ? <PdfText style={[styles.muted, { marginTop: 3 }]}>표본: {rev.sale.basis} · 최근 {rev.periodMonths}개월</PdfText> : null}
 
-      <PdfText style={[styles.h3, { marginTop: 10 }]} minPresenceAhead={60}>(c) 임대(월세) 시나리오</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 10 }]} minPresenceAhead={100}>(c) 임대(월세) 시나리오</PdfText>
       {rev.rent ? (
         <TwoColTable
           rows={[
@@ -752,7 +778,7 @@ function RevenuePage({ input, brand }: { input: ReportInputs; brand: BrandConfig
       </View>
       {bars.length > 0 ? (
         <View wrap={false} style={{ marginTop: 12 }}>
-          <PdfText style={styles.h3} minPresenceAhead={60}>(d) 분양 총수입 vs 총 사업비</PdfText>
+          <PdfText style={styles.h3} minPresenceAhead={100}>(d) 분양 총수입 vs 총 사업비</PdfText>
           <View style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid", padding: 8, backgroundColor: "white" }}>
             <Svg width={BW} height={BH} viewBox={`0 0 ${BW} ${BH}`}>
               {bars.map((b, i) => {
@@ -831,6 +857,7 @@ function SummaryPage({
   analysis: AIAnalysis | null;
   brand: BrandConfig;
 }) {
+  const sec = useSec();
   const totalEok = input.cost.total / 1e8;
   const perPy =
     input.cost.totalArea > 0 ? input.cost.total / input.cost.totalArea : 0;
@@ -839,9 +866,10 @@ function SummaryPage({
     <View style={styles.section}>
 
       <View wrap={false}>
-        <PdfText style={styles.h2}>2. 검토 요약 (Executive Summary)</PdfText>
+        <PdfText style={styles.h2}>{sec.summary}. 검토 요약 (Executive Summary)</PdfText>
         <View style={styles.h2Underline} />
         <PlainSummaryBox input={input} brand={brand} />
+        <UnverifiedBox input={input} />
       </View>
 
       {/* 2x2 KPI 그리드 — 카드 폭 ~78mm로 긴 한국어 텍스트 잘림 방지 */}
@@ -861,14 +889,14 @@ function SummaryPage({
         </View>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <Kpi2
-            label="예상 총 사업비"
+            label="건축·부대비 소계 (토지비 제외)"
             value={`${totalEok.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}억`}
-            sub={fmtWon(input.cost.total)}
+            sub={input.profit ? `토지비 포함 총사업비 ${fmtEok(input.profit.totalProjectCost)}` : `${fmtWon(input.cost.total)} · 토지비·금융비 미포함`}
             accent
             accentColor={brand.primaryColor}
           />
           <Kpi2
-            label="평당 사업비"
+            label="건축비 평당 (지상+지하)"
             value={
               input.cost.totalArea > 0
                 ? `${fmtNum(Math.round(perPy / 10000))}만`
@@ -883,7 +911,7 @@ function SummaryPage({
         </View>
       </View>
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>전문 종합 의견</PdfText>
+      <PdfText style={styles.h3} minPresenceAhead={100}>전문 종합 의견</PdfText>
       <View
         wrap={false}
         style={{
@@ -896,21 +924,27 @@ function SummaryPage({
       >
         <PdfText style={{ ...styles.body, fontFamily: "Pretendard" }}>
           {analysis?.summary ||
-            "전문 종합 분석을 건너뛰었습니다. 본 페이지의 KPI와 다음 페이지의 상세 산정만 보고서에 수록됩니다."}
+            (input.aiStatus === "failed"
+              ? "전문 종합 분석이 실패해 수록하지 않았습니다. 아래 수치는 자동 산정 결과입니다."
+              : "전문 종합 분석을 실행하지 않았습니다. 아래 수치는 자동 산정 결과이며 전문가 검토를 거치지 않았습니다.")}
         </PdfText>
       </View>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>핵심 수치 한눈에</PdfText>
+      <View wrap={false}>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>핵심 수치 한눈에</PdfText>
       <TwoColTable
         rows={[
           ["건폐율 / 용적률", `${input.scale.coverRatio}% / ${input.scale.floorRatio}%`],
-          ["1층 건축면적", formatArea(input.scale.buildingArea)],
-          ["법정 연면적", formatArea(input.scale.legalFloorArea)],
-          ["실제 가능 연면적", formatArea(input.scale.actualFloorArea)],
-          ["일조권 손실", `${input.scale.sunlightLoss.toFixed(1)}%`],
-          ["주차 대수 / 배치", `${input.scale.parkingSpaces}대 / ${PLACEMENT_LABEL[input.scale.parkingPlacement] ?? input.scale.parkingPlacement}`],
+          ["1층 총바닥면적", formatArea(input.scale.buildingArea)],
+          ["용적률 산정 연면적 상한 (산술값)", formatArea(input.scale.legalFloorArea)],
+          ["입력 조건 기준 추정 연면적", formatArea(input.scale.actualFloorArea)],
+          ["총연면적 (지상+지하 추정)", formatArea(input.scale.totalFloorArea ?? input.scale.actualFloorArea)],
+          ["층수 · 높이", `${input.scale.floorLabel ?? "-"} · ${(input.scale.heightM ?? 0).toFixed(1)}m`],
+          ["정북 일조", input.scale.sunlightApplied ? `적용 · 손실 ${input.scale.sunlightLoss.toFixed(1)}%` : "해당 없음 (용도지역)"],
+          ["법정 주차 / 배치 가정", `${input.scale.parkingSpaces}대 / ${PLACEMENT_LABEL[input.scale.parkingPlacement] ?? input.scale.parkingPlacement} (배치 검토 미실시)`],
         ]}
       />
+      </View>
 
       {input.land && <LandInfoBox land={input.land} brand={brand} />}
 
@@ -987,7 +1021,7 @@ function LandInfoBox({
 
   return (
     <View wrap={false} style={{ marginTop: 14 }}>
-      <PdfText style={styles.h3} minPresenceAhead={60}>
+      <PdfText style={styles.h3} minPresenceAhead={100}>
         토지 정보·시세 (지번 조회 · VWorld/국토부 실거래가)
       </PdfText>
       <TwoColTable rows={rows} />
@@ -1034,11 +1068,11 @@ function ProfitKpiBox({
           fontFamily: "Pretendard",
         }}
       >
-        📊 사업성 핵심 지표
+        ■ 사업성 핵심 지표 {profit.verdict?.kind === "hold" ? "— 판정 보류(가정 미확인)" : ""}
       </PdfText>
       <View style={{ flexDirection: "row", gap: 12 }}>
-        <KpiMini label="예상 IRR" value={`${profit.irr.toFixed(1)}%`} valueColor={irrColor} />
-        <KpiMini label="순이익 (세후)" value={fmtEok(profit.netProfit)} valueColor={netColor} />
+        <KpiMini label="자기자본 IRR(단순)" value={`${profit.irr.toFixed(1)}%`} valueColor={irrColor} />
+        <KpiMini label="세후 순이익(가정 세율)" value={fmtEok(profit.netProfit)} valueColor={netColor} />
         <KpiMini label="ROE" value={`${profit.roe.toFixed(1)}%`} />
         <KpiMini label="손익분기 분양률" value={`${profit.breakEvenSalesRate.toFixed(0)}%`} />
       </View>
@@ -1200,21 +1234,23 @@ function ScalePage({
   input: ReportInputs;
   brand: BrandConfig;
 }) {
+  const sec = useSec();
   const s = input.scale;
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>3. 건축 규모 검토</PdfText>
+      <PdfText style={styles.h2} minPresenceAhead={170}>{sec.scale}. 건축 규모 검토</PdfText>
       <View style={styles.h2Underline} />
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>(a) 입력 조건</PdfText>
+      <PdfText style={styles.h3} minPresenceAhead={100}>(a) 입력 조건</PdfText>
       <TwoColTable
         rows={[
           ["대지면적", formatArea(s.landAreaSqm)],
-          ["용도지역", `${s.zoneName} (${s.zoneCode})`],
+          ["용도지역", s.zoneName],
           ["건폐율", `${s.coverRatio}%`],
           ["용적률", `${s.floorRatio}%`],
-          ["전면도로", `${s.roadWidth}m`],
+          ["전면도로", `${s.roadWidth}m${s.roadWidthSource === "assumed" ? " (가정값 — 인접 도로 존재만 조회, 폭 실측 아님)" : " (사용자 입력)"}`],
+          ["층고", `1층 ${s.floor1HeightM ?? 3.5}m · 기준층 ${s.floorHeightM ?? 3.5}m`],
         ]}
       />
       {s.ordinanceSource && (
@@ -1223,10 +1259,10 @@ function ScalePage({
         </PdfText>
       )}
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(b) 산정 결과</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(b) 산정 결과</PdfText>
       <TwoColTable
         rows={[
-          ["1층 법정 건축면적", formatArea(s.buildingArea)],
+          ["1층 총바닥면적 (건폐율 입력값)", formatArea(s.buildingArea)],
           ...(s.groundParkingArea > 0
             ? ([
                 [
@@ -1235,15 +1271,17 @@ function ScalePage({
                 ],
                 [
                   s.floor1Indoor <= 0
-                    ? "⚠ 1층 영업 가능 면적 (1층 전체 주차)"
-                    : "✓ 1층 영업 가능 면적",
+                    ? "1층 주차 외 바닥면적 (1층 전체 주차)"
+                    : "1층 주차 외 바닥면적 (코어·공용 미반영)",
                   formatArea(s.floor1Indoor),
                 ],
               ] as [string, string][])
             : []),
-          ["법정 연면적", formatArea(s.legalFloorArea)],
-          ["실제 가능 연면적", formatArea(s.actualFloorArea)],
-          ["일조권 손실", `${s.sunlightLoss.toFixed(1)}%`],
+          ["용적률 산정 연면적 상한 (산술값)", formatArea(s.legalFloorArea)],
+          ["입력 조건 기준 추정 연면적", formatArea(s.actualFloorArea)],
+          ["총연면적 (지상+지하 추정)", formatArea(s.totalFloorArea ?? s.actualFloorArea)],
+          ["층수 · 높이", `${s.floorLabel ?? "-"} · ${(s.heightM ?? 0).toFixed(1)}m (${s.heightNote ?? "층고 합"})`],
+          ["정북 일조", s.sunlightApplied ? `적용 · 손실 ${s.sunlightLoss.toFixed(1)}%` : "해당 없음 (용도지역)"],
           [
             "주차장 배치",
             `지상 ${s.groundSpaces}대 / 지하 ${s.basementSpaces}대 (총 ${s.parkingSpaces}대, ${PLACEMENT_LABEL[s.parkingPlacement] ?? s.parkingPlacement})`,
@@ -1271,7 +1309,7 @@ function ScalePage({
               fontFamily: "Pretendard",
             }}
           >
-            ✓ 필로티 구조 적용
+            필로티 구조 가정
           </PdfText>
           <PdfText
             style={{
@@ -1281,12 +1319,14 @@ function ScalePage({
               fontFamily: "Pretendard",
             }}
           >
-            1층 주차 {formatArea(s.groundParkingArea)}가 연면적에서 추가 제외됩니다 (건축법 시행령 119조 1항 4호 — 벽 없는 개방형 주차 전용 구조 조건 충족 시).
+            1층 주차 {formatArea(s.groundParkingArea)}를 바닥면적 불산입으로 가정했습니다 (건축법 시행령 제119조 제1항 제3호 다목 — 필로티 등이 공중 통행·차량 통행·주차에 전용되는 경우 등 요건 충족 시). 개방 정도·용도 요건은 설계 단계에서 확인이 필요합니다.
           </PdfText>
         </View>
       ) : null}
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>
+      {s.sunlightApplied ? (
+        <>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>
         (c) 일조권 손실 다이어그램 (정북단면도)
       </PdfText>
       <View
@@ -1308,7 +1348,7 @@ function ScalePage({
           rule={s.sunlightRule ?? "revised"}
         />
         <PdfText style={[styles.muted, { marginTop: 4 }]}>
-          ※ {SUNLIGHT_RULE_META[s.sunlightRule ?? "revised"].basis} · {SUNLIGHT_RULE_META[s.sunlightRule ?? "revised"].effective}. 정북 사선이 적용된 정북단면의 모식도입니다.
+          ※ 적용: {SUNLIGHT_RULE_META[s.sunlightRule ?? "legacy"].basis} · {SUNLIGHT_RULE_META[s.sunlightRule ?? "legacy"].effective}. 기준일 {s.ruleBasisDate ?? input.reviewDate}({s.ruleBasisIsPermitDate ? "허가·신고 신청 예정일" : "검토일"}) — 개정 규정은 2026.11.12 이후 신청분부터 적용(부칙). 정북단면 모식도입니다.
           {s.groundParkingArea > 0
             ? s.isReducingFloor1
               ? " 1층 남측 일부에 필로티 주차(시행령 119조 1항 2호 가목 4, 건축면적 제외)를 음영 표시."
@@ -1316,6 +1356,13 @@ function ScalePage({
             : ""}
         </PdfText>
       </View>
+
+        </>
+      ) : (
+        <PdfText style={[styles.smallText, { marginTop: 10 }]}>
+          (c) 정북 일조 높이제한 — {s.zoneName}은 적용 대상(전용·일반주거지역)이 아니어서 단면도를 싣지 않습니다. 가로구역별 최고높이·지구단위계획 높이 기준은 별도 확인 대상입니다.
+        </PdfText>
+      )}
 
       {s.sunlightApplied && s.sunlightCompare ? (
         <SunlightCompareBlock s={s} brand={brand} />
@@ -1326,7 +1373,7 @@ function ScalePage({
           {/* 기본 뷰와 남·북 정면을 별도 wrap 블록으로 — 한 덩어리(≈330pt)로 묶으면
               앞 페이지 하단이 통째로 비어 인쇄 시 공백이 컸다 (2026-09-04) */}
           <View wrap={false}>
-            <PdfText style={styles.h3} minPresenceAhead={60}>(d) 3D 매스 시각화</PdfText>
+            <PdfText style={styles.h3} minPresenceAhead={100}>(d) 3D 매스 시각화</PdfText>
             <View
               style={{
                 backgroundColor: COLORS.CREAM,
@@ -1360,7 +1407,7 @@ function ScalePage({
                   <View style={{ flex: 1 }}>
                     <PdfImage
                       src={input.visualization3DViews.south}
-                      style={{ width: "100%", height: 105, objectFit: "cover", borderRadius: 2 }}
+                      style={{ width: "100%", height: 105, objectFit: "contain", borderRadius: 2 }}
                     />
                     <PdfText style={[styles.muted, { marginTop: 3, textAlign: "center" }]}>남측(도로) 정면 — 층 번호·높이</PdfText>
                   </View>
@@ -1369,9 +1416,9 @@ function ScalePage({
                   <View style={{ flex: 1 }}>
                     <PdfImage
                       src={input.visualization3DViews.north}
-                      style={{ width: "100%", height: 105, objectFit: "cover", borderRadius: 2 }}
+                      style={{ width: "100%", height: 105, objectFit: "contain", borderRadius: 2 }}
                     />
-                    <PdfText style={[styles.muted, { marginTop: 3, textAlign: "center" }]}>북측 정면 — 정북 일조사선 후퇴(계단)</PdfText>
+                    <PdfText style={[styles.muted, { marginTop: 3, textAlign: "center" }]}>{s.sunlightApplied ? "북측 정면 — 정북 일조사선 후퇴(계단)" : "북측 정면"}</PdfText>
                   </View>
                 ) : null}
               </View>
@@ -1389,6 +1436,7 @@ function ScalePage({
 /* ─────────────────────── 주차장 계획 (전용 페이지) ─────────────────────── */
 
 function ParkingPage({ input, brand }: { input: ReportInputs; brand: BrandConfig }) {
+  const sec = useSec();
   const s = input.scale;
   const raw = s.parkingRawSpaces ?? s.parkingSpaces;
   const tips = buildReductionTips({
@@ -1413,29 +1461,29 @@ function ParkingPage({ input, brand }: { input: ReportInputs; brand: BrandConfig
 
   return (
     <View style={styles.section}>
-      <PdfText style={styles.h2} minPresenceAhead={110}>4. 주차장 계획</PdfText>
+      <View wrap={false}>
+      <PdfText style={styles.h2} minPresenceAhead={170}>{sec.parking}. 주차장 계획</PdfText>
 
       {/* (a) 산정 결과 */}
-      <PdfText style={styles.h3} minPresenceAhead={60}>(a) 법정 주차대수 산정</PdfText>
+      <PdfText style={styles.h3} minPresenceAhead={100}>(a) 법정 주차대수 산정</PdfText>
       <TwoColTable
         rows={[
           ["적용 용도", s.usageLabel ?? "—"],
           ["산정 기준", s.parkingBasisLabel ?? "용도별 설치기준 (별표1)"],
-          ["산정 모수(시설면적)", formatArea(s.legalFloorArea)],
-          [
-            "산정 대수",
-            `${raw.toFixed(2)}대 → 법정 ${s.parkingSpaces}대 (별표1 비고 6: 0.5 이상 올림)`,
-          ],
-          ["1대당 소요면적", `${s.parkingUnitArea}㎡ (주차칸 약 12.5㎡ + 차로·회전)`],
-          ["총 주차 소요면적", formatArea(totalParkingArea)],
-          ["배치 형식", `${placeLabel} — 지상 ${s.groundSpaces}대 / 지하 ${s.basementSpaces}대`],
+          ["산정 모수(시설면적)", `${formatArea(s.legalFloorArea)} — 용적률 산정 연면적 상한 기준(주차시설 면적 제외 여부 확인 필요)`],
+          ["법정 필요 대수", s.parkingRoundingNote ?? `${raw.toFixed(2)}대 → ${s.parkingSpaces}대`],
+          ["1대당 계획면적 (계수)", `${s.parkingUnitArea}㎡ (주차칸 약 12.5㎡ + 차로·회전 — 화면과 같은 계수)`],
+          ["주차장 계획면적 (계수 추정)", formatArea(totalParkingArea)],
+          ["배치 가정", `${placeLabel} — 지상 ${s.groundSpaces}대 / 지하 ${s.basementSpaces}대${s.basementLevels && s.basementLevels.length ? ` → 지하 ${s.basementLevels.length}개 층` : ""}`],
+          ["실제 배치 검토", "미실시 — 램프·차로·회전반경·기둥·코어·설비 공간 미반영"],
         ]}
       />
+      </View>
 
       {/* (b) 1층 영향 */}
       {s.groundParkingArea > 0 ? (
         <>
-          <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(b) 1층 잠식 영향</PdfText>
+          <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(b) 1층 잠식 영향</PdfText>
           <TwoColTable
             rows={[
               ["1층 지상주차 점유", formatArea(s.groundParkingArea)],
@@ -1454,7 +1502,7 @@ function ParkingPage({ input, brand }: { input: ReportInputs; brand: BrandConfig
       <ParkingExplainBox input={input} brand={brand} />
 
       {/* (c) 절감 검토 */}
-      <PdfText style={[styles.h3, { marginTop: 16 }]} minPresenceAhead={60}>
+      <PdfText style={[styles.h3, { marginTop: 16 }]} minPresenceAhead={100}>
         (c) 주차대수·주차면적 줄이는 방법 — 법령 검토 체크리스트
       </PdfText>
       <PdfText
@@ -1822,6 +1870,7 @@ function CostPage({
   input: ReportInputs;
   brand: BrandConfig;
 }) {
+  const sec = useSec();
   const c = input.cost;
   const perPy = c.totalArea > 0 ? c.total / c.totalArea : 0;
 
@@ -1854,10 +1903,10 @@ function CostPage({
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>5. 비용·부담금 산정</PdfText>
+      <PdfText style={styles.h2} minPresenceAhead={170}>{sec.cost}. 비용·부담금 산정</PdfText>
       <View style={styles.h2Underline} />
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>(a) 기본 건축비</PdfText>
+      <PdfText style={styles.h3} minPresenceAhead={100}>(a) 기본 건축비</PdfText>
       <TwoColTable
         rows={[
           [
@@ -1868,14 +1917,17 @@ function CostPage({
             "지하층 공사비",
             `${formatPyeongAsArea(c.basementPyeong)} × ${c.aboveUnit}만원 × ${c.basementPremium}% = ${fmtEok(c.basementCost)}`,
           ],
-          ["주차장 설치비", fmtEok(c.parkingCost)],
+          ["주차장 설치비 (지하층 공사비 외 대수)", fmtEok(c.parkingCost)],
           ["설계·감리·인입·예비비", fmtEok(c.softCost)],
         ]}
       />
+      {c.linkNotes && c.linkNotes.length > 0 && (
+        <PdfText style={[styles.smallText, { marginTop: 4 }]}>※ 수량 연결: {c.linkNotes.join(" · ")}</PdfText>
+      )}
 
       {(c.farmEnabled || c.forestEnabled || c.devEnabled) && (
         <>
-          <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(b) 부담금 (활성 항목)</PdfText>
+          <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(b) 부담금 (활성 항목)</PdfText>
           <TwoColTable
             rows={[
               ...(c.farmEnabled
@@ -1894,7 +1946,7 @@ function CostPage({
         </>
       )}
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(c) 비용 분해 차트</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>{(c.farmEnabled || c.forestEnabled || c.devEnabled) ? "(c)" : "(b)"} 비용 분해 차트</PdfText>
       <View
         wrap={false}
         style={{
@@ -1922,7 +1974,7 @@ function CostPage({
             fontFamily: "Pretendard",
           }}
         >
-          예상 총 사업비
+          건축·부대비 + 부담금 소계 (토지비·금융비 제외)
         </PdfText>
         <PdfText
           style={{
@@ -2021,13 +2073,14 @@ function AIPage({
   analysis: AIAnalysis;
   brand: BrandConfig;
 }) {
+  const sec = useSec();
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>8. 부동산 IT 전문 종합 분석</PdfText>
+      <PdfText style={styles.h2} minPresenceAhead={170}>{sec.ai}. 부동산 IT 전문 종합 분석</PdfText>
       <View style={styles.h2Underline} />
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>사업성 종합 평가</PdfText>
+      <PdfText style={styles.h3} minPresenceAhead={100}>사업성 종합 평가</PdfText>
       <View
         wrap={false}
         style={{
@@ -2043,17 +2096,17 @@ function AIPage({
         </PdfText>
       </View>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>핵심 리스크 3가지</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>핵심 리스크 3가지</PdfText>
       {analysis.risks.map((r, i) => (
         <NumberedRow key={`r-${i}`} num={i + 1} text={r} accent={brand.primaryColor} />
       ))}
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>추천 검토 사항 3가지</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>추천 검토 사항 3가지</PdfText>
       {analysis.recommendations.map((r, i) => (
         <NumberedRow key={`rec-${i}`} num={i + 1} text={r} accent={COLORS.CORAL} />
       ))}
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>평당 사업비 적정성</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>평당 사업비 적정성</PdfText>
       <View
         wrap={false}
         style={{
@@ -2069,7 +2122,7 @@ function AIPage({
         </PdfText>
       </View>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>다음 단계 권고</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>다음 단계 권고</PdfText>
       {analysis.nextSteps.map((step, i) => (
         <View
           key={`n-${i}`}
@@ -2151,6 +2204,7 @@ function UsePricesPage({
   input: ReportInputs;
   brand: BrandConfig;
 }) {
+  const sec = useSec();
   const up = input.usePrices;
   if (!up) return null;
 
@@ -2170,22 +2224,22 @@ function UsePricesPage({
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>7-1. 용도별 분양가·임대료 참고표</PdfText>
+      <PdfText style={styles.h2} minPresenceAhead={170}>{sec.usePrices}. 용도별 분양가·임대료 참고표</PdfText>
       <View style={styles.h2Underline} />
       <PdfText style={[styles.muted, { marginBottom: 10 }]}>
         국토교통부 실거래가 공개시스템 · 최근 {up.periodMonths}개월 ㎡당 중앙값의
         평당 환산 — 분양가·임대료 설정 참고용 (감정평가 아님)
       </PdfText>
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>(a) 용도별 분양가 (매매 실거래)</PdfText>
+      <PdfText style={styles.h3} minPresenceAhead={100}>(a) 용도별 분양가 (매매 실거래)</PdfText>
       <TwoColTable rows={up.sale.map(priceRow)} />
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>
         (b) 용도별 임대료 (월세 실거래 · 평당 월세)
       </PdfText>
       <TwoColTable rows={up.rentMonthly.map(priceRow)} />
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(c) 상업 층별 매매</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(c) 상업 층별 매매</PdfText>
       <TwoColTable
         rows={up.commercial.map((r) => [
           r.label,
@@ -2213,6 +2267,7 @@ function ProfitPage({
   input: ReportInputs;
   brand: BrandConfig;
 }) {
+  const sec = useSec();
   const p = input.profit;
   if (!p) return null;
 
@@ -2234,10 +2289,11 @@ function ProfitPage({
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>6. 사업성 분석</PdfText>
+      <View wrap={false}>
+      <PdfText style={styles.h2} minPresenceAhead={170}>{sec.profit}. 사업성 분석</PdfText>
       <View style={styles.h2Underline} />
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>(a) 총 사업비 구성</PdfText>
+      <PdfText style={styles.h3} minPresenceAhead={100}>(a) 총 사업비 구성</PdfText>
       <View
         wrap={false}
         style={{
@@ -2303,7 +2359,7 @@ function ProfitPage({
               fontFamily: "Pretendard",
             }}
           >
-            총 사업비
+            토지비 포함 총사업비
           </PdfText>
           <PdfText
             style={{
@@ -2319,8 +2375,9 @@ function ProfitPage({
           </PdfText>
         </View>
       </View>
+      </View>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(b) 자금 조달 구조</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(b) 자금 조달 구조</PdfText>
       <View wrap={false} style={{ flexDirection: "row", gap: 8 }}>
         <ProfitMiniCard
           label="자기자본 (Equity)"
@@ -2328,13 +2385,13 @@ function ProfitPage({
           sub={`총 사업비의 ${((p.equity / Math.max(1, p.totalProjectCost)) * 100).toFixed(0)}%`}
         />
         <ProfitMiniCard
-          label={`대출 (LTV ${p.ltvRatio.toFixed(0)}%)`}
+          label={`대출 (LTC ${(p.ltcPct ?? p.ltvRatio).toFixed(0)}% · 총사업비 대비)`}
           value={fmtEok(p.loanAmount)}
           sub={`연 ${p.annualInterestRate}% · ${p.loanPeriodYears}년 · ${methodLabel}`}
         />
       </View>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(c) 예상 수익</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(c) 예상 수익</PdfText>
       <View
         wrap={false}
         style={{
@@ -2354,7 +2411,7 @@ function ProfitPage({
           }}
         >
           {p.revenueModel === "sales"
-            ? `분양 가능 면적 × 평당 ${p.salesPricePerPyeong.toLocaleString("ko-KR")}만원 × 분양률 ${p.salesRate}%`
+            ? `분양 면적 가정(지상 추정 연면적) × 평당 ${p.salesPricePerPyeong.toLocaleString("ko-KR")}만원 × 분양률 ${p.salesRate}%`
             : p.revenueModel === "rent"
               ? `평당 월세 ${p.monthlyRentPerPyeong}만원 × ${p.loanPeriodYears}년 + 보증금 (가동률 ${p.annualOccupancy}%)`
               : "분양 + 임대 혼합 (절반씩 가정)"}
@@ -2371,7 +2428,7 @@ function ProfitPage({
         </PdfText>
       </View>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(d) 수익률 지표</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(d) 수익률 지표</PdfText>
       <View wrap={false} style={{ flexDirection: "row", gap: 8 }}>
         <View
           style={{
@@ -2387,7 +2444,7 @@ function ProfitPage({
               fontFamily: "Pretendard",
             }}
           >
-            IRR (내부수익률)
+            자기자본 IRR (단순 2시점)
           </PdfText>
           <PdfText
             style={{
@@ -2424,7 +2481,7 @@ function ProfitPage({
         />
       </View>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(e) 평당 마진 분석</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(e) 평당 마진 분석</PdfText>
       <View
         wrap={false}
         style={{ padding: 12, backgroundColor: COLORS.CREAM }}
@@ -2480,7 +2537,7 @@ function ProfitPage({
           input.market.aptRent ||
           input.market.offiRent) && (
           <View wrap={false} style={{ marginTop: 14 }}>
-            <PdfText style={styles.h3} minPresenceAhead={60}>
+            <PdfText style={styles.h3} minPresenceAhead={100}>
               (f) 주변 시세·임대료 (국토교통부 실거래가 · 최근 {input.market.months}
               개월 · 시군구 단위)
             </PdfText>
@@ -2525,109 +2582,32 @@ function ProfitPage({
           </View>
         )}
 
-      {/* 경고/안내 */}
-      {p.isLoss ? (
-        <View
-          wrap={false}
-          style={{
-            marginTop: 12,
-            padding: 12,
-            backgroundColor: "#FEF2F2",
-            borderLeftWidth: 4,
-            borderLeftColor: "#DC2626",
-            borderLeftStyle: "solid",
-          }}
-        >
-          <PdfText
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#991B1B",
-              fontFamily: "Pretendard",
-            }}
-          >
-            ⚠ 손실 예상
+      {/* 판정 — 주요 가정 확인 전에는 보류 (lib/plan/finance 와 같은 규칙) */}
+      <View
+        wrap={false}
+        style={{
+          marginTop: 12,
+          padding: 12,
+          backgroundColor: p.verdict?.kind === "loss" ? "#FEF2F2" : p.verdict?.kind === "ok" ? "#F0FDF4" : "#FFFBEB",
+          borderLeftWidth: 4,
+          borderLeftColor: p.verdict?.kind === "loss" ? "#DC2626" : p.verdict?.kind === "ok" ? "#16A34A" : "#F59E0B",
+          borderLeftStyle: "solid",
+        }}
+      >
+        <PdfText style={{ fontSize: 11, fontWeight: 700, color: COLORS.DARK, fontFamily: "Pretendard" }}>
+          {p.verdict?.title ?? "사업성 판정 보류"}
+        </PdfText>
+        {(p.verdict?.reasons ?? []).map((r) => (
+          <PdfText key={r} style={{ fontSize: 9.5, color: COLORS.DARK, marginTop: 3, fontFamily: "Pretendard" }}>
+            · {r}
           </PdfText>
-          <PdfText
-            style={{
-              fontSize: 10,
-              color: "#B91C1C",
-              marginTop: 4,
-              fontFamily: "Pretendard",
-            }}
-          >
-            현재 가정으로는 순이익이 마이너스입니다. 분양가 상향, 공사비 절감,
-            LTV 조정 등 재검토가 필요합니다.
-          </PdfText>
-        </View>
-      ) : p.isHighRisk ? (
-        <View
-          wrap={false}
-          style={{
-            marginTop: 12,
-            padding: 12,
-            backgroundColor: "#FFFBEB",
-            borderLeftWidth: 4,
-            borderLeftColor: "#F59E0B",
-            borderLeftStyle: "solid",
-          }}
-        >
-          <PdfText
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#92400E",
-              fontFamily: "Pretendard",
-            }}
-          >
-            ⚠ 손익분기 여유 부족
-          </PdfText>
-          <PdfText
-            style={{
-              fontSize: 10,
-              color: "#B45309",
-              marginTop: 4,
-              fontFamily: "Pretendard",
-            }}
-          >
-            손익분기 분양률({p.breakEvenSalesRate.toFixed(0)}%) 대비 가정
-            분양률({p.salesRate}%)의 여유가 10% 미만입니다. 시장 변동 리스크에
-            취약합니다.
-          </PdfText>
-        </View>
-      ) : (
-        <View
-          wrap={false}
-          style={{
-            marginTop: 12,
-            padding: 12,
-            backgroundColor: "#F0FDF4",
-            borderLeftWidth: 4,
-            borderLeftColor: "#16A34A",
-            borderLeftStyle: "solid",
-          }}
-        >
-          <PdfText
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#15803D",
-              fontFamily: "Pretendard",
-            }}
-          >
-            ✓ 사업성 양호
-          </PdfText>
-          <PdfText
-            style={{
-              fontSize: 10,
-              color: "#166534",
-              marginTop: 4,
-              fontFamily: "Pretendard",
-            }}
-          >
-            현재 가정 기준 순이익 양수, 손익분기 여유 확보. 다만 실제 분양·
-            공사비·금리 변동에 대비한 추가 시뮬레이션 권장.
-          </PdfText>
+        ))}
+      </View>
+      {p.definitions && (
+        <View wrap={false} style={{ marginTop: 8 }}>
+          {[p.definitions.margin, p.definitions.irr, p.definitions.interest, p.definitions.tax, `분양·임대 면적: ${p.definitions.saleableArea}`].map((t) => (
+            <PdfText key={t} style={[styles.smallText, { marginBottom: 2 }]}>※ {t}</PdfText>
+          ))}
         </View>
       )}
     </View>
@@ -2722,11 +2702,12 @@ function AppendixPage({
   input: ReportInputs;
   brand: BrandConfig;
 }) {
+  const sec = useSec();
   return (
     <View style={styles.section}>
 
       <View wrap={false}>
-      <PdfText style={styles.h2}>9. 부록</PdfText>
+      <PdfText style={styles.h2}>{sec.appendix}. 부록</PdfText>
       <View style={styles.h2Underline} />
 
       <PdfText style={styles.h3}>(a) 적용 법령</PdfText>
@@ -2741,7 +2722,8 @@ function AppendixPage({
       >
         {[
           "국토계획법 시행령 제30조 · 84조 · 85조",
-          "건축법 제61조① (2026.8.11 개정 · 11.12 시행 — 10m↓1.5m · 17m↓5m · 초과 h/2) + 시행령 제86조",
+          "건축법 제61조① (2026.8.11 개정 · 2026.11.12 이후 신청분 적용 — 10m↓1.5m · 17m↓5m · 초과 h/2) / 개정 전: 시행령 제86조①",
+          "건축법 시행령 제119조 (면적 산정 — 총연면적·용적률 산정 연면적 구분)",
           "주차장법 제19조 + 시행령 별표1",
           "농지법 제38조 + 시행령 제53조",
           "산지관리법 제19조 + 시행령 제24조",
@@ -2757,7 +2739,7 @@ function AppendixPage({
       </View>
       </View>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(b) 산정 공식</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(b) 산정 공식</PdfText>
       <View
         wrap={false}
         style={{
@@ -2786,7 +2768,7 @@ function AppendixPage({
         ))}
       </View>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(c) 면책 조항</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(c) 면책 조항</PdfText>
       <View
         wrap={false}
         style={{
@@ -2804,8 +2786,8 @@ function AppendixPage({
             fontFamily: "Pretendard",
           }}
         >
-          본 보고서는 부동산공법 데이터 분석 도구의 산정 결과와 전문 종합
-          분석을 기반으로 작성되었습니다. 최종 인허가·부담금·사업성은 관할
+          본 보고서는 부동산공법 데이터 분석 도구의 자동 산정 결과
+          {input.aiStatus === "done" ? "와 전문 종합 분석" : "(전문 종합 분석 미포함)"}을 기반으로 작성되었으며, 건축사 배치 검토·법률 자문을 거치지 않았습니다. 최종 인허가·부담금·사업성은 관할
           행정청 확인 및 법률·세무 전문가 자문을 받아 결정하시기 바랍니다. 본
           자료는 참고용이며, 본 자료에 기반한 의사결정의 결과에 대해{" "}
           {brand.corporationName}는 책임을 지지 않습니다.
@@ -2861,10 +2843,11 @@ function DetailCell({
   );
 }
 
-function DetailRow({ children, last }: { children: React.ReactNode; last?: boolean }) {
+function DetailRow({ children, last, fixed }: { children: React.ReactNode; last?: boolean; fixed?: boolean }) {
   return (
     <View
       wrap={false}
+      fixed={fixed}
       style={{
         flexDirection: "row",
         borderBottomWidth: last ? 0 : 0.5,
@@ -2884,6 +2867,7 @@ function FloorDetailPage({
   input: ReportInputs;
   brand: BrandConfig;
 }) {
+  const sec = useSec();
   const s = input.scale;
   const ft = s.floorTable!;
   const W = { floor: "12%", area: "30%", setback: "20%", note: "38%" };
@@ -2893,28 +2877,30 @@ function FloorDetailPage({
 
   const legal = [
     { item: "용도지역", plan: s.zoneName, basis: s.ordinanceSource ?? "조회값", verdict: "—", over: false },
-    { item: "건폐율", plan: s.coverRatio + "%", basis: "상한 " + (s.legalCovMax ?? "-") + "%", verdict: overCov ? "초과" : "적합", over: overCov },
-    { item: "용적률", plan: s.floorRatio + "%", basis: "상한 " + (s.legalFarMax ?? "-") + "%", verdict: overFar ? "초과" : "적합", over: overFar },
+    { item: "건폐율", plan: s.coverRatio + "%", basis: "조례·시행령 상한 " + (s.legalCovMax ?? "-") + "% 대비 (지구단위계획 미확인)", verdict: overCov ? "초과" : "상한 이내", over: overCov },
+    { item: "용적률", plan: s.floorRatio + "%", basis: "조례·시행령 상한 " + (s.legalFarMax ?? "-") + "% 대비 (기준·허용·상한용적률 미확인)", verdict: overFar ? "초과" : "상한 이내", over: overFar },
     {
       item: "일조 높이제한",
       plan: s.sunlightApplied ? `적용 (정북 사선 · ${SUNLIGHT_RULE_META[s.sunlightRule ?? "revised"].short})` : "미적용",
-      basis: s.sunlightRule === "legacy"
-        ? "건축법 시행령 제86조① — 10m 이하 1.5m · 초과부 h/2 (전용·일반주거지역)"
-        : "건축법 제61조① (2026.8.11 개정·11.12 시행) — 10m 이하 1.5m · 10~17m 5m · 17m 초과 h/2 (전용·일반주거지역)",
+      basis: !s.sunlightApplied
+        ? "전용·일반주거지역만 적용 — 이 용도지역은 대상 아님"
+        : s.sunlightRule === "legacy"
+          ? "건축법 시행령 제86조① (2026.11.11 이전 신청분) — 10m 이하 1.5m · 초과부 h/2"
+          : "건축법 제61조① (2026.11.12 이후 신청분) — 10m 이하 1.5m · 10~17m 5m · 17m 초과 h/2",
       verdict: s.sunlightApplied ? "반영" : "해당 없음",
       over: false,
     },
     {
       item: "부설주차장",
       plan: s.parkingSpaces + "대 (지상 " + s.groundSpaces + " · 지하 " + s.basementSpaces + ")",
-      basis: s.parkingBasisLabel ?? "-",
-      verdict: "반영",
+      basis: (s.parkingBasisLabel ?? "-") + " · 배치 검토 미실시",
+      verdict: "대수 산정",
       over: false,
     },
     {
       item: "층수 · 높이",
-      plan: (s.floorsExact ?? 0).toFixed(1) + "층 · " + ((s.floorsExact ?? 0) * (s.floorHeightM ?? 3.5)).toFixed(1) + "m",
-      basis: "층고 " + (s.floorHeightM ?? 3.5) + "m 가정 · 가로구역별 높이제한 등은 별도 확인",
+      plan: (s.floorLabel ?? "-") + " · " + (s.heightM ?? 0).toFixed(1) + "m",
+      basis: (s.heightNote ?? "층고 합") + " · 가로구역별 최고높이 등 별도 확인",
       verdict: "참고",
       over: false,
     },
@@ -2923,31 +2909,31 @@ function FloorDetailPage({
   return (
     <View style={styles.section}>
 
-      <PdfText style={styles.h2} minPresenceAhead={110}>3-1. 층별 개요 · 법규 검토</PdfText>
+      <PdfText style={styles.h2} minPresenceAhead={170}>{sec.scale}-1. 층별 개요 · 법규 검토</PdfText>
       <View style={styles.h2Underline} />
 
-      <PdfText style={styles.h3} minPresenceAhead={60}>(a) 층별 개요표</PdfText>
-      <View style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid" }}>
+      <PdfText style={styles.h3} minPresenceAhead={100}>(a) 층별 개요표</PdfText>
+      <View wrap={false} style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid" }}>
         <DetailRow>
           <DetailCell header text="층" width={W.floor} align="center" />
           <DetailCell header text="바닥면적" width={W.area} align="center" />
           <DetailCell header text="정북 법정이격" width={W.setback} align="center" />
           <DetailCell header text="비고" width={W.note} />
         </DetailRow>
-        {[...ft.rows].reverse().map((r) => (
-          <DetailRow key={"f" + r.floor}>
-            <DetailCell text={r.floor + "F"} width={W.floor} align="center" bold />
-            <DetailCell text={formatArea(r.areaSqm)} width={W.area} align="right" />
-            <DetailCell text={r.legalSetbackM > 0 ? r.legalSetbackM.toFixed(2) + "m" : "—"} width={W.setback} align="center" />
-            <DetailCell text={r.note} width={W.note} color={COLORS.GRAY} />
+        {groupFloorRows([...ft.rows].reverse().map((r) => ({ label: r.floor + "F", area: r.areaSqm, setback: r.legalSetbackM, note: r.note }))).map((g) => (
+          <DetailRow key={"f" + g.label}>
+            <DetailCell text={g.label} width={W.floor} align="center" bold />
+            <DetailCell text={formatArea(g.area) + (g.count > 1 ? ` × ${g.count}개 층` : "")} width={W.area} align="right" />
+            <DetailCell text={g.setback > 0 ? g.setback.toFixed(2) + "m" : "—"} width={W.setback} align="center" />
+            <DetailCell text={g.note} width={W.note} color={COLORS.GRAY} />
           </DetailRow>
         ))}
-        {ft.basement.map((b) => (
-          <DetailRow key={"b" + b.level}>
-            <DetailCell text={"B" + b.level} width={W.floor} align="center" bold color={COLORS.GRAY} />
-            <DetailCell text={formatArea(b.areaSqm)} width={W.area} align="right" color={COLORS.GRAY} />
+        {groupFloorRows(ft.basement.map((b) => ({ label: "B" + b.level, area: b.areaSqm, setback: 0, note: b.note }))).map((g) => (
+          <DetailRow key={"b" + g.label}>
+            <DetailCell text={g.label} width={W.floor} align="center" bold color={COLORS.GRAY} />
+            <DetailCell text={formatArea(g.area) + (g.count > 1 ? ` × ${g.count}개 층` : "")} width={W.area} align="right" color={COLORS.GRAY} />
             <DetailCell text="—" width={W.setback} align="center" color={COLORS.GRAY} />
-            <DetailCell text={b.note} width={W.note} color={COLORS.GRAY} />
+            <DetailCell text={g.note} width={W.note} color={COLORS.GRAY} />
           </DetailRow>
         ))}
         <DetailRow>
@@ -2955,7 +2941,7 @@ function FloorDetailPage({
           <DetailCell text={formatArea(ft.sumGroundSqm)} width={W.area} align="right" bold header />
           <DetailCell text="" width={W.setback} header />
           <DetailCell
-            text={"법정 연면적 " + formatArea(s.legalFloorArea) + " 대비 손실 " + s.sunlightLoss.toFixed(1) + "%"}
+            text={"용적률 상한 산술값 " + formatArea(s.legalFloorArea) + (s.sunlightApplied ? " 대비 일조 손실 " + s.sunlightLoss.toFixed(1) + "%" : "")}
             width={W.note}
             header
           />
@@ -2965,14 +2951,14 @@ function FloorDetailPage({
             <DetailCell text="" width={W.floor} />
             <DetailCell text={"− " + formatArea(pilotiDeduct)} width={W.area} align="right" color={COLORS.GRAY} />
             <DetailCell text="" width={W.setback} />
-            <DetailCell text="필로티 주차 — 연면적 제외 (시행령 제119조①4)" width={W.note} color={COLORS.GRAY} />
+            <DetailCell text="필로티 주차 — 바닥면적 불산입 가정 (요건 충족 시)" width={W.note} color={COLORS.GRAY} />
           </DetailRow>
         )}
         <DetailRow last>
           <DetailCell text="" width={W.floor} />
           <DetailCell text={formatArea(s.actualFloorArea)} width={W.area} align="right" bold color={brand.primaryColor} />
           <DetailCell text="" width={W.setback} />
-          <DetailCell text="✓ 실제 가능 연면적 (시뮬레이터 표시값과 동일)" width={W.note} bold color={brand.primaryColor} />
+          <DetailCell text="입력 조건 기준 추정 연면적 (화면 표시값과 같은 계산원)" width={W.note} bold color={brand.primaryColor} />
         </DetailRow>
       </View>
       <PdfText style={[styles.smallText, { marginTop: 4 }]}>
@@ -2981,7 +2967,7 @@ function FloorDetailPage({
           : "※ 층별 면적은 정북 깊이(√건축면적) 근사 모델로, 화면 KPI와 동일한 수식입니다. 지번 조회로 실형상을 반영하면 지적 폴리곤 기준 정밀 계산으로 전환됩니다."}
       </PdfText>
 
-      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={60}>(b) 법규 검토표</PdfText>
+      <PdfText style={[styles.h3, { marginTop: 14 }]} minPresenceAhead={100}>(b) 법규 검토표</PdfText>
       <View style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid" }}>
         <DetailRow>
           <DetailCell header text="항목" width="16%" />
@@ -3006,7 +2992,7 @@ function FloorDetailPage({
       </View>
       {input.land?.useAttrs && input.land.useAttrs.length > 0 && (
         <View wrap={false} style={{ marginTop: 14 }}>
-          <PdfText style={styles.h3} minPresenceAhead={60}>(c) 토지이용계획 지역·지구 등 (전체)</PdfText>
+          <PdfText style={styles.h3} minPresenceAhead={100}>(c) 토지이용계획 지역·지구 등 (전체)</PdfText>
           <View style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid" }}>
             <DetailRow>
               <DetailCell header text="#" width="8%" align="center" />
@@ -3039,7 +3025,7 @@ function FloorDetailPage({
 
       {s.sunlightImpact && (
         <View wrap={false} style={{ marginTop: 14 }}>
-          <PdfText style={styles.h3} minPresenceAhead={60}>(d) 북측 일조 영향 진단 — 동지 9~15시</PdfText>
+          <PdfText style={styles.h3} minPresenceAhead={100}>(d) 북측 일조 영향 진단 — 동지 9~15시</PdfText>
           <View style={{ borderWidth: 1, borderColor: COLORS.LIGHT_GRAY, borderStyle: "solid" }}>
             <DetailRow>
               <DetailCell header text="북측 경계에서" width="25%" align="center" />
@@ -3079,27 +3065,33 @@ function FloorDetailPage({
 /* ── ■ 한눈에 보는 결론 — 숫자를 문장으로 풀어 비전문가도 바로 읽히게 ── */
 function PlainSummaryBox({ input, brand }: { input: ReportInputs; brand: BrandConfig }) {
   const s = input.scale;
-  const py = (sqm: number) => Math.round(sqm / 3.305785).toLocaleString();
-  const floorsTxt = s.floorsExact
-    ? (Number.isInteger(s.floorsExact) ? String(s.floorsExact) : s.floorsExact.toFixed(1))
-    : "-";
-  const totalEok = input.cost.total / 1e8;
+  const py = (sqm: number) => (sqm / 3.305785).toLocaleString("ko-KR", { maximumFractionDigits: 1 });
+  const unresolved = s.constraints?.items ?? [];
+  const fetched = s.constraints?.fetched ?? false;
 
+  // 확정형 표현 금지 — "입력 조건에서의 이론상 규모" 와 "무엇이 확인되면 그 규모가 가능해지는가" 로 쓴다.
   const lines: string[] = [];
   lines.push(
-    `이 땅 ${py(s.landAreaSqm)}평에는 1층 바닥 ${py(s.buildingArea)}평(건폐율 ${s.coverRatio}%) 규모로 최대 ${floorsTxt}층까지 올릴 수 있습니다.`,
+    `입력 조건(건폐율 ${s.coverRatio}% · 용적률 ${s.floorRatio}%)에서 이론상 규모는 1층 ${py(s.buildingArea)}평, ${s.floorLabel ?? "-"}, 높이 약 ${(s.heightM ?? 0).toFixed(1)}m입니다. 허가 가능 규모가 아닙니다.`,
   );
   if (s.sunlightApplied && s.sunlightLoss > 0.05) {
     lines.push(
-      `법으로 허용된 연면적은 ${py(s.legalFloorArea)}평이지만, 정북 일조사선으로 위층이 깎여 실제로는 ${py(s.actualFloorArea)}평(${s.sunlightLoss.toFixed(1)}% 손실)까지 지을 수 있습니다.`,
+      `정북 일조 높이제한(${SUNLIGHT_RULE_META[s.sunlightRule ?? "legacy"].short} 규정)을 반영하면 추정 연면적은 ${py(s.actualFloorArea)}평(용적률 상한 산술값 대비 ${s.sunlightLoss.toFixed(1)}% 감소)입니다.`,
     );
-  } else {
+  } else if (!s.sunlightApplied) {
     lines.push(
-      `이 용도지역은 일조 높이제한 대상이 아니어서, 법정 연면적 ${py(s.legalFloorArea)}평을 온전히 지을 수 있습니다.`,
+      `정북 일조 높이제한은 이 용도지역에 적용되지 않습니다. 다만 그것만으로 상한 ${py(s.legalFloorArea)}평을 모두 실현할 수 있다는 뜻은 아닙니다.`,
+    );
+  }
+  if (!fetched) {
+    lines.push("토지이용계획을 조회하지 않아 지구단위계획·높이 제한 등 반영 여부를 판단할 수 없습니다.");
+  } else if (unresolved.length > 0) {
+    lines.push(
+      `다음 항목이 확인되기 전까지 이 규모는 확정할 수 없습니다: ${unresolved.map((c) => c.label).join(", ")}.`,
     );
   }
   lines.push(
-    `주차는 ${s.parkingSpaces}대(지상 ${s.groundSpaces} · 지하 ${s.basementSpaces})가 필요하고, 총 사업비는 약 ${totalEok.toFixed(1)}억원으로 추정됩니다.`,
+    `법정 주차는 ${s.parkingSpaces}대(면적계수 추정, 배치 검토 전)이며, 건축·부대비 소계는 약 ${(input.cost.total / 1e8).toFixed(1)}억원(토지비·금융비 제외)입니다.`,
   );
 
   return (
@@ -3206,4 +3198,80 @@ function ParkingExplainBox({ input, brand }: { input: ReportInputs; brand: Brand
       </PdfText>
     </View>
   );
+}
+
+
+/** 미확인 사항 — 표지·요약에 고정. 규모에 영향을 주는 규제 + 항상 확인할 설계 제약 */
+function UnverifiedBox({ input, compact }: { input: ReportInputs; compact?: boolean }) {
+  const s = input.scale;
+  const items = s.constraints?.items ?? [];
+  const fetched = s.constraints?.fetched ?? false;
+  const always = s.alwaysUnverified ?? [];
+  const extra: string[] = [];
+  if (s.roadWidthSource === "assumed") extra.push(`전면도로 폭 ${s.roadWidth}m는 가정값`);
+  if (input.profit?.verdict?.kind === "hold") extra.push("사업성 판정 보류(가정 미확인)");
+  return (
+    <View
+      wrap={false}
+      style={{
+        marginTop: compact ? 10 : 8,
+        marginBottom: compact ? 0 : 10,
+        padding: 10,
+        borderWidth: 1,
+        borderColor: "#B45309",
+        borderStyle: "solid",
+        backgroundColor: "#FFFBEB",
+      }}
+    >
+      <PdfText style={{ fontSize: 10, fontWeight: 700, color: "#92400E", fontFamily: "Pretendard" }}>
+        ■ 미확인 사항 — 아래가 확인되기 전 수치는 입력 조건에 따른 이론상 규모입니다
+      </PdfText>
+      {!fetched ? (
+        <PdfText style={{ fontSize: 9, color: COLORS.DARK, marginTop: 3, fontFamily: "Pretendard" }}>
+          · 토지이용계획 미조회 — 지역·지구 규제 반영 여부 판단 불가
+        </PdfText>
+      ) : items.length === 0 ? (
+        <PdfText style={{ fontSize: 9, color: COLORS.DARK, marginTop: 3, fontFamily: "Pretendard" }}>
+          · 조회된 지역·지구 중 높이·용적률을 바꾸는 항목 없음
+        </PdfText>
+      ) : (
+        items.map((c) => (
+          <PdfText key={c.label} style={{ fontSize: 9, color: COLORS.DARK, marginTop: 3, fontFamily: "Pretendard" }}>
+            · {c.label} — {c.effect} (확인: {c.where})
+          </PdfText>
+        ))
+      )}
+      {extra.map((t) => (
+        <PdfText key={t} style={{ fontSize: 9, color: COLORS.DARK, marginTop: 2, fontFamily: "Pretendard" }}>
+          · {t}
+        </PdfText>
+      ))}
+      {!compact && always.length > 0 && (
+        <PdfText style={{ fontSize: 8.5, color: COLORS.GRAY, marginTop: 4, fontFamily: "Pretendard" }}>
+          항상 별도 확인: {always.map((c) => c.label).join(" · ")}
+        </PdfText>
+      )}
+    </View>
+  );
+}
+
+
+/** 층별표 — 면적·이격·비고가 같은 연속 층을 "2F~13F × 12개 층" 한 줄로 묶는다(표가 한 쪽에 들어가 머리글 분리 없음) */
+function groupFloorRows(rows: Array<{ label: string; area: number; setback: number; note: string }>) {
+  const out: Array<{ label: string; area: number; setback: number; note: string; count: number }> = [];
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (last && Math.abs(last.area - r.area) < 0.01 && Math.abs(last.setback - r.setback) < 0.001 && last.note === r.note) {
+      last.count += 1;
+      const first = last.label.split("~")[0];
+      last.label = `${first}~${r.label}`;
+    } else out.push({ ...r, count: 1 });
+  }
+  // "13F~2F" 처럼 내림차순으로 묶인 라벨은 "2F~13F" 로 뒤집는다
+  return out.map((g) => {
+    if (!g.label.includes("~")) return g;
+    const [a, b] = g.label.split("~");
+    const n = (x: string) => parseInt(x.replace(/[^0-9]/g, ""), 10);
+    return { ...g, label: n(a) > n(b) && !a.startsWith("B") ? `${b}~${a}` : g.label };
+  });
 }

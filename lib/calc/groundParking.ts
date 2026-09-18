@@ -51,9 +51,9 @@ export function calculateGroundParking(
   const isReducingFloor1 = pilotiMode && groundSpaces > 0;
 
   const legalBasis = isReducingFloor1
-    ? "건축법 시행령 제119조 제1항 제4호: 필로티 구조의 주차장은 연면적에서 제외"
+    ? "건축법 시행령 제119조①3호 다목: 필로티(벽면적 1/2 이상 개방)가 통행·주차에 전용되면 바닥면적 불산입 — 요건 확인 필요"
     : groundSpaces > 0
-      ? "벽체식 지상주차장은 연면적에 산입 (필로티 제외 규정 미적용)"
+      ? "벽체식 지상주차장은 바닥면적(총연면적)에 산입, 용적률 산정에선 제외(영 119조①4호 나목, 부속용도인 경우)"
       : "지상주차 없음 — 1층 분해 해당 없음";
 
   return {

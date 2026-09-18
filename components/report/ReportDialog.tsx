@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -171,7 +171,20 @@ export function ReportDialog() {
     return `미스터홈즈_검토보고서_${d}.pdf`;
   }, []);
 
+  // 생성 중 중복 요청 방지 — 버튼 연타·두 버튼 동시 클릭 모두 막는다
+  const busyRef = useRef(false);
+
   async function handleStart() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    try {
+      await runStart();
+    } finally {
+      busyRef.current = false;
+    }
+  }
+
+  async function runStart() {
     console.log("[ReportDialog] AI 분석 시작 클릭됨");
 
     const activeProvider = getActiveProvider();
@@ -198,6 +211,7 @@ export function ReportDialog() {
       setStep("2/4 데이터 수집 중...");
       await new Promise((r) => setTimeout(r, 200));
       const locationMap = await buildLocationMap().catch(() => null);
+      // ★ 입력 스냅샷 — 이 시점 값으로 고정. 이후 화면을 바꿔도 이 보고서(PDF·인쇄)엔 섞이지 않는다.
       const built0 = applySections(buildReportInputs());
       const built = locationMap ? { ...built0, locationMap } : built0;
       console.log("[ReportDialog] input:", built);
@@ -211,8 +225,8 @@ export function ReportDialog() {
       await new Promise((r) => setTimeout(r, 300));
       // ★ 결과 입력에 3D 이미지 주입 (PDF 임베드용, AI에는 안 보냄)
       const finalInput: ReportInputs = visualization3D
-        ? { ...built, visualization3D: visualization3D.iso, visualization3DViews: visualization3D }
-        : built;
+        ? { ...built, aiStatus: "done", visualization3D: visualization3D.iso, visualization3DViews: visualization3D }
+        : { ...built, aiStatus: "done" };
       setInput(finalInput);
       setAnalysis(result);
       setStatus("ready");
@@ -226,16 +240,24 @@ export function ReportDialog() {
   }
 
   async function handleSkip() {
-    const visualization3D = sections.viz3d ? await tryCapture3D() : null;
-    const locationMap = await buildLocationMap().catch(() => null);
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setStatus("analyzing");
+    setStep("보고서 데이터를 고정하는 중... (분석 없음)");
+    try {
+      const visualization3D = sections.viz3d ? await tryCapture3D() : null;
+      const locationMap = await buildLocationMap().catch(() => null);
       const built0 = applySections(buildReportInputs());
       const built = locationMap ? { ...built0, locationMap } : built0;
-    const finalInput: ReportInputs = visualization3D
-      ? { ...built, visualization3D: visualization3D.iso, visualization3DViews: visualization3D }
-      : built;
-    setInput(finalInput);
-    setAnalysis(null);
-    setStatus("ready");
+      const finalInput: ReportInputs = visualization3D
+        ? { ...built, aiStatus: "skipped", visualization3D: visualization3D.iso, visualization3DViews: visualization3D }
+        : { ...built, aiStatus: "skipped" };
+      setInput(finalInput);
+      setAnalysis(null);
+      setStatus("ready");
+    } finally {
+      busyRef.current = false;
+    }
   }
 
   function handleReset() {
@@ -467,7 +489,7 @@ function IdleView({
     { key: "land", label: "토지 정보·시세 (지번 조회)", available: availability.land, note: "① 토지가치분석에서 지번 조회 필요" },
     { key: "usePrices", label: "용도별 분양가·임대료 표", available: availability.usePrices, note: "① 탭 [용도별 분양가·임대료] 팝업에서 조회 필요" },
     { key: "cost", label: "비용·부담금 상세 페이지", available: true },
-    { key: "profit", label: "사업성 분석 (IRR·수익률)", available: availability.profit, note: "④ 사업성 탭 조작 시 포함 가능" },
+    { key: "profit", label: availability.profit ? "사업성 분석 (IRR·수익률)" : "사업성 분석 — 기본값(미검증), 판정 보류로 수록", available: true },
     { key: "market", label: "주변 시세·임대료 (아파트·오피스텔)", available: availability.market, note: "④ 사업성 탭에서 시세 조회 필요" },
     { key: "viz3d", label: "3D 매스 캡쳐 이미지", available: true },
   ];

@@ -20,6 +20,9 @@ type LandItem = {
 
 type NearbyData = {
   count: number;
+  failed?: boolean;
+  basis?: string;
+  partial?: string;
   stats: {
     avgPricePerPy: number;
     medianPricePerPy: number;
@@ -43,7 +46,7 @@ function PriceSetBtn({
 
   return (
     <button
-      onClick={() => set("landPricePerPyeong", price)}
+      onClick={() => set("landPricePerPyeong", price, "estimate-nearby")}
       className={`
         inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium
         border transition-all
@@ -89,7 +92,7 @@ export function NearbyLandPrice() {
         if (!signal.aborted) setData(d);
       })
       .catch(() => {
-        if (!signal.aborted) setData({ count: 0, stats: null, items: [], message: "조회 실패" });
+        if (!signal.aborted) setData({ count: 0, stats: null, items: [], failed: true, message: "조회 실패 (자료 없음이 아님)" });
       })
       .finally(() => {
         if (!signal.aborted) setLoading(false);
@@ -200,8 +203,13 @@ export function NearbyLandPrice() {
 
           {/* 거래 없음 */}
           {!loading && data && data.count === 0 && (
-            <div className="text-[12px] text-muted-foreground py-2">
+            <div className={`text-[12px] py-2 ${data.failed ? "text-destructive" : "text-muted-foreground"}`}>
               {data.message ?? "최근 12개월 인근 토지 거래 내역 없음"}
+            </div>
+          )}
+          {!loading && data?.basis && (
+            <div className="text-[10.5px] text-muted-foreground">
+              조건: {data.basis}{data.partial ? ` · ${data.partial}` : ""} — ① 토지가치분석 탭 추정가(같은 법정동·같은 용도지역·건축지목)와 조건이 달라 건수·단가가 다를 수 있습니다.
             </div>
           )}
 

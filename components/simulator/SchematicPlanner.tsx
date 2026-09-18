@@ -90,7 +90,7 @@ export function SchematicPlanner() {
     if (salesManPerPy <= 0) return;
     const p = useProfitStore.getState();
     p.set("revenueModel", "sales");
-    p.set("salesPricePerPyeong", salesManPerPy);
+    p.set("salesPricePerPyeong", salesManPerPy, "estimate-schematic");
     setProfitApplied(true);
     setTimeout(() => setProfitApplied(false), 2500);
   };

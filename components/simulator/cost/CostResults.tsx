@@ -1,7 +1,7 @@
 "use client";
 
-import { useCostStore } from "@/store/cost";
-import { calculateCost, formatEok, formatWon } from "@/lib/calc/cost";
+import { formatEok, formatWon } from "@/lib/calc/cost";
+import { useCostSnapshot } from "@/lib/plan/useSnapshots";
 import { formatPyeongAsArea } from "@/lib/utils/area";
 import {
   Tabs,
@@ -30,8 +30,10 @@ const CHART_COLOR = {
 } as const;
 
 export function CostResults() {
-  const s = useCostStore();
-  const r = calculateCost(s);
+  // 규모검토(지상·지하·주차)와 연결된 수량으로 계산 — PDF 와 같은 계산원
+  const snap = useCostSnapshot();
+  const r = snap.result;
+  const s = snap.inputs;
 
   const cards: {
     label: string;
@@ -63,7 +65,7 @@ export function CostResults() {
     <div className="space-y-4">
       {/* 총비용 보드 */}
       <div className="bg-foreground text-background rounded-xl p-5">
-        <div className="text-[11px] text-background/70 mb-1">예상 총비용</div>
+        <div className="text-[11px] text-background/70 mb-1">건축·부대비 + 부담금 소계 (토지비·금융비 제외)</div>
         <div className="text-3xl sm:text-4xl font-semibold tabular-nums tracking-tight">
           {formatEok(r.total)}
         </div>
@@ -72,8 +74,13 @@ export function CostResults() {
           <span className="font-medium text-background/90">
             {r.totalArea > 0 ? formatWon(perPyeong) : "0원"}
           </span>{" "}
-          · 총 {formatPyeongAsArea(r.totalArea)}
+          · 총 {formatPyeongAsArea(r.totalArea)} (지상+지하)
         </div>
+        <ul className="mt-2 text-[10.5px] text-background/70 list-disc pl-4">
+          {snap.linkNotes.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
       </div>
 
       {/* 7 카드 */}

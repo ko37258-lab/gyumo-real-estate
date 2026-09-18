@@ -25,6 +25,9 @@ import { actualGfaPrecise } from "@/lib/report/floorTable";
 import {
   compareRulesByFloor,
   sunlightLossPct,
+  sunlightRuleForDate,
+  todayYmd,
+  REVISED_EFFECTIVE_DATE,
   SUNLIGHT_RULE_META,
   type SunlightRule,
 } from "@/lib/calc/sunlight";
@@ -35,10 +38,22 @@ import type { ParcelShape } from "@/lib/geo/parcel";
 const SQM_PER_PYEONG = 3.305785; // 1평 = 3.305785㎡
 
 export function ControlPanel() {
-  // 대지면적 입력 단위 토글 ("py" 평 | "sqm" ㎡). store는 항상 평(lotPy) 기준 유지.
-  const [areaUnit, setAreaUnit] = useState<"py" | "sqm">("py");
+  // 대지면적 입력 단위 토글 ("py" 평 | "sqm" ㎡). store 원본은 항상 ㎡(lotSqm) 정밀값.
+  const [areaUnit, setAreaUnit] = useState<"py" | "sqm">("sqm");
   const zone = useSimulatorStore((s) => s.zone);
   const lotPy = useSimulatorStore((s) => s.lotPy);
+  const lotSqm = useSimulatorStore((s) => s.lotSqm);
+  const lotAreaSource = useSimulatorStore((s) => s.lotAreaSource);
+  const officialLotSqm = useSimulatorStore((s) => s.officialLotSqm);
+  const setLotSqm = useSimulatorStore((s) => s.setLotSqm);
+  const setOfficialLotSqm = useSimulatorStore((s) => s.setOfficialLotSqm);
+  const roadMSource = useSimulatorStore((s) => s.roadMSource);
+  const floor1HeightM = useSimulatorStore((s) => s.floor1HeightM);
+  const typicalFloorHeightM = useSimulatorStore((s) => s.typicalFloorHeightM);
+  const setFloor1HeightM = useSimulatorStore((s) => s.setFloor1HeightM);
+  const setTypicalFloorHeightM = useSimulatorStore((s) => s.setTypicalFloorHeightM);
+  const permitDate = useSimulatorStore((s) => s.permitDate);
+  const setPermitDate = useSimulatorStore((s) => s.setPermitDate);
   const covPct = useSimulatorStore((s) => s.covPct);
   const farPct = useSimulatorStore((s) => s.farPct);
   const roadM = useSimulatorStore((s) => s.roadM);
@@ -147,23 +162,30 @@ export function ControlPanel() {
             max={2000}
             step={10}
             unit="평"
-            conversion={`(${Math.round(lotPy * SQM_PER_PYEONG).toLocaleString("ko-KR")}㎡)`}
+            conversion={`(${lotSqm.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}㎡)`}
             inputMin={0}
             inputMax={50000}
           />
         ) : (
           <SliderInputPair
-            value={Math.round(lotPy * SQM_PER_PYEONG)}
-            onChange={(sqm) => setLotPy(Math.round(sqm / SQM_PER_PYEONG))}
+            value={Math.round(lotSqm * 100) / 100}
+            onChange={(sqm) => setLotSqm(sqm)}
             min={165}
             max={6600}
-            step={1}
+            step={0.1}
             unit="㎡"
-            conversion={`(${lotPy.toLocaleString("ko-KR")}평)`}
+            conversion={`(${lotPy.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}평)`}
             inputMin={0}
             inputMax={165000}
           />
         )}
+        <LotAreaProvenance
+          lotSqm={lotSqm}
+          source={lotAreaSource}
+          officialLotSqm={officialLotSqm}
+          shapeSqm={parcelShape?.areaSqm ?? null}
+          onRestore={officialLotSqm ? () => setOfficialLotSqm(officialLotSqm) : undefined}
+        />
       </div>
 
       <SliderInputPair
@@ -313,9 +335,46 @@ export function ControlPanel() {
         unit="m"
         inputMin={0}
         inputMax={100}
+        hint={
+          roadMSource === "assumed" ? (
+            <span className="text-amber-700">
+              ⓘ 가정값 — 지번 조회는 인접 도로 존재만 확인하고 폭은 {roadM}m로 가정합니다. 실측·도로대장 폭이 아닙니다.
+            </span>
+          ) : (
+            "사용자 입력값"
+          )
+        }
       />
 
-      <div className="flex items-center gap-3 pt-2 border-t border-border">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <SliderInputPair
+          label="1층 층고"
+          value={floor1HeightM}
+          onChange={setFloor1HeightM}
+          min={3}
+          max={7}
+          step={0.1}
+          unit="m"
+          inputMin={2.4}
+          inputMax={10}
+        />
+        <SliderInputPair
+          label="기준층 층고"
+          value={typicalFloorHeightM}
+          onChange={setTypicalFloorHeightM}
+          min={2.8}
+          max={5}
+          step={0.1}
+          unit="m"
+          inputMin={2.4}
+          inputMax={8}
+        />
+      </div>
+      <p className="text-[10px] text-muted-foreground/80 -mt-1">
+        높이 = 1층 층고 + 기준층 층고 × (층수−1), 지표면 기준. 옥탑·파라펫·설비 높이는 포함하지 않습니다.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-2 border-t border-border">
         <Label
           htmlFor="sun-switch"
           className="text-xs text-muted-foreground min-w-[78px]"
@@ -328,7 +387,7 @@ export function ControlPanel() {
           onCheckedChange={setSunOn}
           disabled={!z.sunlight}
         />
-        <span className="text-[11px] text-muted-foreground/80 flex-1">
+        <span className="text-[11px] text-muted-foreground/80 flex-1 min-w-[180px] order-last basis-full sm:basis-auto sm:order-none">
           {z.sunlight
             ? "전용·일반주거지역 · 정북방향 (건축법 61조① — 2026.8.11 개정 · 11.12 시행)"
             : z.code === "junju"
@@ -342,6 +401,8 @@ export function ControlPanel() {
         <SunlightRulePicker
           rule={sunlightRule}
           onChange={setSunlightRule}
+          permitDate={permitDate}
+          onPermitDate={setPermitDate}
           lotPy={lotPy}
           covPct={covPct}
           farPct={farPct}
@@ -364,6 +425,8 @@ export function ControlPanel() {
 function SunlightRulePicker({
   rule,
   onChange,
+  permitDate,
+  onPermitDate,
   lotPy,
   covPct,
   farPct,
@@ -371,6 +434,8 @@ function SunlightRulePicker({
 }: {
   rule: SunlightRule;
   onChange: (r: SunlightRule) => void;
+  permitDate: string | null;
+  onPermitDate: (v: string | null) => void;
   lotPy: number;
   covPct: number;
   farPct: number;
@@ -419,7 +484,7 @@ function SunlightRulePicker({
                     : "bg-background text-muted-foreground hover:bg-secondary"
                 }`}
               >
-                {r === "revised" ? "개정 후 (원칙)" : "개정 전 보기"}
+                {r === "revised" ? "개정 후" : "개정 전"}
               </button>
             );
           })}
@@ -428,6 +493,30 @@ function SunlightRulePicker({
           {meta.basis} · {meta.effective}
         </span>
       </div>
+
+      {/* 기준일 — 부칙: 시행일(2026.11.12) 이후 건축허가·심의·신고 신청분부터 개정 후 규정 */}
+      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+        <label htmlFor="permit-date" className="text-muted-foreground whitespace-nowrap">
+          허가·신고 신청 예정일
+        </label>
+        <input
+          id="permit-date"
+          type="date"
+          value={permitDate ?? ""}
+          onChange={(e) => onPermitDate(e.target.value || null)}
+          className="border border-border rounded px-1.5 py-0.5 bg-background text-[11px]"
+        />
+        <span className="text-muted-foreground/90">
+          기준일 {permitDate ?? `${todayYmd()}(검토일)`} → 적용 규정{" "}
+          <b>{SUNLIGHT_RULE_META[sunlightRuleForDate(permitDate ?? todayYmd())].short}</b>
+          {rule !== sunlightRuleForDate(permitDate ?? todayYmd()) && (
+            <span className="text-amber-700"> · 지금은 비교용으로 {SUNLIGHT_RULE_META[rule].short} 규정을 보고 있습니다</span>
+          )}
+        </span>
+      </div>
+      <p className="text-[10px] text-muted-foreground/80 -mt-1">
+        개정 규정은 {REVISED_EFFECTIVE_DATE} 이후 건축허가·심의·신고를 신청하는 분부터 적용(부칙). 심의와 허가 시점이 다른 사업은 관할청에 적용 기준을 확인하세요.
+      </p>
 
       <div className="grid grid-cols-3 gap-1.5 text-[10.5px]">
         {meta.tiers.map((t) => (
@@ -527,14 +616,14 @@ function SunlightRulePicker({
             ) : (
               <>현재 층 구성에는 10~17m 구간 층 상단이 없어 차이가 없습니다.</>
             )}{" "}
-            시행 전(2026.11.11까지) 접수분은 개정 전 기준으로 심사됩니다.
+            시행 전(2026.11.11까지) 신청분은 개정 전 기준으로 심사됩니다.
           </p>
           <button
             type="button"
             onClick={() => onChange("revised")}
             className="text-[11px] text-[var(--info)] hover:underline"
           >
-            ← 개정 후(원칙)로 돌아가기
+            개정 후 규정으로 비교해 보기 →
           </button>
         </div>
       )}
@@ -585,6 +674,52 @@ function RegulationHint({
           법정 최대 {maxLegal}%로 설정 →
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 대지면적 출처 — 공부상 면적 / 지도 도형면적 / 산정 적용 면적을 구분해 보여준다 */
+function LotAreaProvenance({
+  lotSqm,
+  source,
+  officialLotSqm,
+  shapeSqm,
+  onRestore,
+}: {
+  lotSqm: number;
+  source: "official" | "input" | "default";
+  officialLotSqm: number | null;
+  shapeSqm: number | null;
+  onRestore?: () => void;
+}) {
+  const f = (v: number) => v.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+  const diffOfficial = officialLotSqm != null && Math.abs(officialLotSqm - lotSqm) > 0.005;
+  return (
+    <div className="text-[10.5px] leading-relaxed text-muted-foreground space-y-0.5">
+      <div>
+        산정 대지면적 <b className="text-foreground tabular-nums">{f(lotSqm)}㎡</b>{" "}
+        <span
+          className={`px-1 rounded ${
+            source === "official" ? "bg-emerald-50 text-emerald-700" : source === "input" ? "bg-sky-50 text-sky-700" : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          {source === "official" ? "공식자료 조회값(공부상 면적)" : source === "input" ? "사용자 입력값" : "초기 예시값 — 지번 조회 전"}
+        </span>
+      </div>
+      {officialLotSqm != null && (
+        <div>
+          공부상 면적 {f(officialLotSqm)}㎡
+          {diffOfficial && <span className="text-amber-700"> · 산정 면적과 다름(도로 후퇴·저촉 등 차감 사유를 기록하세요)</span>}
+          {diffOfficial && onRestore && (
+            <button type="button" onClick={onRestore} className="ml-1 text-[var(--info)] hover:underline">
+              공부상 면적으로 되돌리기
+            </button>
+          )}
+        </div>
+      )}
+      {shapeSqm != null && shapeSqm > 0 && (
+        <div>지적도 도형면적 {f(shapeSqm)}㎡ (참고 — 폴리곤 계산값, 산정에는 공부상 면적 사용)</div>
+      )}
     </div>
   );
 }

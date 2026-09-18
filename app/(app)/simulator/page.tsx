@@ -26,8 +26,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { useSimulatorStore } from "@/store/simulator";
-import { useCostStore } from "@/store/cost";
 import { useLandInfoStore } from "@/store/landinfo";
 
 export default function SimulatorPage() {
@@ -36,19 +34,16 @@ export default function SimulatorPage() {
 
   // 탭 전환 시 simulator → cost store 동기화
   const handleTabChange = (next: string) => {
-    if (next === "cost") {
-      const { lotPy, farPct } = useSimulatorStore.getState();
-      const gfaPy = Math.round(lotPy * farPct / 100);
-      if (gfaPy > 0) useCostStore.getState().set("abovePyeong", gfaPy);
-    }
+    // 비용 탭 수량은 규모검토와 자동 연결(lib/plan/finance) — 탭 전환 때 덮어쓰지 않는다
     setTab(next);
   };
 
   return (
     <main className="notranslate min-h-screen px-4 py-6" translate="no">
       <div className="max-w-5xl mx-auto bg-card rounded-xl p-6 border border-border">
-        <header className="flex items-center justify-between gap-3 pb-3 mb-4 border-b border-border">
-          <div className="flex items-center gap-3 min-w-0">
+        {/* 모바일: 제목이 한 글자씩 세로로 쪼개지던 문제 — 버튼 줄이 좁으면 아래로 내려가게(flex-wrap), 제목은 최소 폭 확보 */}
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pb-3 mb-4 border-b border-border">
+          <div className="flex items-center gap-3 min-w-[200px] flex-1">
             <Link
               href="/"
               className="flex-shrink-0 inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md border border-border hover:bg-secondary transition-colors"
@@ -59,7 +54,7 @@ export default function SimulatorPage() {
               <span className="hidden sm:inline">홈</span>
             </Link>
             <div className="min-w-0">
-              <h1 className="text-[22px] font-medium leading-tight">
+              <h1 className="text-[19px] sm:text-[22px] font-medium leading-tight break-keep">
                 <Link
                   href="/"
                   className="hover:text-[var(--info)] hover:underline underline-offset-4 transition-colors"
@@ -67,12 +62,12 @@ export default function SimulatorPage() {
                   {SITE_HEADER.title}
                 </Link>
               </h1>
-              <div className="text-[11px] text-muted-foreground mt-1">
+              <div className="text-[11px] text-muted-foreground mt-1 break-keep">
                 {SITE_HEADER.subtitle}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
             <ReportDialog />
             <ThemeQuickToggle />
             <Link

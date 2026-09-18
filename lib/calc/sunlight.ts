@@ -19,7 +19,25 @@ import { FLOOR_HEIGHT_M } from "@/lib/constants";
  */
 export type SunlightRule = "revised" | "legacy";
 
-export const DEFAULT_SUNLIGHT_RULE: SunlightRule = "revised";
+/** 개정 규정 시행일. 부칙상 시행일 이후 건축허가·심의·신고를 신청하는 분부터 적용. */
+export const REVISED_EFFECTIVE_DATE = "2026-11-12";
+
+/**
+ * 기준일(허가·신고 신청 예정일, 없으면 검토일)에 적용되는 규칙.
+ * 시행일 전 신청분은 개정 전 규정(시행령 제86조①), 시행일 이후 신청분은 개정 후 규정.
+ * ⚠️ 적용례는 부칙 기준 — 심의·허가 단계가 나뉘는 사업은 관할청 확인 필요.
+ */
+export function sunlightRuleForDate(ymd: string): SunlightRule {
+  return ymd >= REVISED_EFFECTIVE_DATE ? "revised" : "legacy";
+}
+
+export function todayYmd(d: Date = new Date()): string {
+  const k = new Date(d.getTime() + 9 * 3600 * 1000); // KST
+  return k.toISOString().slice(0, 10);
+}
+
+/** 기본 규칙 = 오늘(검토일) 신청한다고 볼 때의 규칙. 2026-09-18 기준 개정 전. */
+export const DEFAULT_SUNLIGHT_RULE: SunlightRule = sunlightRuleForDate(todayYmd());
 
 /** 저층부 기준 높이(m) — 2023.9.12 시행령 개정으로 9m → 10m. 두 규칙 공통. */
 export const SUNLIGHT_THRESHOLD_M = 10;
@@ -41,7 +59,7 @@ export const SUNLIGHT_RULE_META: Record<
   }
 > = {
   revised: {
-    label: "개정 후 (원칙)",
+    label: "개정 후",
     short: "개정 후",
     basis: "건축법 제61조 제1항 (2026.8.11 개정)",
     effective: "2026.11.12 시행",

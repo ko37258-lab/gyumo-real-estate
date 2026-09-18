@@ -56,7 +56,8 @@ export default function EnforcementFineTip() {
   const hasOver = sug.covOver > 0.05 || sug.farOver > 0.05;
   return (
     <div className="rounded-md border border-amber-300 bg-amber-50/60 px-3 py-2.5 flex flex-wrap items-center gap-2">
-      <div className="min-w-0 flex-1">
+      {/* 설명 최소 폭 확보 — 좁은 화면에선 버튼이 아래 줄로 내려간다 */}
+      <div className="min-w-[220px] flex-1">
         <div className="text-[12.5px] font-bold text-amber-900">
           💡 Tip · 위반건축물 이행강제금 계산하기
         </div>
@@ -276,7 +277,7 @@ export function EnforcementFineSheet({
 
             {/* 2. 시가표준액 · 면적 */}
             {type.group === "area" ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3 [&>*]:min-w-0">
                 <Field label="1㎡당 시가표준액 (원/㎡)" hint="건축물 시가표준액 ÷ 연면적, 또는 위택스 조회값">
                   <Input type="number" inputMode="numeric" value={unitValue} min={0} step={10000} onChange={(e) => setUnitValue(Number(e.target.value) || 0)} />
                 </Field>
@@ -322,7 +323,7 @@ export function EnforcementFineSheet({
                 <Check key={k} checked={aggs.includes(k)} onChange={() => toggle(aggs, k, setAggs)} label={AGGRAVATION_LABEL[k]} />
               ))}
               {aggs.length > 0 && (
-                <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3 pt-1 [&>*]:min-w-0">
                   <Field label="적용 기준" hint={amended ? "2027.2.12 시행: 50~100% 가중 의무" : "현행: 100% 범위에서 조례 가중"}>
                     <div className="flex gap-1">
                       <Button size="xs" variant={!amended ? "secondary" : "ghost"} onClick={() => setAmended(false)}>현행</Button>
@@ -350,7 +351,7 @@ export function EnforcementFineSheet({
             </div>
 
             {/* 6. 반복 부과 */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3 [&>*]:min-w-0">
               <Field label="연간 부과 횟수" hint="1년 2회 이내에서 조례로 정함 (법 80조⑤)">
                 <div className="flex gap-1">
                   {[1, 2].map((n) => (
