@@ -914,9 +914,9 @@ function ModeToggle({
 }) {
   const options: { v: ParkingMode; label: string; hint: string }[] = [
     { v: "none", label: "없음", hint: "주차 없는 가정" },
-    { v: "basement", label: "지하", hint: "용적률 산정 제외" },
-    { v: "ground", label: "지상", hint: "용적률 산정 제외 · 1층 잠식" },
-    { v: "mixed", label: "혼합", hint: "지상+지하 안분" },
+    { v: "basement", label: "지하", hint: "용적률 제외" },
+    { v: "ground", label: "지상", hint: "1층 잠식" },
+    { v: "mixed", label: "혼합", hint: "지상·지하" },
   ];
   return (
     <div className="grid grid-cols-4 gap-1.5">

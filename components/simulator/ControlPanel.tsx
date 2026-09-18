@@ -346,7 +346,7 @@ export function ControlPanel() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SliderInputPair
           label="1층 층고"
           value={floor1HeightM}
@@ -374,7 +374,7 @@ export function ControlPanel() {
         높이 = 1층 층고 + 기준층 층고 × (층수−1), 지표면 기준. 옥탑·파라펫·설비 높이는 포함하지 않습니다.
       </p>
 
-      <div className="flex items-center gap-3 pt-2 border-t border-border">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-2 border-t border-border">
         <Label
           htmlFor="sun-switch"
           className="text-xs text-muted-foreground min-w-[78px]"
@@ -387,7 +387,7 @@ export function ControlPanel() {
           onCheckedChange={setSunOn}
           disabled={!z.sunlight}
         />
-        <span className="text-[11px] text-muted-foreground/80 flex-1">
+        <span className="text-[11px] text-muted-foreground/80 flex-1 min-w-[180px] order-last basis-full sm:basis-auto sm:order-none">
           {z.sunlight
             ? "전용·일반주거지역 · 정북방향 (건축법 61조① — 2026.8.11 개정 · 11.12 시행)"
             : z.code === "junju"
