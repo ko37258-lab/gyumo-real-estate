@@ -692,7 +692,11 @@ function CaptureRegistrar() {
         ? Math.max(ps.bounds.maxX - ps.bounds.minX, ps.bounds.maxY - ps.bounds.minY)
         : Math.sqrt(Math.max(lotSqm, 1));
       const hM = planFromState(st).heightM;
-      const size = Math.max(lotSide * 1.15, hM * 0.95, 14);
+      // 좁은(세로형) 캔버스에서도 상부·대지가 잘리지 않게 화면비로 보정
+      const cw = gl.domElement.clientWidth || 1;
+      const ch = gl.domElement.clientHeight || 1;
+      const narrow = Math.max(1, 1.2 / Math.max(cw / ch, 0.3));
+      const size = Math.max(lotSide * 1.15 * narrow, hM * 1.3, 14);
 
       const prevPos = camera.position.clone();
       const target = new THREE.Vector3(0, Math.min(hM * 0.4, 14), 0);
@@ -950,10 +954,12 @@ function RoofSlab({ pts, y, color }: { pts: Pt[]; y: number; color: string }) {
 
 /** 프리셋 위치를 건물 높이·대지 크기에 맞춰 늘린다 — 고층일 때 상부가 화면 밖으로 잘리던 문제.
  *  fov 35° 기준: 높이 h 를 여유 있게 담으려면 거리 ≈ 1.9h, 대지 폭 w 는 ≈ 1.7w. */
-function fittedPreset(preset: PresetKey, heightM: number, lotSide: number): [number, number, number] {
+function fittedPreset(preset: PresetKey, heightM: number, lotSide: number, aspect = 1.6): [number, number, number] {
   const [x, y, z] = PRESETS[preset];
   const base = Math.hypot(x, y, z);
-  const need = Math.max(1.9 * heightM, 1.7 * lotSide, base);
+  // 세로로 긴(좁은) 화면은 가로 시야가 좁아 같은 거리에서도 잘린다 → 화면비로 보정
+  const narrow = Math.max(1, 1.2 / Math.max(aspect, 0.3));
+  const need = Math.max(2.6 * heightM, 2.0 * lotSide * narrow, base);
   const k = need / base;
   return [x * k, y * k, z * k];
 }
@@ -969,15 +975,16 @@ function CameraRig({
   heightM: number;
   lotSide: number;
 }) {
-  const { camera, invalidate } = useThree();
-  const target = useRef(new THREE.Vector3(...fittedPreset(preset, heightM, lotSide)));
+  const { camera, invalidate, size } = useThree();
+  const aspect = size.height > 0 ? size.width / size.height : 1.6;
+  const target = useRef(new THREE.Vector3(...fittedPreset(preset, heightM, lotSide, aspect)));
   const lerping = useRef(false);
 
   useEffect(() => {
-    target.current.set(...fittedPreset(preset, heightM, lotSide));
+    target.current.set(...fittedPreset(preset, heightM, lotSide, aspect));
     lerping.current = true;
     invalidate(); // frameloop="demand" 모드에서 lerp 시작 트리거
-  }, [preset, heightM, lotSide, invalidate]);
+  }, [preset, heightM, lotSide, aspect, invalidate]);
 
   useFrame(() => {
     if (autoRotate) return; // OrbitControls가 회전 중일 때는 우리가 손대지 않음
