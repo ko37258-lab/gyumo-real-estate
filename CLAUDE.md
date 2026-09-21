@@ -254,6 +254,13 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-09-21** — **한장 보고서(A4 가로 1장) + 작성자 인적사항 인쇄** (브랜치 `feature/one-pager-report`, 미배포). 운영자 요청: "간단하게 보고할 때 쓰는 한장짜리, 만든 사람 인적사항 넣고 인쇄".
+  - 시뮬레이터 헤더 [한장 보고서] → 제목·검토 의견·인적사항 입력 → 미리보기(iframe) → [인쇄]/[PDF 저장]. 값은 전부 `buildReportInputs`(=computePlan 단일 계산원) 것만 쓴다 — 본 보고서와 숫자가 갈리지 않음.
+  - `lib/report/onePager.ts`(표시용 순수 변환: 핵심 4칸·토지·규모·사업비·판정·확인 전 전제) / `components/report/OnePagerDocument.tsx`(A4 landscape) / `components/report/OnePagerDialog.tsx` / `lib/report/reporter.ts`(인적사항 8필드, localStorage `gyumo_reporter_profile` — 브랜드와 분리해 사람마다 자기 이름으로, 게이트 없음) / `lib/report/capture3d.ts`(ReportDialog에서 추출해 공용) / 워커에 `generate-onepager` 메시지 추가(폰트 캐시 공유, 실패 시 메인스레드 폴백).
+  - 표기 원칙 유지: 연면적은 "입력 조건 기준 추정", 도로 폭·대지면적 출처 표기, 미확인 규제·항상 미확인 항목은 좌측 열 "확인 전 전제" 카드, 하단 면책 고정.
+  - **1장 유지가 핵심 제약**: 전제 박스를 전폭으로 두면 2장으로 넘어감 → 좌측 열 안으로. 주차 대수+배치를 한 줄로 합치고 토지비는 총사업비 설명줄로 접어 세전이익까지 넣음. 본문 `paddingBottom: 78`로 absolute 꼬리말 자리 확보.
+  - 검증: vitest 49개(신규 11개 — 추정 표기·전제 목록·판정 전달·공시지가 총액·억/만원 포맷) / tsc 0 / eslint 0 / next build ✓ / Node 렌더 — 풀데이터(이미지 2장 포함) 1장·최소데이터 1장, pdf.js로 페이지 텍스트 확인 / 로컬 브라우저 — 다이얼로그에서 실제 생성 성공(blob 미리보기·인쇄·저장 버튼 활성), 393px 가로 넘침 0. ⚠ 브라우저 패널이 백그라운드라 3D 캡쳐는 미등록으로 건너뜀(위치도·3D 없는 2열 레이아웃으로 정상 생성) — 실화면 3D 포함 캡쳐는 운영자 확인 필요.
+
 - **2026-09-18** — **규모·주차·비용·사업성·PDF 단일 계산원 + 미확인 표시** (브랜치 `fix/scale-consistency`, 미배포 · 외부 검토 보고서: 역삼동 825-3).
   - **원인 확인**: ① 조회 면적을 `Math.round(㎡/3.305785)` 정수 평으로 저장 후 다시 ㎡ 로 환산(394.8→119평→393.39㎡) ② 주차면적 계수가 2D·3D·규모 탭 25㎡ 상수 / PDF 30㎡ ③ 비용 탭 주차 8대·지하 0평이 초기값 그대로(규모검토와 미연결) ④ 높이 = 환산층수×층고(13.3×3.5=46.7m) ⑤ 2D 지하 박스가 viewBox 끝에서 잘려 B1·B2만 표시 ⑥ 3D 카메라 프리셋이 고정 좌표라 고층 상부 잘림 ⑦ 사업성 탭 `/api/nearby-landprice` 가 UA 없음·실패 무시·면적 필드 `landAr`(실제 `dealArea`) 로 항상 "거래 없음" ⑧ 건축물대장 실패·빈 응답을 "나대지"로 표시.
   - **단일 계산원** `lib/plan/computePlan.ts`(원본 ㎡ → 층별 계획(1층·기준층 층고 분리, 실제 층수/환산층수) → 주차(법정 대수·끝수·배치 가정·경고) → 지하층) + `lib/plan/finance.ts`(비용 수량 연결·총사업비·사업성 판정 보류 규칙) + `lib/plan/scaleConstraints.ts`(규모에 영향 주는 미확인 규제). 화면(`usePlan`/`useSnapshots`)·2D·3D·PDF(`buildReportInputs`) 모두 이 결과만 읽는다.
