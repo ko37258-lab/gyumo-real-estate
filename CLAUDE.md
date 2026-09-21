@@ -259,6 +259,7 @@ TOSS_SECRET_KEY=
   - `lib/report/onePager.ts`(표시용 순수 변환: 핵심 4칸·토지·규모·사업비·판정·확인 전 전제) / `components/report/OnePagerDocument.tsx`(A4 landscape) / `components/report/OnePagerDialog.tsx` / `lib/report/reporter.ts`(인적사항 8필드, localStorage `gyumo_reporter_profile` — 브랜드와 분리해 사람마다 자기 이름으로, 게이트 없음) / `lib/report/capture3d.ts`(ReportDialog에서 추출해 공용) / 워커에 `generate-onepager` 메시지 추가(폰트 캐시 공유, 실패 시 메인스레드 폴백).
   - 표기 원칙 유지: 연면적은 "입력 조건 기준 추정", 도로 폭·대지면적 출처 표기, 미확인 규제·항상 미확인 항목은 좌측 열 "확인 전 전제" 카드, 하단 면책 고정.
   - **1장 유지가 핵심 제약**: 전제 박스를 전폭으로 두면 2장으로 넘어감 → 좌측 열 안으로. 주차 대수+배치를 한 줄로 합치고 토지비는 총사업비 설명줄로 접어 세전이익까지 넣음. 본문 `paddingBottom: 78`로 absolute 꼬리말 자리 확보.
+  - **여백 없이 꽉 채우기**(운영자 피드백): 본문(cols)·카드·행에 flexGrow — 남는 세로 공간을 카드가 나눠 갖고, 행은 균등 높이로 벌어져 바닥까지 찬다. 자료가 적어도 아래가 비지 않는다. ⚠ react-pdf 에서 **Image 에 flexGrow 나 height "100%" 를 주면 "VIEW can't wrap between pages" 로 장수가 늘어남** — 사진은 고정 높이(152)로 두고 바깥 칸만 grow + justifyContent center.
   - 검증: vitest 49개(신규 11개 — 추정 표기·전제 목록·판정 전달·공시지가 총액·억/만원 포맷) / tsc 0 / eslint 0 / next build ✓ / Node 렌더 — 풀데이터(이미지 2장 포함) 1장·최소데이터 1장, pdf.js로 페이지 텍스트 확인 / 로컬 브라우저 — 다이얼로그에서 실제 생성 성공(blob 미리보기·인쇄·저장 버튼 활성), 393px 가로 넘침 0. ⚠ 브라우저 패널이 백그라운드라 3D 캡쳐는 미등록으로 건너뜀(위치도·3D 없는 2열 레이아웃으로 정상 생성) — 실화면 3D 포함 캡쳐는 운영자 확인 필요.
 
 - **2026-09-18** — **규모·주차·비용·사업성·PDF 단일 계산원 + 미확인 표시** (브랜치 `fix/scale-consistency`, 미배포 · 외부 검토 보고서: 역삼동 825-3).

@@ -70,7 +70,9 @@ const s = StyleSheet.create({
   kpiSub: { fontSize: 6.8, color: COLORS.GRAY, marginTop: 2, lineHeight: 1.3 },
 
   /* 본문 3열 */
-  cols: { flexDirection: "row", gap: 8, marginTop: 8 },
+  cols: { flexDirection: "row", gap: 8, marginTop: 8, flexGrow: 1 },
+  col: { flexDirection: "column" },
+  cardWrap: { flexDirection: "column" },
   card: {
     borderWidth: 0.8,
     borderColor: COLORS.LIGHT_GRAY,
@@ -79,6 +81,7 @@ const s = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 5,
     marginBottom: 6,
+    flexDirection: "column",
   },
   cardHead: {
     fontSize: 8.5,
@@ -94,7 +97,8 @@ const s = StyleSheet.create({
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+    flexGrow: 1,
     paddingVertical: 2.6,
     borderBottomWidth: 0.5,
     borderBottomColor: "#EFEDE9",
@@ -117,13 +121,19 @@ const s = StyleSheet.create({
     borderRadius: 3,
     padding: 4,
     marginBottom: 7,
+    // 사진 칸도 남는 높이를 받아 바닥까지 — 이미지 자체는 고정 높이(비율 유지), 칸 안에서 가운데
+    flexDirection: "column",
+    justifyContent: "center",
+    flexGrow: 1,
   },
-  img: { width: "100%", height: 143, objectFit: "contain" },
+  img: { width: "100%", height: 152, objectFit: "contain" },
   imgCap: { fontSize: 6.8, color: COLORS.GRAY, marginTop: 3, textAlign: "center" },
 
   /* 전제 */
   cautionBox: {
     marginTop: 1,
+    flexDirection: "column",
+    justifyContent: "center",
     backgroundColor: "#FAF8F4",
     borderWidth: 0.6,
     borderColor: "#EDE9E1",
@@ -178,11 +188,26 @@ function Rows({ rows, max }: { rows: OnePagerRow[]; max: number }) {
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+/** grow: 남는 세로 공간을 이 카드가 얼마나 가져갈지(0이면 내용 높이 그대로) */
+function Card({
+  title,
+  grow = 0,
+  children,
+}: {
+  title: string;
+  grow?: number;
+  children: React.ReactNode;
+}) {
   return (
-    <View wrap={false}>
+    <View style={[s.cardWrap, grow ? { flexGrow: grow } : {}]} wrap={false}>
       <Text style={s.cardHead}>{title}</Text>
-      <View style={[s.card, { borderTopWidth: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}>
+      <View
+        style={[
+          s.card,
+          { borderTopWidth: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
+          grow ? { flexGrow: 1 } : {},
+        ]}
+      >
         {children}
       </View>
     </View>
@@ -252,12 +277,12 @@ export function OnePagerDocument({
 
         {/* 3열 */}
         <View style={s.cols}>
-          <View style={{ flex: 1 }}>
-            <Card title="토지 개요">
+          <View style={[s.col, { flex: 1 }]}>
+            <Card title="토지 개요" grow={3}>
               <Rows rows={f.landRows} max={8} />
             </Card>
             {comment?.trim() ? (
-              <Card title="검토 의견">
+              <Card title="검토 의견" grow={1}>
                 <Text style={{ fontSize: 7.8, lineHeight: 1.5, color: COLORS.DARK }}>
                   {comment.trim()}
                 </Text>
@@ -265,7 +290,7 @@ export function OnePagerDocument({
             ) : null}
             {/* 확인 전 전제 — 좌측 열 안에 둔다(전폭 블록으로 두면 1장을 넘김) */}
             {cautionShown.length > 0 ? (
-              <View style={s.cautionBox} wrap={false}>
+              <View style={[s.cautionBox, { flexGrow: 1 }]} wrap={false}>
                 <Text style={s.cautionHead}>확인 전 전제 — 바뀌면 규모·사업성이 달라집니다</Text>
                 {cautionShown.map((c, i) => (
                   <Text key={i} style={s.cautionItem}>
@@ -279,12 +304,12 @@ export function OnePagerDocument({
             ) : null}
           </View>
 
-          <View style={{ flex: 1.08 }}>
-            <Card title="건축 가능 규모 (입력 조건 기준 추정)">
+          <View style={[s.col, { flex: 1.08 }]}>
+            <Card title="건축 가능 규모 (입력 조건 기준 추정)" grow={3}>
               <Rows rows={f.scaleRows} max={8} />
             </Card>
             {f.costRows.length > 0 ? (
-              <Card title="사업비 · 사업성">
+              <Card title="사업비 · 사업성" grow={2}>
                 <Rows rows={f.costRows} max={4} />
                 {v && f.verdict ? (
                   <View style={[s.verdict, { backgroundColor: v.bg }]}>
@@ -301,7 +326,7 @@ export function OnePagerDocument({
           </View>
 
           {images.length > 0 ? (
-            <View style={{ flex: 1.02 }}>
+            <View style={[s.col, { flex: 1.02 }]}>
               {images.map((im) => (
                 <View key={im.cap} style={s.imgBox} wrap={false}>
                   <PdfImage src={im.src} style={s.img} />
