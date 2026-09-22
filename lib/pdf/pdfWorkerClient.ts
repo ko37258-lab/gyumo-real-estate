@@ -6,6 +6,7 @@
 // PDF 생성 기능 자체가 깨지는 일은 없어야 한다.
 import type { AIAnalysis, ReportInputs } from "@/lib/ai/types";
 import type { BrandConfig } from "@/lib/branding/types";
+import type { ReporterProfile } from "@/lib/report/reporter";
 
 type Res =
   | { type: "warmup-done" }
@@ -73,6 +74,30 @@ export function generatePdfInWorker(
   brand: BrandConfig,
   timeoutMs = 5 * 60 * 1000,
 ): Promise<Blob> {
+  return requestBlob((id) => ({ type: "generate", id, input, analysis, brand }), timeoutMs);
+}
+
+/**
+ * 한장 요약 보고서(A4 가로 1장). 본 보고서보다 훨씬 가볍지만 폰트·이미지 비용은 같으므로
+ * 같은 워커를 그대로 쓴다(워밍업 캐시 공유).
+ */
+export function generateOnePagerInWorker(
+  input: ReportInputs,
+  brand: BrandConfig,
+  reporter: ReporterProfile,
+  extra: { headline?: string; comment?: string } = {},
+  timeoutMs = 2 * 60 * 1000,
+): Promise<Blob> {
+  return requestBlob(
+    (id) => ({ type: "generate-onepager", id, input, brand, reporter, ...extra }),
+    timeoutMs,
+  );
+}
+
+function requestBlob(
+  payload: (id: number) => Record<string, unknown>,
+  timeoutMs: number,
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
     let settled = false;
     const id = nextId++;
@@ -100,7 +125,7 @@ export function generatePdfInWorker(
 
     try {
       if (typeof Worker === "undefined") throw new Error("Worker 미지원 환경");
-      getWorker().postMessage({ type: "generate", id, input, analysis, brand });
+      getWorker().postMessage(payload(id));
     } catch (e) {
       settled = true;
       clearTimeout(timer);

@@ -12,9 +12,11 @@
 // 동안 탭은 완전히 정상 — "응답 없음" 자체가 뜨지 않는다.
 import { pdf, Document, Page, Text } from "@react-pdf/renderer";
 import { ReportDocument } from "@/components/report/ReportDocument";
+import { OnePagerDocument } from "@/components/report/OnePagerDocument";
 import { ensurePdfFonts } from "./fonts";
 import type { AIAnalysis, ReportInputs } from "@/lib/ai/types";
 import type { BrandConfig } from "@/lib/branding/types";
+import type { ReporterProfile } from "@/lib/report/reporter";
 
 ensurePdfFonts();
 
@@ -26,6 +28,15 @@ type Req =
       input: ReportInputs;
       analysis: AIAnalysis | null;
       brand: BrandConfig;
+    }
+  | {
+      type: "generate-onepager";
+      id: number;
+      input: ReportInputs;
+      brand: BrandConfig;
+      reporter: ReporterProfile;
+      headline?: string;
+      comment?: string;
     };
 
 type Res =
@@ -52,6 +63,21 @@ self.onmessage = async (e: MessageEvent<Req>) => {
       return;
     }
 
+    if (msg.type === "generate-onepager") {
+      const doc = (
+        <OnePagerDocument
+          input={msg.input}
+          brand={msg.brand}
+          reporter={msg.reporter}
+          headline={msg.headline}
+          comment={msg.comment}
+        />
+      );
+      const blob = await pdf(doc).toBlob();
+      postMessage({ type: "generate-done", id: msg.id, blob } satisfies Res);
+      return;
+    }
+
     if (msg.type === "generate") {
       const doc = (
         <ReportDocument input={msg.input} analysis={msg.analysis} brand={msg.brand} />
@@ -62,7 +88,7 @@ self.onmessage = async (e: MessageEvent<Req>) => {
     }
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    if (msg.type === "generate") {
+    if (msg.type === "generate" || msg.type === "generate-onepager") {
       postMessage({ type: "generate-error", id: msg.id, error } satisfies Res);
     } else {
       postMessage({ type: "warmup-error", error } satisfies Res);

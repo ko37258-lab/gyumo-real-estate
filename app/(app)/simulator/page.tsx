@@ -18,6 +18,7 @@ import EnforcementFineTip from "@/components/simulator/EnforcementFineSheet";
 import { CostSimulator } from "@/components/simulator/cost/CostSimulator";
 import { ProfitAnalyzer } from "@/components/simulator/profit/ProfitAnalyzer";
 import { ReportDialog } from "@/components/report/ReportDialog";
+import { OnePagerDialog } from "@/components/report/OnePagerDialog";
 import { ThemeQuickToggle } from "@/components/theme/ThemeQuickToggle";
 import { SITE_HEADER } from "@/lib/branding/constants";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,7 @@ export default function SimulatorPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-auto">
+            <OnePagerDialog />
             <ReportDialog />
             <ThemeQuickToggle />
             <Link
