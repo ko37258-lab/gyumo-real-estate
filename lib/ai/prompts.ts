@@ -67,7 +67,7 @@ export function buildUserPrompt(input: ReportInputs): string {
 - 전면도로: ${s.roadWidth}m
 - 1층 법정 건축면적: ${formatArea(s.buildingArea)}${s.groundParkingArea > 0 ? `
 - 1층 지상주차 점유: ${formatArea(s.groundParkingArea)} (${s.groundSpaces}대 × ${s.parkingUnitArea}㎡, ${s.pilotiMode ? "필로티 구조" : "벽체식"})` : ""}
-- 1층 영업 가능 면적: ${formatArea(s.floor1Indoor)}${s.floor1Indoor <= 0 && s.groundParkingArea > 0 ? " ⚠ 1층 전체 주차 — 영업 공간 없음" : ""}
+- 1층 영업 가능 면적: ${formatArea(s.floor1Indoor)}${s.floor1Indoor <= 0 && s.groundParkingArea > 0 ? " 1층 전체 주차 — 영업 공간 없음" : ""}
 - 필로티 적용: ${s.isReducingFloor1 ? "예 (연면적에서 " + formatArea(s.groundParkingArea) + " 추가 제외, 시행령 119조 1항 4호)" : "아니오"}
 - 법정 연면적: ${formatArea(s.legalFloorArea)}
 - 실제 가능 연면적(일조권 반영): ${formatArea(s.actualFloorArea)}
@@ -196,8 +196,8 @@ function buildProfitSection(p: NonNullable<ReportInputs["profit"]>): string {
       ? `\n- 평당 월세: ${p.monthlyRentPerPyeong}만원 · 보증금 ${p.deposit}개월 · 가동률 ${p.annualOccupancy}%`
       : "";
   const flags: string[] = [];
-  if (p.isLoss) flags.push("⚠️ 손실 예상");
-  if (p.isHighRisk) flags.push("⚠️ 손익분기 여유 부족");
+  if (p.isLoss) flags.push("손실 예상");
+  if (p.isHighRisk) flags.push("손익분기 여유 부족");
   return `
 
 [사업성 분석]

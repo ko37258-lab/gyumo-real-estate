@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Icon } from '@/components/ui/icon'
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircleIcon,
@@ -501,7 +502,7 @@ function IdleView({
 
       {/* 수록 항목 선택 */}
       <div className="rounded-md border border-border p-3">
-        <div className="text-[11px] font-bold mb-2">📑 보고서에 넣을 항목 선택</div>
+        <div className="text-[11px] font-bold mb-2"><Icon name="document" /> 보고서에 넣을 항목 선택</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
           {items.map((it) => (
             <label
@@ -536,7 +537,7 @@ function IdleView({
 
       {sections.viz3d && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900 leading-relaxed">
-          💡 보고서에는 현재 화면의 <b>3D 매스 모습</b>이 함께 캡쳐됩니다. 분석 전에 원하는 각도로 회전해 두세요. (시뮬레이터 → 규모 검토 → 3D 360° 탭)
+          <Icon name="idea" /> 보고서에는 현재 화면의 <b>3D 매스 모습</b>이 함께 캡쳐됩니다. 분석 전에 원하는 각도로 회전해 두세요. (시뮬레이터 → 규모 검토 → 3D 360° 탭)
         </div>
       )}
 
@@ -564,7 +565,7 @@ function IdleView({
               분석 도구가 설정되지 않았습니다
             </div>
             <Button variant="outline" size="sm" asChild>
-              <Link href="/settings">⚙️ 설정 페이지로</Link>
+              <Link href="/settings"><Icon name="gear" /> 설정 페이지로</Link>
             </Button>
             <div className="text-[11px] text-muted-foreground">
               설정 없이 PDF만 받으려면 아래 &ldquo;분석 없이 PDF만&rdquo;을 사용하세요.
@@ -580,7 +581,7 @@ function IdleView({
           size="lg"
           className="flex-1 bg-[#993C1D] hover:bg-[#7A2F16] disabled:bg-secondary disabled:text-muted-foreground"
         >
-          📊 전문 분석 시작
+          <Icon name="chart-bar" /> 전문 분석 시작
         </Button>
         <Button onClick={onSkip} size="lg" variant="outline">
           분석 없이 PDF만
@@ -670,7 +671,7 @@ function ReadyView({
       {input?.profit && (
         <div className="rounded-md border-l-4 border-[#993C1D] bg-[#FAECE7]/60 p-3">
           <div className="text-[11px] font-bold text-[#993C1D] mb-2">
-            📊 사업성 핵심
+            <Icon name="chart-bar" /> 사업성 핵심
           </div>
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
@@ -771,7 +772,7 @@ function ErrorView({
         </div>
         <p className="text-[12.5px] break-words">{errorMsg}</p>
         <div className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
-          💡 자주 발생하는 원인:
+          <Icon name="idea" /> 자주 발생하는 원인:
           <br />· API 키가 잘못되었거나 만료됨 → /settings에서 재등록
           <br />· 일일 호출 한도 초과 → 잠시 후 재시도
           <br />· 네트워크 오류 → 인터넷 연결 확인
@@ -785,7 +786,7 @@ function ErrorView({
           onClick={onRetry}
           className="bg-[#993C1D] hover:bg-[#7A2F16]"
         >
-          🔄 재시도
+          <Icon name="refresh" /> 재시도
         </Button>
       </div>
     </div>
@@ -806,7 +807,7 @@ function DebugDetails({
 }) {
   return (
     <details className="text-[11px] text-muted-foreground mt-4 pt-2 border-t border-border">
-      <summary className="cursor-pointer">🔧 디버그 정보 (문제 발생 시 클릭)</summary>
+      <summary className="cursor-pointer"><Icon name="gear" /> 디버그 정보 (문제 발생 시 클릭)</summary>
       <div className="mt-2 space-y-1 font-mono">
         <div>현재 상태: {status}</div>
         <div>활성 제공자: {provider || "없음"}</div>

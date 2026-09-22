@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { Icon } from '@/components/ui/icon'
 import { ALL_ROLES } from "@/lib/membership";
 import Link from "next/link";
 import { UserTable } from "./UserTable";
@@ -101,7 +102,7 @@ export default async function UsersPage({
           className="text-xs px-3 py-1.5 rounded-lg font-medium"
           style={{ background: "var(--secondary)", border: "1px solid var(--border)" }}
         >
-          📥 엑셀 다운로드
+          <Icon name="download" /> 엑셀 다운로드
         </Link>
       </div>
 
@@ -123,8 +124,8 @@ export default async function UsersPage({
           className="rounded-lg px-3 py-2 text-sm border outline-none"
           style={{ background: "var(--card)", borderColor: "var(--border)" }}>
           <option value="all">전체 분류</option>
-          <option value="buyer">💳 크레딧 구매자</option>
-          <option value="multi">👥 다계정 (전화번호 동일)</option>
+          <option value="buyer"><Icon name="card" /> 크레딧 구매자</option>
+          <option value="multi"><Icon name="users" /> 다계정 (전화번호 동일)</option>
           <option value="google">구글 가입 전체</option>
           <option value="google_named">구글 가입 · 이름 등록 완료</option>
           <option value="google_unnamed">구글 가입 · 이름 미등록(이용 불가)</option>

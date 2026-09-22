@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { createClient } from "@/lib/supabase/client";
 
 /**
  * 구글 OAuth 로그인/가입 버튼.
- * ⚠ Supabase 대시보드 → Authentication → Providers → Google 활성화 +
+ * <Icon name="warning" /> Supabase 대시보드 → Authentication → Providers → Google 활성화 +
  *   승인된 리디렉션 URL에 `<사이트>/auth/callback` 등록 필요.
  */
 export function GoogleButton({ next = "/simulator" }: { next?: string }) {

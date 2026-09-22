@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Icon } from '@/components/ui/icon'
 import { useRouter } from "next/navigation";
 import { ALL_ROLES } from "@/lib/membership";
 import { formatDateKST } from "@/lib/utils";
@@ -38,9 +39,9 @@ export function UserTable({
 }: {
   profiles: Profile[];
   isSuperAdmin: boolean;
-  /** purchase 크레딧을 받은 적 있는 회원 id — 💳 구매자 배지 표시용 */
+  /** purchase 크레딧을 받은 적 있는 회원 id — <Icon name="card" /> 구매자 배지 표시용 */
   buyerIds: string[];
-  /** 회원 id → 같은 전화번호·이름으로 묶인 다른 계정 이메일 (👥 N계정 배지) */
+  /** 회원 id → 같은 전화번호·이름으로 묶인 다른 계정 이메일 (<Icon name="users" /> N계정 배지) */
   linkedEmails?: Record<string, string[]>;
 }) {
   const router = useRouter();
@@ -228,7 +229,7 @@ export function UserTable({
                         {buyers.has(p.id) && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                             style={{ background: "rgba(255,207,13,0.15)", color: "#eab308", border: "1px solid rgba(234,179,8,0.35)" }}>
-                            💳 구매자
+                            <Icon name="card" /> 구매자
                           </span>
                         )}
                         {/* 동일 전화번호·이름 묶음 — 한 계정처럼 크레딧을 함께 쓴다 */}
@@ -236,7 +237,7 @@ export function UserTable({
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                             title={`함께 묶인 계정: ${linkedEmails[p.id].join(", ")}`}
                             style={{ background: "rgba(96,165,250,0.14)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.35)" }}>
-                            👥 {linkedEmails[p.id].length + 1}계정
+                            <Icon name="users" /> {linkedEmails[p.id].length + 1}계정
                           </span>
                         )}
                         {/* 구글 가입은 이름이 자동으로 오므로, "자기이름 등록" 여부는 등록시각(또는 전화)으로 판별 */}

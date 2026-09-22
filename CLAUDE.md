@@ -254,6 +254,11 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-09-22** — **이모지 전면 제거 → 우리 아이콘 72종(힉스필드 벡터 SVG)** (브랜치 `feature/own-icons`, 372law 와 같은 세트).
+  - `lib/icons/svg/*.svg` 72종 → `lib/icons/build.py` 가 `icons.generated.ts`(name→svg 문자열)로 굽는다(Next/Turbopack 은 import.meta.glob 없음). `components/ui/icon.tsx` `<Icon name="house" />`, `app/globals.css .ico`. 남색은 currentColor·금색 고정·흰 판은 `--icon-bg`.
+  - 코드모드 `scripts/emoji-to-icon.py`(매핑 `lib/icons/emojiIcons.ts`): JSX 텍스트 124곳 → `<Icon>`, 문자열 안 59곳 삭제, 이모지 하나짜리 문자열 38곳 → 아이콘 이름(`{x.emoji}`/`{x.icon}` 렌더 8곳은 `<Icon name={…}/>`). `.ts` 파일은 태그 대신 삭제.
+  - ⚠ react-pdf 문서(`components/report/*Document.tsx`)에는 `<Icon>`(span innerHTML) 을 못 넣는다 → PDF 안 이모지는 그냥 지움. 템플릿 문자열(`${s.icon}`)에 태그가 끼면 글자로 찍히니 코드모드 후 `\$<Icon` 검색으로 확인할 것. 3D 라벨은 drei `<Html>` 안이라 `<Icon>` 가능.
+  - 검증: tsc 0 / next build ✓ / vitest 38 / 로컬 4개 탭 아이콘 4·17·7·8개 렌더, 빈 아이콘 0, 잔여 이모지 0, `<Icon` 글자 노출 0.
 - **2026-09-18** — **규모·주차·비용·사업성·PDF 단일 계산원 + 미확인 표시** (브랜치 `fix/scale-consistency`, 미배포 · 외부 검토 보고서: 역삼동 825-3).
   - **원인 확인**: ① 조회 면적을 `Math.round(㎡/3.305785)` 정수 평으로 저장 후 다시 ㎡ 로 환산(394.8→119평→393.39㎡) ② 주차면적 계수가 2D·3D·규모 탭 25㎡ 상수 / PDF 30㎡ ③ 비용 탭 주차 8대·지하 0평이 초기값 그대로(규모검토와 미연결) ④ 높이 = 환산층수×층고(13.3×3.5=46.7m) ⑤ 2D 지하 박스가 viewBox 끝에서 잘려 B1·B2만 표시 ⑥ 3D 카메라 프리셋이 고정 좌표라 고층 상부 잘림 ⑦ 사업성 탭 `/api/nearby-landprice` 가 UA 없음·실패 무시·면적 필드 `landAr`(실제 `dealArea`) 로 항상 "거래 없음" ⑧ 건축물대장 실패·빈 응답을 "나대지"로 표시.
   - **단일 계산원** `lib/plan/computePlan.ts`(원본 ㎡ → 층별 계획(1층·기준층 층고 분리, 실제 층수/환산층수) → 주차(법정 대수·끝수·배치 가정·경고) → 지하층) + `lib/plan/finance.ts`(비용 수량 연결·총사업비·사업성 판정 보류 규칙) + `lib/plan/scaleConstraints.ts`(규모에 영향 주는 미확인 규제). 화면(`usePlan`/`useSnapshots`)·2D·3D·PDF(`buildReportInputs`) 모두 이 결과만 읽는다.

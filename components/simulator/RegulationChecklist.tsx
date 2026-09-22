@@ -1,6 +1,7 @@
 "use client";
 
 import { buildRegulationChecklist, type ChecklistItem } from "@/lib/regulation-checklist";
+import { Icon } from '@/components/ui/icon'
 import type { ZoneCode } from "@/lib/zones";
 
 const LEVEL_STYLE: Record<
@@ -37,7 +38,7 @@ export function RegulationChecklist({
   return (
     <div className="rounded-md border border-border bg-card p-2.5">
       <div className="text-[11px] font-bold text-foreground mb-1.5">
-        {hasRisk ? "🧾 이 땅의 걸림돌" : "🧾 규제 체크리스트"}
+        {hasRisk ? "이 땅의 걸림돌" : "규제 체크리스트"}
       </div>
       <div className="space-y-1">
         {items.map((item, i) => {
@@ -48,7 +49,7 @@ export function RegulationChecklist({
               className="flex items-start gap-1.5 rounded px-2 py-1.5"
               style={{ background: s.bg, border: `1px solid ${s.border}` }}
             >
-              <span className="text-[12px] shrink-0 leading-[1.4]">{item.icon}</span>
+              <span className="text-[12px] shrink-0 leading-[1.4]"><Icon name={item.icon} /></span>
               <div className="min-w-0 text-[11px] leading-relaxed">
                 <span className="font-semibold" style={{ color: s.text }}>
                   {item.title}

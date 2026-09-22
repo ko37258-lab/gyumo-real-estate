@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -98,7 +99,7 @@ export function ControlPanel() {
             className="inline-flex items-center gap-1 text-[10.5px] font-medium px-1.5 py-0.5 rounded"
             style={{ color: useStyle.edge, background: `${useStyle.gradMid}33` }}
           >
-            {useStyle.icon} {useStyle.label}
+            <Icon name={useStyle.icon} /> {useStyle.label}
           </span>
         </div>
         <Select
@@ -109,7 +110,7 @@ export function ControlPanel() {
             <SelectValue>
               {(value: ParkingUsageCode) => {
                 const s = getUseStyle(value);
-                return `${s.icon} ${s.usageLabel}`;
+                return `${s.usageLabel}`;
               }}
             </SelectValue>
           </SelectTrigger>
@@ -118,7 +119,7 @@ export function ControlPanel() {
               const st = getUseStyle(s.code);
               return (
                 <SelectItem key={s.code} value={s.code}>
-                  {st.icon} {s.label}
+                  <Icon name={st.icon} /> {s.label}
                 </SelectItem>
               );
             })}
@@ -201,7 +202,7 @@ export function ControlPanel() {
         hint={
           covPct > maxCov ? (
             <span className="text-destructive">
-              ⚠ 법정 한도 {maxCov}% 초과 — 인허가 불가 (시뮬레이션 전용)
+              <Icon name="warning" /> 법정 한도 {maxCov}% 초과 — 인허가 불가 (시뮬레이션 전용)
             </span>
           ) : (
             `법정 최대 ${maxCov}% (1층 ${(lotPy * maxCov / 100).toFixed(0)}평)`
@@ -239,7 +240,7 @@ export function ControlPanel() {
         hint={
           farPct > effectiveFarMax ? (
             <span className="text-destructive">
-              ⚠ 법정 한도 {effectiveFarMax.toLocaleString("ko-KR")}% 초과 — 인허가 불가 (시뮬레이션 전용)
+              <Icon name="warning" /> 법정 한도 {effectiveFarMax.toLocaleString("ko-KR")}% 초과 — 인허가 불가 (시뮬레이션 전용)
             </span>
           ) : (
             <>
@@ -272,7 +273,7 @@ export function ControlPanel() {
             htmlFor="cbd-switch"
             className="text-xs text-muted-foreground min-w-[78px]"
           >
-            🏛️ 서울도심
+            <Icon name="courthouse" /> 서울도심
           </Label>
           <Switch id="cbd-switch" checked={isCBD} onCheckedChange={setIsCBD} />
           <span className="text-[11px] text-muted-foreground/80 flex-1">
@@ -285,7 +286,7 @@ export function ControlPanel() {
           없으면 국토계획법 시행령 상한(정직한 폴백)임을 밝힌다. */}
       {ordinance ? (
         <div className="flex items-start gap-2 rounded-md bg-[var(--info-bg)] border border-[var(--info)]/25 px-3 py-2">
-          <span className="text-sm shrink-0">📍</span>
+          <span className="text-sm shrink-0"><Icon name="pin" /></span>
           <div className="text-[11px] leading-relaxed">
             <span className="font-medium text-foreground">
               {ordinance.regionName} 도시계획조례 자동 적용
@@ -411,7 +412,7 @@ export function ControlPanel() {
       )}
 
       <p className="text-[10px] text-muted-foreground/80 pt-2 border-t border-border/60">
-        ⚖️ 출처: 서울특별시 도시계획 조례 (2026 기준) · 검토: 고상철 대표
+        <Icon name="scale" /> 출처: 서울특별시 도시계획 조례 (2026 기준) · 검토: 고상철 대표
       </p>
     </div>
   );
@@ -648,7 +649,7 @@ function RegulationHint({
 }) {
   return (
     <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 flex items-start gap-2">
-      <span className="text-amber-600 text-base leading-none mt-0.5">⚠️</span>
+      <span className="text-amber-600 text-base leading-none mt-0.5"><Icon name="warning" /></span>
       <div className="flex-1 min-w-0 text-[11.5px] leading-relaxed text-amber-900">
         <div className="font-semibold">
           법정 최대 {maxLegal.toLocaleString("ko-KR")}% 대비{" "}

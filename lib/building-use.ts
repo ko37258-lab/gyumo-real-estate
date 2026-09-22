@@ -85,7 +85,7 @@ export const USE_GROUP_STYLE: Record<UseGroup, UseGroupStyle> = {
   residential: {
     key: "residential",
     label: "주거",
-    icon: "🏠",
+    icon: "house",
     gradTop: "#F8BB9C",
     gradMid: "#F0997B",
     gradBottom: "#DD7A54",
@@ -97,7 +97,7 @@ export const USE_GROUP_STYLE: Record<UseGroup, UseGroupStyle> = {
   office: {
     key: "office",
     label: "업무·오피스텔",
-    icon: "🏢",
+    icon: "building",
     gradTop: "#A9C4DE",
     gradMid: "#6A93BC",
     gradBottom: "#456B90",
@@ -109,7 +109,7 @@ export const USE_GROUP_STYLE: Record<UseGroup, UseGroupStyle> = {
   retail: {
     key: "retail",
     label: "근린·판매",
-    icon: "🏪",
+    icon: "shop",
     gradTop: "#7FD6B9",
     gradMid: "#42B08E",
     gradBottom: "#2E8168",
@@ -121,7 +121,7 @@ export const USE_GROUP_STYLE: Record<UseGroup, UseGroupStyle> = {
   lodging: {
     key: "lodging",
     label: "숙박",
-    icon: "🏨",
+    icon: "",
     gradTop: "#CFAAE6",
     gradMid: "#A379C6",
     gradBottom: "#7F57A2",
@@ -133,7 +133,7 @@ export const USE_GROUP_STYLE: Record<UseGroup, UseGroupStyle> = {
   civic: {
     key: "civic",
     label: "의료·문화·종교",
-    icon: "🏥",
+    icon: "bank",
     gradTop: "#F2A9C1",
     gradMid: "#D96E93",
     gradBottom: "#B34F73",
@@ -145,7 +145,7 @@ export const USE_GROUP_STYLE: Record<UseGroup, UseGroupStyle> = {
   industrial: {
     key: "industrial",
     label: "공장·창고",
-    icon: "🏭",
+    icon: "factory",
     gradTop: "#BEC5CD",
     gradMid: "#8C949E",
     gradBottom: "#656D77",

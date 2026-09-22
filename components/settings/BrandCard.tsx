@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,14 +42,14 @@ export function BrandCard({ canEdit = false }: { canEdit?: boolean }) {
     return (
       <Card className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold">📋 보고서 브랜드 설정</h2>
+          <h2 className="text-sm font-semibold"><Icon name="document" /> 보고서 브랜드 설정</h2>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
             정회원 이상
           </span>
         </div>
         <div className="rounded-lg px-4 py-6 text-center"
           style={{ background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.12)" }}>
-          <div className="text-2xl mb-2">🔒</div>
+          <div className="text-2xl mb-2"><Icon name="lock" /></div>
           <div className="text-sm font-medium text-foreground mb-1">정회원 이상 이용 가능</div>
           <div className="text-xs text-muted-foreground">
             정회원·VIP·미스터홈즈센터·멘토스쿨 회원은 PDF 브랜드를 자신의 상호로 변경할 수 있습니다.
@@ -62,7 +63,7 @@ export function BrandCard({ canEdit = false }: { canEdit?: boolean }) {
     <Card className="p-4 space-y-4">
       <header className="space-y-1">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">📋 보고서 브랜드 설정</h2>
+          <h2 className="text-sm font-semibold"><Icon name="document" /> 보고서 브랜드 설정</h2>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
             PRO 기능 · PDF 화이트라벨
           </span>
@@ -174,10 +175,10 @@ export function BrandCard({ canEdit = false }: { canEdit?: boolean }) {
       {/* 액션 */}
       <div className="flex flex-wrap gap-2 pt-1">
         <Button onClick={handleSave} disabled={!dirty}>
-          💾 저장
+          <Icon name="download" /> 저장
         </Button>
         <Button variant="outline" onClick={handleReset}>
-          ↩️ 기본값(미스터홈즈)으로
+          <Icon name="refresh" /> 기본값(미스터홈즈)으로
         </Button>
         {savedAt && (
           <span className="text-[11px] text-[var(--success)] self-center">
@@ -192,7 +193,7 @@ export function BrandCard({ canEdit = false }: { canEdit?: boolean }) {
       </div>
 
       <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-relaxed">
-        💡 변경 사항은 다음 보고서 생성부터 즉시 적용됩니다. 현재 미리보기가 필요하면
+        <Icon name="idea" /> 변경 사항은 다음 보고서 생성부터 즉시 적용됩니다. 현재 미리보기가 필요하면
         시뮬레이터 → 보고서 생성에서 빈 데이터로도 PDF 1장을 받아 확인할 수
         있습니다.
       </div>

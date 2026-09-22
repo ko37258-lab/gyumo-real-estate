@@ -82,7 +82,7 @@ export interface ReportInputs {
   visualization3D?: string;
   /** 3D 다각도 캡쳐 — 기본(iso)·남측 정면·북측 정면 (플렉시티식 3컷) */
   visualization3DViews?: { iso?: string; south?: string; north?: string };
-  /** 💰 분양·월세 수익 추정 — 주거계 용도 + 가설계 세대수 + 인근 실거래(use-prices) 있을 때 */
+  /** 분양·월세 수익 추정 — 주거계 용도 + 가설계 세대수 + 인근 실거래(use-prices) 있을 때 */
   revenue?: import("@/lib/report/revenue").ReportRevenue;
   /** 표지 위치도 (위성 타일 합성 base64 JPEG) — 실형상 조회 시 자동 생성 */
   locationMap?: string;

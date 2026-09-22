@@ -1,6 +1,7 @@
 "use client";
 
 import { formatEok, formatWon } from "@/lib/calc/cost";
+import { Icon } from '@/components/ui/icon'
 import type { ProfitSnapshot } from "@/lib/plan/finance";
 import { PRICE_SOURCE_LABEL } from "@/store/profit";
 
@@ -90,7 +91,7 @@ export function ProfitResults({
 
       {/* 대출 요약 */}
       <div className="rounded-md bg-secondary/50 border border-border p-3 text-[11.5px] space-y-1">
-        <div className="font-medium text-[12px]">💰 대출 요약</div>
+        <div className="font-medium text-[12px]"><Icon name="coins" /> 대출 요약</div>
         <Row label="대출 금액" value={formatEok(result.loanAmount)} small />
         <Row label="LTC (대출 ÷ 토지비 포함 사업비)" value={`${snap.ltcPct.toFixed(0)}%`} small />
         <Row label="월 상환액" value={formatWon(result.monthlyLoanPayment)} small />

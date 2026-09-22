@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from '@/components/ui/icon'
 import AptSunlight from "@/components/sunlight/AptSunlight";
 
 export const metadata = {
@@ -7,7 +8,7 @@ export const metadata = {
 };
 
 /**
- * ☀️ 아파트 일조 보기 — 단지명 검색 → 주변 건물 3D → 시간대별 햇빛 + 동별 동지 일조 진단.
+ * <Icon name="star" /> 아파트 일조 보기 — 단지명 검색 → 주변 건물 3D → 시간대별 햇빛 + 동별 동지 일조 진단.
  * 규모검토 3D(주변 건물·위성 바닥·태양 위치)를 재사용한 독립 페이지. 크레딧 차감 없음.
  */
 export default function SunlightPage() {
@@ -21,7 +22,7 @@ export default function SunlightPage() {
           <Link href="/simulator" className="text-white/70 text-sm hover:text-white">
             ← 시뮬레이터
           </Link>
-          <span className="text-white font-semibold text-sm">☀️ 아파트 일조 보기</span>
+          <span className="text-white font-semibold text-sm"><Icon name="star" /> 아파트 일조 보기</span>
           <Link href="/account" className="text-xs text-white/50 hover:text-white px-3 py-1.5 rounded hover:bg-white/10 transition-colors">
             마이페이지
           </Link>

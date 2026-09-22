@@ -1,6 +1,7 @@
 "use client";
 
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
+import { Icon } from '@/components/ui/icon'
 import { useProfitStore } from "@/store/profit";
 import { formatEok } from "@/lib/calc/cost";
 
@@ -17,7 +18,7 @@ export function LandCostInputs({
   return (
     <section className="bg-card border border-border rounded-lg p-4 space-y-4">
       <header className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">💰 토지비</h3>
+        <h3 className="text-sm font-semibold"><Icon name="coins" /> 토지비</h3>
         <span className="text-[10.5px] text-muted-foreground">
           대지 {landAreaPyeong.toLocaleString("ko-KR")}평 기준
         </span>
@@ -31,7 +32,7 @@ export function LandCostInputs({
         max={30000}
         step={100}
         unit="만원/평"
-        hint="💡 강남·송파 8,000~20,000 / 서울 일반 3,000~6,000 / 수도권 1,500~3,500 만원/평"
+        hint="강남·송파 8,000~20,000 / 서울 일반 3,000~6,000 / 수도권 1,500~3,500 만원/평"
         inputMin={0}
         inputMax={200000}
         inputWidthClass="w-24"

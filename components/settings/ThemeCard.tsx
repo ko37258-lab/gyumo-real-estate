@@ -1,6 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
+import { Icon } from '@/components/ui/icon'
 import { setActiveThemeId, useActiveThemeId } from "@/lib/theme/storage";
 import { THEMES, type Theme } from "@/lib/theme/themes";
 
@@ -10,7 +11,7 @@ export function ThemeCard() {
   return (
     <Card className="p-5 space-y-4">
       <header>
-        <h2 className="text-base font-semibold">🎨 화면 색상 테마</h2>
+        <h2 className="text-base font-semibold"><Icon name="palette" /> 화면 색상 테마</h2>
         <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
           사이트 전체의 색상 톤을 선택할 수 있습니다. PDF 보고서 색상은 별도로{" "}
           <span className="italic">보고서 브랜드 설정</span>에서 관리합니다.
@@ -29,7 +30,7 @@ export function ThemeCard() {
       </div>
 
       <p className="text-[10.5px] text-muted-foreground leading-relaxed">
-        💡 선택 즉시 반영 · 새로고침 후에도 유지 · 다크 톤(미드나잇)은 어두운 배경
+        <Icon name="idea" /> 선택 즉시 반영 · 새로고침 후에도 유지 · 다크 톤(미드나잇)은 어두운 배경
       </p>
     </Card>
   );
@@ -72,7 +73,7 @@ function ThemeOption({
         />
       </div>
       <div className="text-[13px] font-bold leading-tight">
-        {theme.emoji} {theme.name}
+        <Icon name={theme.emoji} /> {theme.name}
       </div>
       <div
         className="text-[10.5px] mt-1 leading-tight"

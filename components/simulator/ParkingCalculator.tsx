@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import {
   buildReductionTips,
   compactCarAllowance,
@@ -164,7 +165,7 @@ export function ParkingCalculator() {
           className="mb-3 px-3 py-2 rounded-md text-[11px] flex items-start gap-1.5"
           style={{ background: "var(--info-bg)", color: "var(--info)" }}
         >
-          <span>📍</span>
+          <span><Icon name="pin" /></span>
           <span>
             <b>{basis.region!.ordinanceName}</b> 자동 적용 — 조회하신 지번의
             지자체 조례 기준으로 산정합니다.
@@ -173,7 +174,7 @@ export function ParkingCalculator() {
       )}
       {parkingLawdCd && basis.sourceType === "decree" && (
         <div className="mb-3 px-3 py-2 rounded-md text-[11px] bg-amber-50 border border-amber-300 text-amber-800 flex items-start gap-1.5">
-          <span>📍</span>
+          <span><Icon name="pin" /></span>
           <span>
             <b>{basis.regionName ?? "해당 지자체"}</b> 주차장 조례는 아직
             미수록입니다 — <b>시행령 별표1 기준</b>으로 산정합니다 (조례가
@@ -193,7 +194,7 @@ export function ParkingCalculator() {
       )}
       {!parkingLawdCd && (
         <div className="mb-3 px-3 py-1.5 rounded-md text-[10.5px] bg-card border border-border text-muted-foreground">
-          💡 지번 미조회 상태 — 서울특별시 조례 기준. ① 지번 조회 시 해당
+          <Icon name="idea" /> 지번 미조회 상태 — 서울특별시 조례 기준. ① 지번 조회 시 해당
           지자체 조례가 자동 적용됩니다.
         </div>
       )}
@@ -447,7 +448,7 @@ export function ParkingCalculator() {
         <div className="mt-3 rounded-md border-l-4 border-amber-400 bg-amber-50 p-3 space-y-2.5">
           <div className="flex items-baseline justify-between">
             <div className="font-medium text-[12.5px]">
-              🚗 1층 지상주차 면적 산정
+              <Icon name="car" /> 1층 지상주차 면적 산정
             </div>
             <div className="text-[10px] text-muted-foreground">
               시행령 119조 1항 2호 가목 (4)
@@ -462,7 +463,7 @@ export function ParkingCalculator() {
             max={35}
             step={1}
             unit="㎡/대"
-            hint="💡 자주식 평행 28~32, 직각 25~30, 기계식 15~20㎡ 참고"
+            hint="자주식 평행 28~32, 직각 25~30, 기계식 15~20㎡ 참고"
             inputMin={10}
             inputMax={50}
           />
@@ -495,7 +496,7 @@ export function ParkingCalculator() {
             </button>
           </div>
           <div className="text-[10.5px] text-muted-foreground -mt-1">
-            💡 필로티: 벽 없는 개방형 + 주차 외 다른 용도 없을 때 적용 가능 (건축법 시행령 119조 1항 4호)
+            <Icon name="idea" /> 필로티: 벽 없는 개방형 + 주차 외 다른 용도 없을 때 적용 가능 (건축법 시행령 119조 1항 4호)
           </div>
 
           {/* 실시간 결과 */}
@@ -596,11 +597,11 @@ export function ParkingCalculator() {
 
       {std.note && (
         <div className="mt-2 text-[11px] text-muted-foreground/90 leading-relaxed bg-card/60 px-2.5 py-1.5 rounded">
-          📎 {std.note}
+          {std.note}
         </div>
       )}
       <div className="mt-2 text-[10.5px] text-muted-foreground/80 leading-relaxed">
-        ⚖️ {std.legalBasis} · 시·군·구 조례별 강화 가능. 최종 인허가 시 해당
+        <Icon name="scale" /> {std.legalBasis} · 시·군·구 조례별 강화 가능. 최종 인허가 시 해당
         지자체 확인 필수.
       </div>
 
@@ -629,7 +630,7 @@ function ReductionTips(ctx: ReductionContext) {
     <div className="mt-3 rounded-lg border border-[var(--info)]/35 bg-card/70 p-3">
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="text-[13px] font-semibold text-[var(--info)] whitespace-nowrap">
-          💡 주차대수 줄이는 방법
+          <Icon name="idea" /> 주차대수 줄이는 방법
         </span>
         <span className="text-[10.5px] text-muted-foreground">
           법정 {ctx.spaces}대 기준 · 검토 {tips.length}가지
@@ -674,7 +675,7 @@ function ReductionTips(ctx: ReductionContext) {
               </p>
             )}
             <p className="mt-0.5 text-[10px] text-muted-foreground/80 leading-snug">
-              ⚖️ {t.basis}
+              <Icon name="scale" /> {t.basis}
             </p>
           </li>
         ))}
@@ -855,11 +856,11 @@ function Floor1BreakdownCard({
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 text-red-700 font-semibold text-sm">
-                    <span>⚠️</span>
+                    <span><Icon name="warning" /></span>
                     <span>1층 전체 주차 — 영업 공간 없음</span>
                   </div>
                   <p className="text-xs text-red-600 mt-1.5 leading-relaxed">
-                    💡 주차대수 또는 1대당 면적 조정 검토 — 1층 매출 손실 리스크
+                    <Icon name="idea" /> 주차대수 또는 1대당 면적 조정 검토 — 1층 매출 손실 리스크
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -897,7 +898,7 @@ function Floor1BreakdownCard({
 
           {/* 법령 근거 */}
           <p className="text-xs text-muted-foreground mt-2 ml-6 leading-relaxed">
-            ⚖️ {legalBasis}
+            <Icon name="scale" /> {legalBasis}
           </p>
         </>
       ) : null}

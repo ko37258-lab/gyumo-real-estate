@@ -1,6 +1,7 @@
 "use client";
 
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
+import { Icon } from '@/components/ui/icon'
 import { Label } from "@/components/ui/label";
 import { useProfitStore } from "@/store/profit";
 import type { RevenueModel } from "@/lib/calc/profit";
@@ -23,7 +24,7 @@ export function SalesRevenueInputs({
   return (
     <section className="bg-card border border-border rounded-lg p-4 space-y-4">
       <header className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">📈 수익 가정</h3>
+        <h3 className="text-sm font-semibold"><Icon name="chart-up" /> 수익 가정</h3>
         <span className="text-[10.5px] text-muted-foreground">
           분양 가능 {salesAvailableAreaPyeong.toLocaleString("ko-KR")}평
         </span>
@@ -70,7 +71,7 @@ export function SalesRevenueInputs({
             max={30000}
             step={100}
             unit="만원/평"
-            hint="💡 분양가는 평당 공사비의 2~3배 일반적. 위치·등급에 따라 변동 큼."
+            hint="분양가는 평당 공사비의 2~3배 일반적. 위치·등급에 따라 변동 큼."
             inputMin={0}
             inputMax={200000}
             inputWidthClass="w-24"

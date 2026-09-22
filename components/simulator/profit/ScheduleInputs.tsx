@@ -1,6 +1,7 @@
 "use client";
 
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
+import { Icon } from '@/components/ui/icon'
 import { useProfitStore } from "@/store/profit";
 
 export function ScheduleInputs() {
@@ -8,7 +9,7 @@ export function ScheduleInputs() {
   return (
     <section className="bg-card border border-border rounded-lg p-4 space-y-4">
       <header className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">📅 사업 일정</h3>
+        <h3 className="text-sm font-semibold"><Icon name="calendar" /> 사업 일정</h3>
         <span className="text-[10.5px] text-muted-foreground">
           착공~준공 + 분양 시작점
         </span>
@@ -22,7 +23,7 @@ export function ScheduleInputs() {
         max={48}
         step={3}
         unit="개월"
-        hint="💡 일반 5~10층 약 12~24개월, 대형 단지 24~48개월"
+        hint="일반 5~10층 약 12~24개월, 대형 단지 24~48개월"
         inputMin={1}
         inputMax={120}
       />

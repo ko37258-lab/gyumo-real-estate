@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { Icon } from '@/components/ui/icon'
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -228,7 +229,7 @@ export function LandLookup({
     ).toLocaleString("ko-KR");
   const [mergeMode, setMergeMode] = useState(false);
   const [extraAddresses, setExtraAddresses] = useState<string[]>([""]);
-  /** 🗺️ 지도 필지 선택 패널 표시 여부 */
+  /** <Icon name="map" /> 지도 필지 선택 패널 표시 여부 */
   const [showMap, setShowMap] = useState(defaultShowMap);
   /** 딥링크(?address=) 1회 실행 가드 */
   const deepLinkRan = useRef(false);
@@ -720,28 +721,28 @@ export function LandLookup({
       !accessible && !!jimokKnown && result.roads.totalParcels >= 8;
     if (directRoad) {
       roadVerdict = {
-        icon: "🛣️",
+        icon: "road",
         label: "도로 접면",
         sub: `주변 도로 ${result.roads.roads.length}개 확인`,
         tone: "ok",
       };
     } else if (presumed) {
       roadVerdict = {
-        icon: "✅",
+        icon: "check",
         label: "도로 접면 (추정)",
         sub: `지목 "${jimokName}" — 건축 지목, 접도 사실상 확정`,
         tone: "ok",
       };
     } else if (maengji) {
       roadVerdict = {
-        icon: "⛔",
+        icon: "x-circle",
         label: "맹지 가능성",
         sub: `주변 ${result.roads.totalParcels}개 필지 중 도로 없음`,
         tone: "warn",
       };
     } else {
       roadVerdict = {
-        icon: "❓",
+        icon: "question",
         label: "확인 필요",
         sub: "VWorld 데이터 부족 — 현지 답사 권장",
         tone: "uncertain",
@@ -856,7 +857,7 @@ export function LandLookup({
               : "bg-transparent text-[var(--info)] border-[var(--info)] hover:bg-[var(--info-bg)]"
           }`}
         >
-          {showMap ? "🗺️ 지도 닫기" : "🗺️ 지도에서 필지 선택"}
+          {showMap ? "지도 닫기" : "지도에서 필지 선택"}
         </button>
         <button
           type="button"
@@ -876,11 +877,11 @@ export function LandLookup({
               : "bg-transparent text-[var(--info)] border-[var(--info)] hover:bg-[var(--info-bg)]"
           }`}
         >
-          {mergeMode ? "🔗 합필 모드 ON — 취소하기" : "➕ 합필하실 경우 (옆 필지 합쳐서 검토)"}
+          {mergeMode ? "합필 모드 ON — 취소하기" : "합필하실 경우 (옆 필지 합쳐서 검토)"}
         </button>
       </div>
 
-      {/* 🗺️ 지도 필지 선택 패널 — key로 합필 모드 전환 시 선택 상태 리셋 */}
+      {/* <Icon name="map" /> 지도 필지 선택 패널 — key로 합필 모드 전환 시 선택 상태 리셋 */}
       {showMap && (
         <div className="mt-2">
           <MapPicker
@@ -893,7 +894,7 @@ export function LandLookup({
           />
           {mergeMode && (
             <p className="mt-1 text-[10px]" style={{ color: "var(--info)" }}>
-              🔗 합필 모드 — 옆 필지들을 연달아 클릭해 선택(재클릭=해제)한 뒤 [전체 합치기 조회]를 누르세요. 조회 횟수는 1회만 차감됩니다.
+              <Icon name="link" /> 합필 모드 — 옆 필지들을 연달아 클릭해 선택(재클릭=해제)한 뒤 [전체 합치기 조회]를 누르세요. 조회 횟수는 1회만 차감됩니다.
             </p>
           )}
         </div>
@@ -906,7 +907,7 @@ export function LandLookup({
           style={{ borderColor: "var(--info)", background: "var(--info-bg)" }}
         >
           <div className="text-[10.5px] font-medium" style={{ color: "var(--info)" }}>
-            🔗 합필 검토 — 위 대표 지번 + 아래 지번들의 면적을 합산해 하나의 대지로 시뮬레이션합니다.
+            <Icon name="link" /> 합필 검토 — 위 대표 지번 + 아래 지번들의 면적을 합산해 하나의 대지로 시뮬레이션합니다.
           </div>
           {extraAddresses.map((a, i) => (
             <div key={i} className="flex gap-1.5">
@@ -956,10 +957,10 @@ export function LandLookup({
 
       {error && (
         <div className="mt-2.5 px-3 py-2 rounded-md text-xs bg-red-50 border-l-4 border-red-500 text-red-700">
-          ⚠ {error}
+          <Icon name="warning" /> {error}
           {error.includes("키") && (
             <div className="mt-1 text-[10.5px] text-red-600">
-              💡 .env.local에 VWORLD_DATA_KEY · DATAGO_KEY · KAKAO_KEY 설정 필요
+              <Icon name="idea" /> .env.local에 VWORLD_DATA_KEY · DATAGO_KEY · KAKAO_KEY 설정 필요
             </div>
           )}
         </div>
@@ -967,7 +968,7 @@ export function LandLookup({
 
       {result && (
         <div className="mt-2.5 space-y-2 text-[12px]">
-          {/* 🧾 이 땅의 걸림돌 — 새 API 호출 없이 이미 조회된 데이터만으로 즉시 판정 */}
+          {/* <Icon name="document" /> 이 땅의 걸림돌 — 새 API 호출 없이 이미 조회된 데이터만으로 즉시 판정 */}
           <RegulationChecklist
             jimok={jimokName ?? undefined}
             useAttrs={bld?.useAttrs}
@@ -978,12 +979,12 @@ export function LandLookup({
 
           {/* 기본 정보 */}
           <div className="px-3 py-2 rounded-md bg-[var(--info-bg)] text-[var(--info)]">
-            <div className="font-semibold">📍 {result.refinedAddress}</div>
+            <div className="font-semibold"><Icon name="pin" /> {result.refinedAddress}</div>
             <div className="mt-0.5 text-[11px] opacity-90">
               {resolvedArea > 0
                 ? `${formatAreaBy(resolvedArea, unit)}${areaSourceLabel ? ` · ${areaSourceLabel}` : ""}`
                 : bld?.transient
-                  ? "⏳ 면적 조회 일시 불안정 — 잠시 후 다시 시도"
+                  ? "면적 조회 일시 불안정 — 잠시 후 다시 시도"
                   : "면적 정보 없음 (수동 입력 필요)"}
               {zoneShown ? ` · ${zoneShown}` : ""}
               {matchedZoneCode
@@ -1009,7 +1010,7 @@ export function LandLookup({
             >
               <div className="flex items-baseline justify-between mb-1.5">
                 <span className="text-[11px] font-bold" style={{ color: "var(--info)" }}>
-                  🔗 합필 {result.merged.parcels.length}필지 검토
+                  <Icon name="link" /> 합필 {result.merged.parcels.length}필지 검토
                 </span>
                 <span className="text-[12px] font-bold">
                   합계 {formatAreaBy(result.merged.totalSqm, unit)}
@@ -1042,7 +1043,7 @@ export function LandLookup({
               </div>
               {result.merged.zoneMismatch && (
                 <div className="mt-1.5 px-2 py-1 rounded bg-amber-50 border border-amber-300 text-[10px] text-amber-800">
-                  ⚠ 필지별 용도지역이 다릅니다 — 시뮬레이션은 대표 지번 기준. 실제 합필 시 관할청 확인 필수
+                  <Icon name="warning" /> 필지별 용도지역이 다릅니다 — 시뮬레이션은 대표 지번 기준. 실제 합필 시 관할청 확인 필수
                 </div>
               )}
               <div className="mt-1 text-[9.5px] text-muted-foreground">
@@ -1088,7 +1089,7 @@ export function LandLookup({
                   }`}
                 >
                   <div className="flex items-baseline gap-2">
-                    <span className="text-base">{roadVerdict.icon}</span>
+                    <span className="text-base"><Icon name={roadVerdict.icon} /></span>
                     <div className="flex-1 min-w-0">
                       <div className="text-[10px] text-muted-foreground">
                         도로 접면 (60m 반경)
@@ -1112,7 +1113,7 @@ export function LandLookup({
             (bld?.useAttrs?.length ?? 0) > 0) && (
             <div className="px-3 py-2 rounded-md bg-card border border-border text-[11px]">
               <div className="text-[10px] text-muted-foreground mb-1">
-                🧭 토지특성 · 토지이용계획 (VWorld 토지특성정보)
+                <Icon name="map" /> 토지특성 · 토지이용계획 (VWorld 토지특성정보)
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                 {bld?.landUse && (
@@ -1171,7 +1172,7 @@ export function LandLookup({
             (bld.bcRat || bld.vlRat || bld.mainUse) && (
               <div className="px-3 py-2 rounded-md bg-card border border-border text-[11px]">
                 <div className="text-[10px] text-muted-foreground mb-1">
-                  🏢 등록 건축물 (건축물대장 · 참고용)
+                  <Icon name="building" /> 등록 건축물 (건축물대장 · 참고용)
                   {bld.bldName ? ` — ${bld.bldName}` : ""}
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5">
@@ -1207,7 +1208,7 @@ export function LandLookup({
           {result.permits && result.permits.length > 0 && (
             <div className="px-3 py-2 rounded-md bg-card border border-border text-[11px]">
               <div className="text-[10px] text-muted-foreground mb-1">
-                📋 건축 인허가 이력 (건축HUB · 최근 {Math.min(result.permits.length, 3)}건
+                <Icon name="document" /> 건축 인허가 이력 (건축HUB · 최근 {Math.min(result.permits.length, 3)}건
                 {result.permits.length > 3 ? ` / 총 ${result.permits.length}건` : ""})
               </div>
               <div className="space-y-1">
@@ -1259,7 +1260,7 @@ export function LandLookup({
           {/* 공시지가 (VWorld 토지특성정보) — 단위 토글 + 읽기 쉬운 괄호 병기 */}
           {bld?.price && bld.price > 0 && (
             <div className="px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-[11px]">
-              💰 개별공시지가{" "}
+              <Icon name="coins" /> 개별공시지가{" "}
               <b className="text-foreground">
                 {Math.round(
                   unit === "py" ? bld.price * SQM_PER_PYEONG : bld.price,
@@ -1281,7 +1282,7 @@ export function LandLookup({
           {result.landTrades && result.landTrades.sampleCount > 0 && (
             <div className="rounded-md border p-2.5" style={{ borderColor: "var(--info)", background: "var(--card)" }}>
               <div className="text-[10px] text-muted-foreground mb-1.5">
-                💹 토지 실거래 기반 추정가
+                토지 실거래 기반 추정가
                 <span className="ml-1 opacity-80">
                   ({result.landTrades.basis} · 최근 {result.landTrades.periodMonths}개월 {result.landTrades.sampleCount}건)
                 </span>
@@ -1408,7 +1409,7 @@ export function LandLookup({
                 >
                   {applied.land
                     ? "✓ 사업성 탭 토지가에 적용됨"
-                    : `📊 사업성 탭 평당 토지가로 적용 (${Math.round(result.landTrades.estimatedPrice / (resolvedArea / 3.305785) / 10000).toLocaleString("ko-KR")}만원/평)`}
+                    : `사업성 탭 평당 토지가로 적용 (${Math.round(result.landTrades.estimatedPrice / (resolvedArea / 3.305785) / 10000).toLocaleString("ko-KR")}만원/평)`}
                 </button>
               )}
             </div>
@@ -1420,7 +1421,7 @@ export function LandLookup({
               result.newbuild.commercial.f1.count > 0) && (
               <div className="rounded-md border border-border bg-card p-2.5">
                 <div className="text-[10px] text-muted-foreground mb-1.5">
-                  🏘️ 신축 시세 참고 (최근 {result.newbuild.periodMonths}개월 실거래 {unitLabel}당 중앙값)
+                  <Icon name="neighborhood" /> 신축 시세 참고 (최근 {result.newbuild.periodMonths}개월 실거래 {unitLabel}당 중앙값)
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {result.newbuild.residential.tradeCount > 0 && (
@@ -1584,7 +1585,7 @@ export function LandLookup({
                   >
                     {applied.sales
                       ? "✓ 사업성 탭 분양가에 적용됨"
-                      : `📊 사업성 탭 평당 분양가로 적용 (${Math.round((result.newbuild.residential.tradeUnitWon * 3.305785) / 10000).toLocaleString("ko-KR")}만원/평)`}
+                      : `사업성 탭 평당 분양가로 적용 (${Math.round((result.newbuild.residential.tradeUnitWon * 3.305785) / 10000).toLocaleString("ko-KR")}만원/평)`}
                   </button>
                 )}
                 <div className="mt-1 text-[9.5px] text-muted-foreground/80">
@@ -1608,14 +1609,14 @@ export function LandLookup({
           {/* 부분 실패 안내 */}
           {result.errors.length > 0 && (
             <div className="px-3 py-1.5 rounded-md bg-amber-50 border border-amber-300 text-[10.5px] text-amber-800">
-              ⚠ {result.errors.join(" · ")}
+              <Icon name="warning" /> {result.errors.join(" · ")}
             </div>
           )}
 
           {/* zone 매핑 안내 */}
           {zoneShown && !matchedZoneCode && (
             <div className="px-3 py-1.5 rounded-md bg-amber-50 border border-amber-300 text-[10.5px] text-amber-800">
-              ⚠ 비도시지역(녹지·관리·농림·자연환경) 또는 미지원 용도지역 — gyumo 현재 13개 도시지역 지원
+              <Icon name="warning" /> 비도시지역(녹지·관리·농림·자연환경) 또는 미지원 용도지역 — gyumo 현재 13개 도시지역 지원
             </div>
           )}
         </div>
@@ -1624,7 +1625,7 @@ export function LandLookup({
       {/* mock fallback (이전 동작 유지) */}
       {!result && lotInfo && lotInfo.source === "mock" && (
         <div className="mt-2.5 px-3 py-2 rounded-md text-xs bg-secondary/50 border border-border">
-          <div className="font-medium">📍 {lotInfo.address} (mock)</div>
+          <div className="font-medium"><Icon name="pin" /> {lotInfo.address} (mock)</div>
           <div className="text-[11px] text-muted-foreground">
             대지면적 {lotInfo.lotSqm.toLocaleString("ko-KR")}㎡ · 전면도로 {lotInfo.roadM}m
           </div>

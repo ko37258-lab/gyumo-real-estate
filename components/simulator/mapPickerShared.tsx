@@ -7,6 +7,7 @@
 // MapPicker(leaflet)·KakaoMapPicker 두 엔진이 이 파일만 공유하고, 지도 그리기만 각자 한다.
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { fetchParcelAtPoint } from "@/lib/vworld";
 
 /** 클릭으로 확정된 필지 (후보/선택 공용) */
@@ -191,7 +192,7 @@ export function MapPickerChrome({
                 </span>
               ))}
               <span className="text-[10px] text-muted-foreground ml-0.5">
-                {picking ? "⏳ 필지 확인 중..." : selections.length === 0 ? "옆 필지들을 연달아 클릭해 선택하세요 (재클릭 = 해제)" : ""}
+                {picking ? "필지 확인 중..." : selections.length === 0 ? "옆 필지들을 연달아 클릭해 선택하세요 (재클릭 = 해제)" : ""}
               </span>
             </div>
             <div className="flex gap-1.5">
@@ -202,7 +203,7 @@ export function MapPickerChrome({
                 className="flex-1 text-[11.5px] font-bold px-2.5 py-1.5 rounded disabled:opacity-45"
                 style={{ background: "#2563EB", color: "#fff" }}
               >
-                🔗 전체 합치기 조회 ({baseJibun ? `대표 + ${selections.length}필지` : `${selections.length}필지`}) →
+                <Icon name="link" /> 전체 합치기 조회 ({baseJibun ? `대표 + ${selections.length}필지` : `${selections.length}필지`}) →
               </button>
               {selections.length > 0 && (
                 <button type="button" onClick={() => setSelections(() => [])} className="shrink-0 text-[11px] px-2 py-1.5 rounded border text-muted-foreground" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
@@ -214,7 +215,7 @@ export function MapPickerChrome({
         ) : candidate ? (
           <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md shadow border" style={{ background: "var(--card)", borderColor: "#2563EB" }}>
             <span className="min-w-0 truncate text-[11.5px] font-medium text-foreground">
-              📍 {candidate.address}
+              <Icon name="pin" /> {candidate.address}
               {autoLookup && <span className="ml-1 text-[10px]" style={{ color: "#2563EB" }}>— 조회 중...</span>}
             </span>
             {!autoLookup && (
@@ -228,7 +229,7 @@ export function MapPickerChrome({
           </div>
         ) : (
           <div className="inline-block text-[10.5px] font-medium px-2 py-1 rounded shadow" style={{ background: "var(--card)", color: "var(--muted-foreground)" }}>
-            {picking ? "⏳ 필지 확인 중..." : autoLookup ? "➕ 필지를 클릭하면 즉시 조회됩니다 (조회 1회 차감)" : "➕ 십자 커서로 필지를 클릭하면 지번을 확인한 뒤 조회할 수 있습니다"}
+            {picking ? "필지 확인 중..." : autoLookup ? "필지를 클릭하면 즉시 조회됩니다 (조회 1회 차감)" : "십자 커서로 필지를 클릭하면 지번을 확인한 뒤 조회할 수 있습니다"}
           </div>
         )}
       </div>

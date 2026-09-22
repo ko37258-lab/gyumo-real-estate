@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { useSimulatorStore } from "@/store/simulator";
 import { useProfitStore } from "@/store/profit";
 import { useMarketStore, type MarketData } from "@/store/market";
@@ -131,7 +132,7 @@ export function MarketInsight() {
   if (!lawdCd) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-card p-4 text-[12px] text-muted-foreground">
-        📡 <strong className="text-foreground">주변 시세·임대료</strong>
+        <strong className="text-foreground">주변 시세·임대료</strong>
         &nbsp;— 1번 탭에서 지번 조회 후 자동으로 불러옵니다.
         <br />
         아파트·상업업무 매매 시세와 아파트·오피스텔 임대료(전월세)를 분양가·임대료 입력에 바로 적용할 수 있습니다.
@@ -149,7 +150,7 @@ export function MarketInsight() {
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-secondary/50 transition-colors text-left"
       >
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold">📡 주변 시세·임대료</span>
+          <span className="text-[13px] font-semibold">주변 시세·임대료</span>
           <span className="text-[11px] text-muted-foreground">
             국토부 실거래 최근 6개월 (시군구 단위)
           </span>
@@ -164,7 +165,7 @@ export function MarketInsight() {
         <div className="px-4 pb-4 space-y-3">
           {error && (
             <div className="text-[11.5px] text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-              ⚠ {error}
+              <Icon name="warning" /> {error}
             </div>
           )}
 
@@ -178,7 +179,7 @@ export function MarketInsight() {
           {!loading && (data?.aptTrade || data?.nrgTrade) && (
             <div className="space-y-2">
               <div className="text-[11px] text-muted-foreground font-medium">
-                🏢 매매 시세 (평당) — 분양가 참고
+                <Icon name="building" /> 매매 시세 (평당) — 분양가 참고
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {data?.aptTrade && (
@@ -221,7 +222,7 @@ export function MarketInsight() {
           {!loading && (data?.aptRent || data?.offiRent) && (
             <div className="space-y-2">
               <div className="text-[11px] text-muted-foreground font-medium">
-                🔑 임대료 (전월세) — 임대 수익 모델 참고
+                <Icon name="key" /> 임대료 (전월세) — 임대 수익 모델 참고
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {data?.aptRent && data.aptRent.wolseCount > 0 && (
