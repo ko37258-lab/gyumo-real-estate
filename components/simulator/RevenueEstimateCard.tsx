@@ -8,6 +8,7 @@
 // ① 지번 조회가 되어 있어야 동작 (pnu·법정동 필요).
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { Button } from "@/components/ui/button";
 import { useLandInfoStore } from "@/store/landinfo";
 import { useUsePricesStore } from "@/store/useprices";
@@ -85,7 +86,7 @@ export default function RevenueEstimateCard({
         onClick={toggle}
         className="w-full justify-between text-[12.5px] font-bold text-amber-900 hover:bg-amber-100/60 rounded-none h-9"
       >
-        <span>💰 이 계획으로 얼마 받을 수 있나? <span className="font-medium text-[11px]">— 인근 실거래 기준 분양·월세 추정</span></span>
+        <span><Icon name="coins" /> 이 계획으로 얼마 받을 수 있나? <span className="font-medium text-[11px]">— 인근 실거래 기준 분양·월세 추정</span></span>
         <span>{open ? "∧ 접기" : "∨ 열기"}</span>
       </Button>
 
@@ -99,13 +100,13 @@ export default function RevenueEstimateCard({
           {land && loading && (
             <p className="text-[11.5px] text-muted-foreground">인근 12개월 실거래를 집계하는 중…</p>
           )}
-          {land && error && <p className="text-[11.5px] text-red-700">⚠️ {error}</p>}
+          {land && error && <p className="text-[11.5px] text-red-700"><Icon name="warning" /> {error}</p>}
 
           {land && cached && (
             <>
               {/* 분양 */}
               <div className="rounded border border-border bg-card p-2.5">
-                <div className="text-[11px] font-bold text-muted-foreground mb-1">🏷️ 분양(매각)하면</div>
+                <div className="text-[11px] font-bold text-muted-foreground mb-1">분양(매각)하면</div>
                 {saleRow && salePerUnit > 0 ? (
                   <>
                     <p className="text-[13px] leading-relaxed">
@@ -124,7 +125,7 @@ export default function RevenueEstimateCard({
 
               {/* 월세 */}
               <div className="rounded border border-border bg-card p-2.5">
-                <div className="text-[11px] font-bold text-muted-foreground mb-1">🏠 월세를 놓으면</div>
+                <div className="text-[11px] font-bold text-muted-foreground mb-1"><Icon name="house" /> 월세를 놓으면</div>
                 {rentRow && rentPerUnit > 0 ? (
                   <>
                     <p className="text-[13px] leading-relaxed">

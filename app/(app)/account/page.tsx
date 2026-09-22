@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Icon } from '@/components/ui/icon'
 import { roleColor, roleDesc } from "@/lib/membership";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
@@ -199,7 +200,7 @@ export default async function AccountPage({
         {linkedAccounts.length > 0 && (
           <div className="rounded-2xl border p-6"
             style={{ background: "var(--card)", borderColor: "rgba(96,165,250,0.45)" }}>
-            <h2 className="font-semibold mb-1">👥 연결된 계정 {linkedAccounts.length + 1}개</h2>
+            <h2 className="font-semibold mb-1"><Icon name="users" /> 연결된 계정 {linkedAccounts.length + 1}개</h2>
             <p className="text-xs mb-3" style={{ color: "var(--muted-foreground)" }}>
               같은 이름·전화번호로 등록된 계정은 한 계정처럼 관리되며, 위 크레딧 잔액은 모든 계정을 합친 값입니다.
             </p>

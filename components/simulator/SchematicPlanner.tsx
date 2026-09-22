@@ -7,6 +7,7 @@
 // 주거계 용도(공동주택·다세대연립·다가구·도시형생활주택·오피스텔)에서 활성.
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { useSimulatorStore } from "@/store/simulator";
 import { useProfitStore } from "@/store/profit";
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
@@ -130,7 +131,7 @@ export function SchematicPlanner() {
             className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded"
             style={{ color: useStyle.edge, background: `${useStyle.gradMid}33` }}
           >
-            {useStyle.icon} {useStyle.usageLabel}
+            <Icon name={useStyle.icon} /> {useStyle.usageLabel}
           </span>
         </div>
         <span className="text-[10px] text-muted-foreground/80">
@@ -249,7 +250,7 @@ export function SchematicPlanner() {
                 >
                   <div className="flex items-center gap-1.5 text-[11.5px] font-semibold"
                     style={{ color: r.elevatorFitsInCore ? "#15803d" : "#b91c1c" }}>
-                    <span>🛗</span>
+                    <span></span>
                     <span>
                       법정 승강기 {r.elevator.count}대 필요
                       {r.elevatorFitsInCore ? " — 코어 면적 안에 여유 있음" : " — 코어 면적 부족 가능성"}
@@ -374,7 +375,7 @@ export function SchematicPlanner() {
               >
                 {applied
                   ? "✓ ⑤ 주차 산정에 세대수 반영됨"
-                  : `🚗 ⑤ 주차 산정에 ${r.totalUnits}세대 자동 반영 (전용 ${unitSqm}㎡ 구간)`}
+                  : `⑤ 주차 산정에 ${r.totalUnits}세대 자동 반영 (전용 ${unitSqm}㎡ 구간)`}
               </button>
 
               {/* 세대 기반 수익 → 사업성 연동 (신축 시세 자동, 지번 조회 필요) */}
@@ -413,14 +414,14 @@ export function SchematicPlanner() {
                     }
                   >
                     {profitApplied
-                      ? "✓ 📊 사업성 탭 분양가에 반영됨 (분양 모델)"
-                      : `📊 사업성 탭에 세대 수익 반영 (평당 ${salesManPerPy.toLocaleString("ko-KR")}만원 · 분양 모델)`}
+                      ? "✓ 사업성 탭 분양가에 반영됨 (분양 모델)"
+                      : `사업성 탭에 세대 수익 반영 (평당 ${salesManPerPy.toLocaleString("ko-KR")}만원 · 분양 모델)`}
                   </button>
                 </div>
               ) : (
                 <p className="text-[10px] text-muted-foreground/80">
-                  💡 ① 지번 조회를 하면 인근 신축 실거래 시세로 세대당 분양가·총 분양수입이 자동 계산되고,
-                  📊 사업성 탭 원클릭 반영이 활성화됩니다.
+                  <Icon name="idea" /> ① 지번 조회를 하면 인근 신축 실거래 시세로 세대당 분양가·총 분양수입이 자동 계산되고,
+                  <Icon name="chart-bar" /> 사업성 탭 원클릭 반영이 활성화됩니다.
                 </p>
               )}
 
@@ -433,7 +434,7 @@ export function SchematicPlanner() {
             </>
           ) : (
             <div className="px-3 py-2.5 rounded-md bg-amber-50 border border-amber-300 text-[11px] text-amber-800">
-              ⚠ 기준층({Math.round(floorArea)}㎡)에 전용 {unitSqm}㎡(공급 {r.supplyPerUnitSqm}㎡) 유닛이
+              <Icon name="warning" /> 기준층({Math.round(floorArea)}㎡)에 전용 {unitSqm}㎡(공급 {r.supplyPerUnitSqm}㎡) 유닛이
               들어가지 않습니다 — 유닛을 줄이거나 건폐율·대지면적을 확인하세요.
             </div>
           )}

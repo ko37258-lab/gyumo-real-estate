@@ -7,6 +7,7 @@
 // 좌표 규약은 규모검토 3D와 같다: 로컬 x=동, y=북 → 씬 (x, 높이, -북).
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import dynamic from "next/dynamic";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Edges, Html } from "@react-three/drei";
@@ -378,7 +379,7 @@ export default function AptSunlight() {
     });
   }
 
-  /** 📄 일조 검토 보고서 PDF — 동지 9·12·15시 3D 캡처 + 동별 표 (이행강제금 PDF 와 같은 blob 패턴) */
+  /** <Icon name="document" /> 일조 검토 보고서 PDF — 동지 9·12·15시 3D 캡처 + 동별 표 (이행강제금 PDF 와 같은 blob 패턴) */
   async function handleDownloadPdf() {
     if (!place || rows.length === 0 || pdfBusy) return;
     setPdfBusy(true);
@@ -682,7 +683,7 @@ export default function AptSunlight() {
                   className="text-xs font-bold px-3 py-1.5 rounded-md"
                   style={{ background: "#FFCF0D", color: "#020425" }}
                 >
-                  {playing ? "❚❚ 멈춤" : "▶ 하루 재생"}
+                  {playing ? "멈춤" : "▶ 하루 재생"}
                 </button>
                 <input
                   type="range"
@@ -819,8 +820,8 @@ export default function AptSunlight() {
                 {pdfBusy
                   ? "보고서 만드는 중… (동지 9·12·15시 캡처)"
                   : selectedBuilding
-                    ? `📄 보고서 PDF (단지 + ${labelOfId(selectedBuilding.id)} 상세)`
-                    : "📄 일조 검토 보고서 PDF 다운로드"}
+                    ? `보고서 PDF (단지 + ${labelOfId(selectedBuilding.id)} 상세)`
+                    : "일조 검토 보고서 PDF 다운로드"}
               </button>
             </div>
 
@@ -828,7 +829,7 @@ export default function AptSunlight() {
             {selectedBuilding && (
               <div className="rounded-2xl border p-4 space-y-3" style={{ background: "var(--card)", borderColor: "rgba(255,207,13,0.6)" }}>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm font-semibold">🏢 {labelOfId(selectedBuilding.id)} 상세</div>
+                  <div className="text-sm font-semibold"><Icon name="building" /> {labelOfId(selectedBuilding.id)} 상세</div>
                   <button type="button" onClick={() => setSelectedId(null)} className="text-[11px] px-2 py-1 rounded border" style={{ borderColor: "var(--border)" }}>
                     닫기
                   </button>

@@ -6,7 +6,7 @@
  * 사용자가 탭을 넘기지 않아도 "이 땅 농지네, 부담금 대략 얼마" "개발제한
  * 구역 걸려있네"를 3초 안에 알 수 있게 한다.
  *
- * ⚠ 전부 간이 추정이다. 정확한 부담금·저촉 여부는 관할 지자체 확인이 필요
+ * 전부 간이 추정이다. 정확한 부담금·저촉 여부는 관할 지자체 확인이 필요
  *   하다는 문구를 항상 같이 노출한다 (calculateCost 학습시트와 같은 원칙).
  */
 
@@ -60,13 +60,13 @@ function checkLandUsePlan(useAttrs: string[] | undefined): ChecklistItem[] {
     for (const { pattern, label } of HIGH_RISK_PATTERNS) {
       if (pattern.test(attr) && !seen.has(label)) {
         seen.add(label);
-        hits.push({ level: "danger", icon: "🚫", title: "저촉 지역·지구", detail: label });
+        hits.push({ level: "danger", icon: "", title: "저촉 지역·지구", detail: label });
       }
     }
     for (const { pattern, label } of MEDIUM_RISK_PATTERNS) {
       if (pattern.test(attr) && !seen.has(label)) {
         seen.add(label);
-        hits.push({ level: "warning", icon: "⚠️", title: "저촉 지역·지구", detail: label });
+        hits.push({ level: "warning", icon: "warning", title: "저촉 지역·지구", detail: label });
       }
     }
   }
@@ -88,14 +88,14 @@ function checkFarmland(
     const won = Math.round(unit * areaSqm);
     return {
       level: "warning",
-      icon: "🌾",
+      icon: "wheat",
       title: "농지 — 농지보전부담금 예상",
       detail: `지목 ${jimok}(농지법 적용). ${inZone ? "농업진흥구역 안 30%" : "진흥구역 밖 20%"} 기준 약 ${(won / 1e4).toLocaleString("ko-KR", { maximumFractionDigits: 0 })}만원 예상 (개별공시지가 × 적용률, ㎡당 상한 5만원 — 실제 부과액은 전용 시점 공시지가 기준)`,
     };
   }
   return {
     level: "warning",
-    icon: "🌾",
+    icon: "wheat",
     title: "농지 — 부담금 발생 예정",
     detail: `지목 ${jimok}(농지법 적용). ${inZone ? "농업진흥구역 안" : "진흥구역 밖"} — 전용 시 농지보전부담금 필요 (공시지가 미확보로 금액 미산출)`,
   };
@@ -117,14 +117,14 @@ function checkForest(
     const won = Math.round(unit * areaSqm);
     return {
       level: "warning",
-      icon: "⛰️",
+      icon: "mountain",
       title: "산지 — 대체산림자원조성비 예상",
       detail: `지목 임야(산지관리법 적용). ${isPreserved ? "보전산지(+30%)" : "준보전산지"} 기준 약 ${(won / 1e4).toLocaleString("ko-KR", { maximumFractionDigits: 0 })}만원 예상 (2026년 산림청 고시 기준 — 실제 부과액은 전용 시점 고시 단가 기준)`,
     };
   }
   return {
     level: "warning",
-    icon: "⛰️",
+    icon: "mountain",
     title: "산지 — 부담금 발생 예정",
     detail: `지목 임야(산지관리법 적용). ${isPreserved ? "보전산지" : "준보전산지"} — 전용 시 대체산림자원조성비 필요 (공시지가 미확보로 금액 미산출)`,
   };
@@ -137,7 +137,7 @@ function checkSunlight(zoneCode: ZoneCode | undefined): ChecklistItem | null {
   if (z.sunlight) {
     return {
       level: "info",
-      icon: "☀️",
+      icon: "star",
       title: "정북 일조권 사선제한 대상",
       detail: `${z.name} — 건축법 시행령 제86조 1항 적용. ② 규모 검토 탭에서 층별 후퇴 반영값을 확인하세요.`,
     };
@@ -166,7 +166,7 @@ export function buildRegulationChecklist(input: {
   if (items.length === 0) {
     items.push({
       level: "ok",
-      icon: "✅",
+      icon: "check",
       title: "확인된 저촉 사항 없음",
       detail: "조회 범위 안에서는 특별한 규제 항목이 발견되지 않았습니다. 다만 조례·지구단위계획 등은 지자체 확인이 원칙입니다.",
     });

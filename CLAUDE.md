@@ -254,6 +254,11 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-09-22** — **이모지 전면 제거 → 우리 아이콘 72종(힉스필드 벡터 SVG)** (브랜치 `feature/own-icons`, 372law 와 같은 세트).
+  - `lib/icons/svg/*.svg` 72종 → `lib/icons/build.py` 가 `icons.generated.ts`(name→svg 문자열)로 굽는다(Next/Turbopack 은 import.meta.glob 없음). `components/ui/icon.tsx` `<Icon name="house" />`, `app/globals.css .ico`. 남색은 currentColor·금색 고정·흰 판은 `--icon-bg`.
+  - 코드모드 `scripts/emoji-to-icon.py`(매핑 `lib/icons/emojiIcons.ts`): JSX 텍스트 124곳 → `<Icon>`, 문자열 안 59곳 삭제, 이모지 하나짜리 문자열 38곳 → 아이콘 이름(`{x.emoji}`/`{x.icon}` 렌더 8곳은 `<Icon name={…}/>`). `.ts` 파일은 태그 대신 삭제.
+  - ⚠ react-pdf 문서(`components/report/*Document.tsx`)에는 `<Icon>`(span innerHTML) 을 못 넣는다 → PDF 안 이모지는 그냥 지움. 템플릿 문자열(`${s.icon}`)에 태그가 끼면 글자로 찍히니 코드모드 후 `\$<Icon` 검색으로 확인할 것. 3D 라벨은 drei `<Html>` 안이라 `<Icon>` 가능.
+  - 검증: tsc 0 / next build ✓ / vitest 38 / 로컬 4개 탭 아이콘 4·17·7·8개 렌더, 빈 아이콘 0, 잔여 이모지 0, `<Icon` 글자 노출 0.
 - **2026-09-21** — **한장 보고서(A4 가로 1장) + 작성자 인적사항 인쇄** (브랜치 `feature/one-pager-report`, 미배포). 운영자 요청: "간단하게 보고할 때 쓰는 한장짜리, 만든 사람 인적사항 넣고 인쇄".
   - 시뮬레이터 헤더 [한장 보고서] → 제목·검토 의견·인적사항 입력 → 미리보기(iframe) → [인쇄]/[PDF 저장]. 값은 전부 `buildReportInputs`(=computePlan 단일 계산원) 것만 쓴다 — 본 보고서와 숫자가 갈리지 않음.
   - `lib/report/onePager.ts`(표시용 순수 변환: 핵심 4칸·토지·규모·사업비·판정·확인 전 전제) / `components/report/OnePagerDocument.tsx`(A4 landscape) / `components/report/OnePagerDialog.tsx` / `lib/report/reporter.ts`(인적사항 8필드, localStorage `gyumo_reporter_profile` — 브랜드와 분리해 사람마다 자기 이름으로, 게이트 없음) / `lib/report/capture3d.ts`(ReportDialog에서 추출해 공용) / 워커에 `generate-onepager` 메시지 추가(폰트 캐시 공유, 실패 시 메인스레드 폴백).

@@ -24,7 +24,7 @@ export function linkKey(p: { phone?: string | null; full_name?: string | null })
 
 /**
  * 프로필 목록 → { 계정 id: 같은 묶음의 다른 계정들 } (혼자면 빈 배열).
- * 관리자 회원 목록에서 "👥 N계정" 배지와 "다계정" 필터에 쓴다.
+ * 관리자 회원 목록에서 "N계정" 배지와 "다계정" 필터에 쓴다.
  */
 export function groupLinked<T extends { id: string; phone?: string | null; full_name?: string | null }>(
   profiles: T[],

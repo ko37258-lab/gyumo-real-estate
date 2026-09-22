@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSimulatorStore } from "@/store/simulator";
@@ -46,7 +47,7 @@ export function AddressLookup() {
       </div>
       {lotInfo && (
         <div className="mt-2.5 px-3 py-2 rounded-md text-xs bg-[var(--info-bg)] text-[var(--info)]">
-          <div className="font-semibold">📍 {lotInfo.address}</div>
+          <div className="font-semibold"><Icon name="pin" /> {lotInfo.address}</div>
           <div className="mt-0.5 text-[11px]">
             대지면적 {lotInfo.lotSqm.toLocaleString("ko-KR")}㎡ ({Math.round(
               lotInfo.lotSqm / 3.305785,

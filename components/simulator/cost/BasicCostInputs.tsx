@@ -1,6 +1,7 @@
 "use client";
 
 import { useCostStore, type CostLinkKey } from "@/store/cost";
+import { Icon } from '@/components/ui/icon'
 import { useCostSnapshot } from "@/lib/plan/useSnapshots";
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
 import { pyeongToSqmDisplay } from "@/lib/utils/area";
@@ -12,10 +13,10 @@ export function BasicCostInputs() {
   const link = (k: CostLinkKey) => (
     <span className="text-[10px]">
       {s.linked[k] ? (
-        <span className="text-emerald-700">🔗 규모검토 연동</span>
+        <span className="text-emerald-700"><Icon name="link" /> 규모검토 연동</span>
       ) : (
         <>
-          <span className="text-amber-700">✋ 수동 입력</span>{" "}
+          <span className="text-amber-700">수동 입력</span>{" "}
           <button type="button" onClick={() => s.relink(k)} className="text-[var(--info)] hover:underline">
             규모검토 값으로
           </button>
@@ -67,7 +68,7 @@ export function BasicCostInputs() {
           step={10}
           unit="만원/평"
           tooltip="공사비 시세 참고: 일반 800~1,200, 고급 1,500~2,000, 특수 2,500+ 만원/평"
-          hint="💡 일반 5~10층 건물 기준 시장 평균 800~1,200만원/평. 고급·특수 자재 시 더 높음."
+          hint="일반 5~10층 건물 기준 시장 평균 800~1,200만원/평. 고급·특수 자재 시 더 높음."
           inputMin={100}
           inputMax={10000}
         />

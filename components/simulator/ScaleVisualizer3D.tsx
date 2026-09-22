@@ -1,6 +1,7 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Icon } from '@/components/ui/icon'
 import { Html, OrbitControls, Grid, Text, Line, Edges, Billboard, Environment } from "@react-three/drei";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -55,7 +56,7 @@ const CAR_COLORS = ["#DC2626", "#2563EB", "#F1F5F9", "#64748B", "#0F766E", "#D97
 
 type PresetKey = "iso" | "top" | "south" | "north";
 
-/** ☀️ 태양 궤적 — 그림자 모드에서 하루 태양 호(弧)와 현재 위치를 그린다. 씬 단위(m). */
+/** <Icon name="star" /> 태양 궤적 — 그림자 모드에서 하루 태양 호(弧)와 현재 위치를 그린다. 씬 단위(m). */
 interface SunPathData {
   arc: [number, number, number][];
   marks: { hour: number; pos: [number, number, number] }[];
@@ -150,9 +151,9 @@ export default function ScaleVisualizer3D() {
             className="text-[11px]"
           >
             {k === "iso"
-              ? "🏠 "
+              ? "house "
               : k === "top"
-                ? "⬆ "
+                ? ""
                 : k === "south"
                   ? "← "
                   : "→ "}
@@ -168,7 +169,7 @@ export default function ScaleVisualizer3D() {
               onClick={() => setShowNeighbors((v) => !v)}
               className="text-[11px]"
             >
-              🏘️ 주변 건물
+              <Icon name="neighborhood" /> 주변 건물
             </Button>
             <Button
               size="xs"
@@ -176,7 +177,7 @@ export default function ScaleVisualizer3D() {
               onClick={() => setShowImagery((v) => !v)}
               className="text-[11px]"
             >
-              🛰️ 위성 바닥
+              <Icon name="globe" /> 위성 바닥
             </Button>
           </>
         )}
@@ -186,7 +187,7 @@ export default function ScaleVisualizer3D() {
           onClick={() => setShadowMode((v) => !v)}
           className="text-[11px]"
         >
-          ☀️ 그림자
+          <Icon name="star" /> 그림자
         </Button>
         <Button
           size="xs"
@@ -194,7 +195,7 @@ export default function ScaleVisualizer3D() {
           onClick={() => setAutoRotate((v) => !v)}
           className="text-[11px]"
         >
-          🔄 자동 회전 {autoRotate ? "ON" : "OFF"}
+          <Icon name="refresh" /> 자동 회전 {autoRotate ? "ON" : "OFF"}
         </Button>
       </div>
       {shadowMode && (
@@ -225,8 +226,8 @@ export default function ScaleVisualizer3D() {
           </span>
           <span className="text-[10.5px] text-muted-foreground tabular-nums">
             {sunPos.altitudeDeg > 0
-              ? `☀️ 고도 ${sunPos.altitudeDeg.toFixed(1)}° · 방위 ${Math.round(sunPos.azimuthDeg)}°`
-              : "🌙 해 뜨기 전 / 진 후"}
+              ? `고도 ${sunPos.altitudeDeg.toFixed(1)}° · 방위 ${Math.round(sunPos.azimuthDeg)}°`
+              : "해 뜨기 전 / 진 후"}
           </span>
           <span className="text-[10px] text-muted-foreground">
             · 판례 일조 기준: 동지 9~15시 연속 2시간
@@ -267,7 +268,7 @@ export default function ScaleVisualizer3D() {
         <span>•</span>
         <span>모든 값은 좌측 슬라이더·토글로 실시간 반영</span>
         <span>•</span>
-        <span>🚗 자동차는 산정된 지상 주차 대수를 실제 주차칸 규격(2.6×5.5m)으로 배치한 예시</span>
+        <span><Icon name="car" /> 자동차는 산정된 지상 주차 대수를 실제 주차칸 규격(2.6×5.5m)으로 배치한 예시</span>
       </div>
     </div>
   );
@@ -402,7 +403,7 @@ function Scene({
   return (
     <>
       {/* 분위기 — 환경광(내장 스튜디오 큐브맵, 네트워크 불필요)·하늘/지면 반구광·거리 안개.
-          ⚠ drei SoftShadows(PCSS)는 three 0.184의 depth-texture 그림자와 호환되지 않아(셰이더 컴파일 실패 → 전부 검게)
+          <Icon name="warning" /> drei SoftShadows(PCSS)는 three 0.184의 depth-texture 그림자와 호환되지 않아(셰이더 컴파일 실패 → 전부 검게)
           쓰지 않는다. 부드러운 그림자는 Canvas shadows="variance"(VSM) + 광원 shadow-radius로. */}
       <EnvLighting />
       <fog attach="fog" args={["#dfe7ee", 170, 520]} />
@@ -456,12 +457,12 @@ function Scene({
         <meshStandardMaterial color="#e9ebe0" roughness={1} />
       </mesh>
 
-      {/* 🛰️ 위성 바닥 + 🏘️ 주변 건물 — 실형상(경위도 중심)이 있을 때만 */}
+      {/* <Icon name="globe" /> 위성 바닥 + <Icon name="neighborhood" /> 주변 건물 — 실형상(경위도 중심)이 있을 때만 */}
       {parcelShape && showImagery && (
         <GroundImagery centerLon={parcelShape.centerLon} centerLat={parcelShape.centerLat} halfM={190} />
       )}
       {parcelShape && showNeighbors && <Neighborhood shape={parcelShape} />}
-      {/* 🛣️ 실제 도로면 — 지목 도 필지 폴리곤 (실형상일 때만) */}
+      {/* <Icon name="road" /> 실제 도로면 — 지목 도 필지 폴리곤 (실형상일 때만) */}
       {parcelShape && <RoadSurfaces shape={parcelShape} roadM={roadM} onLoaded={setRoadPolyCount} />}
 
       {/* 대지 — 실형상 폴리곤 있으면 실제 지적 모양으로 */}
@@ -779,7 +780,7 @@ function EnvLighting() {
   return <Environment map={rt.texture} environmentIntensity={0.42} />;
 }
 
-/** ☀️ 태양 궤적 — 하루 태양 호(점선) + 9·12·15시 눈금 + 현재 시각 태양 구체 */
+/** <Icon name="star" /> 태양 궤적 — 하루 태양 호(점선) + 9·12·15시 눈금 + 현재 시각 태양 구체 */
 function SunPath({ data }: { data: SunPathData }) {
   return (
     <group>
@@ -829,7 +830,7 @@ function SunPath({ data }: { data: SunPathData }) {
   );
 }
 
-/** 📏 치수선 — 양 끝 눈금 + 라벨. flat=true면 라벨을 바닥에 눕힘(남쪽에서 읽는 방향), 아니면 카메라를 향함. */
+/** 치수선 — 양 끝 눈금 + 라벨. flat=true면 라벨을 바닥에 눕힘(남쪽에서 읽는 방향), 아니면 카메라를 향함. */
 function Dimension({
   from,
   to,
@@ -1266,7 +1267,7 @@ function BuildingMass({
                     color: "#993C1D",
                   }}
                 >
-                  🚗 1층 주차 {day10GroundSpaces}대
+                  <Icon name="car" /> 1층 주차 {day10GroundSpaces}대
                   {day10IsPiloti ? " (필로티)" : " (벽체식)"}
                 </div>
               </Html>
@@ -1342,7 +1343,7 @@ function BuildingMass({
             color: edgeColor,
           }}
         >
-          {useIcon} {useLabel}
+          <Icon name={useIcon} /> {useLabel}
         </div>
       </Html>,
     );
@@ -2049,7 +2050,7 @@ function ParcelMass({
               color: "#993C1D",
             }}
           >
-            🚗 1층 주차 {groundSpaces}대{piloti ? " (필로티)" : " (벽체식)"}
+            <Icon name="car" /> 1층 주차 {groundSpaces}대{piloti ? " (필로티)" : " (벽체식)"}
           </div>
         </Html>
       </group>
@@ -2065,7 +2066,7 @@ function ParcelMass({
       {items}
       {floors > 0 && topPts.length >= 3 && <RoofSlab pts={topPts} y={topY} color={massColor} />}
       {parking}
-      {/* 📏 치수 — 폭·깊이(바닥)·높이(모서리)·정북 이격(최상층) */}
+      {/* 치수 — 폭·깊이(바닥)·높이(모서리)·정북 이격(최상층) */}
       {floors > 0 && fpW > 3 && (
         <Dimension
           from={[fpBounds.minX, 0.1, -fpBounds.minY + 2.0]}
@@ -2134,7 +2135,7 @@ function ParcelMass({
               color: edgeColor,
             }}
           >
-            {useIcon} {useLabel} · 실형상
+            <Icon name={useIcon} /> {useLabel} · 실형상
           </div>
         </Html>
       )}

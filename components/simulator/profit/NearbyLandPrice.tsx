@@ -117,7 +117,7 @@ export function NearbyLandPrice() {
   if (!pnu && !officialPy) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-card p-4 text-[12px] text-muted-foreground">
-        🏷️ <strong className="text-foreground">주변 토지 시세</strong>
+        <strong className="text-foreground">주변 토지 시세</strong>
         &nbsp;— 1번 탭에서 지번 조회 후 자동으로 불러옵니다.
         <br />
         조회 후 평당 토지가를 실거래가/공시지가 기준으로 자동 입력할 수 있습니다.
@@ -133,7 +133,7 @@ export function NearbyLandPrice() {
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-secondary/50 transition-colors text-left"
       >
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold">🏷️ 주변 토지 시세</span>
+          <span className="text-[13px] font-semibold">주변 토지 시세</span>
           {lotInfo?.address && (
             <span className="text-[11px] text-muted-foreground truncate max-w-[200px]">
               {lotInfo.address}

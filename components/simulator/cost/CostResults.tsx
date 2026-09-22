@@ -1,6 +1,7 @@
 "use client";
 
 import { formatEok, formatWon } from "@/lib/calc/cost";
+import { Icon } from '@/components/ui/icon'
 import { useCostSnapshot } from "@/lib/plan/useSnapshots";
 import { formatPyeongAsArea } from "@/lib/utils/area";
 import {
@@ -157,7 +158,7 @@ export function CostResults() {
       {/* 학습 패널 — 3 탭 */}
       <div className="bg-card border border-border rounded-md p-4">
         <div className="text-[11px] text-muted-foreground font-medium mb-2">
-          📚 부담금 학습 — 공식과 현재값 비교
+          <Icon name="book" /> 부담금 학습 — 공식과 현재값 비교
         </div>
         <Tabs defaultValue="farm">
           <TabsList>

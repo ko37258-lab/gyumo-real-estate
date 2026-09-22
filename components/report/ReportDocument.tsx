@@ -1488,7 +1488,7 @@ function ParkingPage({ input, brand }: { input: ReportInputs; brand: BrandConfig
             rows={[
               ["1층 지상주차 점유", formatArea(s.groundParkingArea)],
               [
-                s.floor1Indoor <= 0 ? "⚠ 1층 영업 가능 면적" : "1층 영업 가능 면적",
+                s.floor1Indoor <= 0 ? "1층 영업 가능 면적" : "1층 영업 가능 면적",
                 s.floor1Indoor <= 0
                   ? "0㎡ — 1층 전체가 주차"
                   : formatArea(s.floor1Indoor),
@@ -1571,7 +1571,7 @@ function ParkingPage({ input, brand }: { input: ReportInputs; brand: BrandConfig
               marginBottom: 2,
             }}
           >
-            ⚖️ {t.basis}
+            {t.basis}
           </PdfText>
           <PdfText
             style={{

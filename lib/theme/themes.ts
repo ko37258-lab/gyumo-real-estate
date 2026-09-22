@@ -40,7 +40,7 @@ export const THEMES: Theme[] = [
     id: "mrhomes",
     name: "MR.K (추천)",
     description: "미스터홈즈 기본 코랄·크림 톤",
-    emoji: "🟧",
+    emoji: "",
     colors: {
       primary: "#F0997B",
       primaryDark: "#993C1D",
@@ -60,7 +60,7 @@ export const THEMES: Theme[] = [
     id: "forest",
     name: "포레스트",
     description: "짙은 그린 + 베이지 (자연·친환경)",
-    emoji: "🟢",
+    emoji: "check",
     colors: {
       primary: "#10B981",
       primaryDark: "#064E3B",
@@ -80,7 +80,7 @@ export const THEMES: Theme[] = [
     id: "midnight",
     name: "미드나잇",
     description: "다크 + 골드 액센트 (고급·집중)",
-    emoji: "⚫",
+    emoji: "",
     isDark: true,
     colors: {
       primary: "#FBBF24",
@@ -101,7 +101,7 @@ export const THEMES: Theme[] = [
     id: "lightclean",
     name: "라이트 클린",
     description: "화이트 + 블루 액센트 (깔끔·밝음)",
-    emoji: "⚪",
+    emoji: "",
     colors: {
       primary: "#3B82F6",
       primaryDark: "#1E40AF",
@@ -121,7 +121,7 @@ export const THEMES: Theme[] = [
     id: "premium",
     name: "프리미엄",
     description: "네이비 + 실버 (금융·기관 톤)",
-    emoji: "🟦",
+    emoji: "",
     colors: {
       primary: "#475569",
       primaryDark: "#1E293B",

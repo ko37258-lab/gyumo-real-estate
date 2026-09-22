@@ -4,6 +4,7 @@
 // 실형상(지번 조회) 필지에서만 계산 가능. 계획 참고용임을 명시한다.
 
 import { useMemo } from "react";
+import { Icon } from '@/components/ui/icon'
 import { useSimulatorStore } from "@/store/simulator";
 import { ZONES } from "@/lib/zones";
 import { lotPyToSqm, buildingFootprintSqm } from "@/lib/calc/coverage";
@@ -55,7 +56,7 @@ export default function SunlightImpactCard() {
   return (
     <div className="rounded-md border border-border bg-card">
       <div className="px-3 py-2 border-b border-border bg-secondary/40">
-        <div className="text-[13px] font-bold">☀️ 북측 일조 영향 진단 <span className="text-[11px] font-medium text-muted-foreground">동지 9~15시 그림자 스캔</span></div>
+        <div className="text-[13px] font-bold"><Icon name="star" /> 북측 일조 영향 진단 <span className="text-[11px] font-medium text-muted-foreground">동지 9~15시 그림자 스캔</span></div>
         <p className="text-[11px] text-muted-foreground mt-0.5">
           이 매스가 북측 이웃 땅에 남기는 일조 — 판례 수인한도(동지 9~15시 <b>연속 2시간</b>) 기준.
         </p>

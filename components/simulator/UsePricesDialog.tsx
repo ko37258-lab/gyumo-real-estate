@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +17,7 @@ import { useUsePricesStore } from "@/store/useprices";
 import type { ReportUsePrices } from "@/lib/ai/types";
 
 /**
- * 📊 용도별 분양가·임대료 팝업 (플렉시티 대응).
+ * <Icon name="chart-bar" /> 용도별 분양가·임대료 팝업 (플렉시티 대응).
  * 매매(분양가 참고)·월세(임대료 참고)를 용도별로, 상업은 층별로 표시.
  * 조회 결과는 useUsePricesStore에 저장 → 보고서 생성 시 선택 포함.
  */
@@ -71,7 +72,7 @@ export function UsePricesDialog({
               color: "var(--info)",
             }}
           >
-            📊 용도별 분양가·임대료 전체 보기
+            <Icon name="chart-bar" /> 용도별 분양가·임대료 전체 보기
           </button>
         }
       />
@@ -95,7 +96,7 @@ export function UsePricesDialog({
           )}
           {error && (
             <div className="px-3 py-2 rounded-md text-xs bg-red-50 border-l-4 border-red-500 text-red-700">
-              ⚠ {error}
+              <Icon name="warning" /> {error}
             </div>
           )}
           {d && !loading && (

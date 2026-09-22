@@ -1,6 +1,7 @@
 "use client";
 
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
+import { Icon } from '@/components/ui/icon'
 import { Label } from "@/components/ui/label";
 import { useProfitStore } from "@/store/profit";
 import type { RepaymentMethod } from "@/lib/calc/loan";
@@ -46,7 +47,7 @@ export function LoanCalculator({
   return (
     <section className="bg-card border border-border rounded-lg p-4 space-y-4">
       <header className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">🏦 대출</h3>
+        <h3 className="text-sm font-semibold"><Icon name="bank" /> 대출</h3>
         <span className="text-[10.5px] text-muted-foreground">
           베이스 사업비 {formatEok(baseProjectCost)} 기준
         </span>
@@ -60,7 +61,7 @@ export function LoanCalculator({
         max={80}
         step={5}
         unit="%"
-        hint="💡 토지담보 60~70%, PF 60~80% 일반적"
+        hint="토지담보 60~70%, PF 60~80% 일반적"
         inputMin={0}
         inputMax={100}
       />
@@ -75,8 +76,8 @@ export function LoanCalculator({
         unit="억원"
         hint={
           s.loanAmountOverride === null
-            ? "🔄 LTC로 자동 산정 중 — 슬라이더 조작 시 사용자 직접 입력 모드로 전환"
-            : "✋ 사용자 직접 입력 모드 — LTC는 표시값"
+            ? "LTC로 자동 산정 중 — 슬라이더 조작 시 사용자 직접 입력 모드로 전환"
+            : "사용자 직접 입력 모드 — LTC는 표시값"
         }
         inputMin={0}
         inputMax={10000}
@@ -91,7 +92,7 @@ export function LoanCalculator({
         max={12}
         step={0.1}
         unit="%"
-        hint="💰 한국은행 기준금리 3.25% (2026.5 기준) · 토지담보 4~7% · PF 5~10%"
+        hint="한국은행 기준금리 3.25% (2026.5 기준) · 토지담보 4~7% · PF 5~10%"
         inputMin={0}
         inputMax={30}
       />

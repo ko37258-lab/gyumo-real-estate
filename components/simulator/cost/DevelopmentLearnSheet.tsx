@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { Icon } from '@/components/ui/icon'
 import { BookOpenIcon, ChevronDownIcon } from "lucide-react";
 import {
   Sheet,
@@ -97,7 +98,7 @@ export function DevelopmentLearnSheet() {
               </li>
             </ul>
             <p className="mt-2 text-[12px] text-muted-foreground/90">
-              ⚠️ 사업이 대상에 해당하지 않으면 부담금이 아예 없습니다. 가장 먼저
+              <Icon name="warning" /> 사업이 대상에 해당하지 않으면 부담금이 아예 없습니다. 가장 먼저
               확인할 항목.
             </p>
           </Section>
@@ -165,7 +166,7 @@ export function DevelopmentLearnSheet() {
               </li>
             </ul>
             <p className="mt-2 text-[12px] text-muted-foreground/90">
-              ⚠️ <b>비용 인정이 부담금 결과를 좌우합니다.</b> 영수증·세금계산서·
+              <Icon name="warning" /> <b>비용 인정이 부담금 결과를 좌우합니다.</b> 영수증·세금계산서·
               감정평가서 등 증빙을 사업 초기부터 철저히 모아야 합니다.
             </p>
           </Section>

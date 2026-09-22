@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from '@/components/ui/icon'
 import { signUp } from "@/app/actions/auth";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 
@@ -48,7 +49,7 @@ export default async function SignupPage({
           className="rounded-lg px-3.5 py-2.5 mb-4 text-[11.5px] leading-relaxed"
           style={{ background: "rgba(255,207,13,0.10)", border: "1px solid rgba(255,207,13,0.25)", color: "rgba(255,255,255,0.75)" }}
         >
-          🎁 가입하면 <b style={{ color: "#FFCF0D" }}>무료 3크레딧</b>이 지급됩니다 (조회 3건). 소진 후에는 정회원 신청으로 크레딧을 충전할 수 있습니다.
+          <Icon name="gift" /> 가입하면 <b style={{ color: "#FFCF0D" }}>무료 3크레딧</b>이 지급됩니다 (조회 3건). 소진 후에는 정회원 신청으로 크레딧을 충전할 수 있습니다.
         </div>
 
         <GoogleButton next="/simulator" />

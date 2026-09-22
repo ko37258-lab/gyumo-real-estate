@@ -7,7 +7,7 @@ import { sendAdminEmail } from "./email";
  * 이메일 가입(서버 액션)과 구글 가입(콜백) 두 경로에서 모두 부른다.
  * gyumo_profiles.signup_notified_at 로 중복 발송을 막으므로 몇 번을 불러도 안전하다.
  *
- * ⚠ 이 함수는 절대 예외를 밖으로 던지지 않는다 — 알림 때문에 가입이 실패하면 안 된다.
+ * 이 함수는 절대 예외를 밖으로 던지지 않는다 — 알림 때문에 가입이 실패하면 안 된다.
  */
 export async function notifyNewSignup(userId: string): Promise<void> {
   try {

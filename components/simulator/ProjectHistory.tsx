@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { useHistoryStore } from "@/store/history";
 import { useUnitStore } from "@/store/unit";
 import { formatAreaShortBy } from "@/lib/utils/area";
 
 /**
- * 📁 내 프로젝트 이력 — 지번 조회 성공 시 자동 기록된 물건 목록.
+ * <Icon name="folder" /> 내 프로젝트 이력 — 지번 조회 성공 시 자동 기록된 물건 목록.
  *
  * 저장소는 서버 DB(gyumo_history)가 정본 — 어느 기기·브라우저로 로그인해도
  * 같은 이력이 보인다. LocalStorage 는 두 가지 역할만 남는다:
@@ -117,7 +118,7 @@ export function ProjectHistory() {
     <div className="rounded-md border border-border bg-card p-2.5">
       <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
         <span className="text-[11px] font-bold text-foreground">
-          📁 내 프로젝트 이력 ({records.length}건)
+          <Icon name="folder" /> 내 프로젝트 이력 ({records.length}건)
         </span>
         <span className="flex items-center gap-1.5">
           <a
@@ -126,7 +127,7 @@ export function ProjectHistory() {
             style={{ borderColor: "var(--info)", color: "var(--info)" }}
             title="내 조회 이력을 CSV(엑셀)로 내려받습니다"
           >
-            📥 자료 다운로드
+            <Icon name="download" /> 자료 다운로드
           </a>
           <button
             type="button"

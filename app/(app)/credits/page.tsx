@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import Link from "next/link";
 import {
   BANK_INFO,
@@ -158,7 +159,7 @@ export default function CreditsPage() {
           style={{ background: "rgba(153,60,29,0.06)", borderColor: "rgba(153,60,29,0.3)" }}
         >
           <div className="font-bold mb-2" style={{ color: "#993C1D" }}>
-            📌 신청 안내
+            <Icon name="pushpin" /> 신청 안내
           </div>
           <ul className="space-y-1 list-disc pl-5">
             {CREDIT_NOTICE.map((line) => (

@@ -25,7 +25,7 @@ export const REVISED_EFFECTIVE_DATE = "2026-11-12";
 /**
  * 기준일(허가·신고 신청 예정일, 없으면 검토일)에 적용되는 규칙.
  * 시행일 전 신청분은 개정 전 규정(시행령 제86조①), 시행일 이후 신청분은 개정 후 규정.
- * ⚠️ 적용례는 부칙 기준 — 심의·허가 단계가 나뉘는 사업은 관할청 확인 필요.
+ * 적용례는 부칙 기준 — 심의·허가 단계가 나뉘는 사업은 관할청 확인 필요.
  */
 export function sunlightRuleForDate(ymd: string): SunlightRule {
   return ymd >= REVISED_EFFECTIVE_DATE ? "revised" : "legacy";

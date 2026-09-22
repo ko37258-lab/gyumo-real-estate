@@ -4,6 +4,7 @@
 // 계산은 lib/calc/enforcementFine.ts 단일 출처. 여기서는 입력·표시만 한다.
 
 import { useMemo, useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import { CalculatorIcon, ChevronDownIcon, FileDownIcon } from "lucide-react";
 import {
   Sheet,
@@ -59,7 +60,7 @@ export default function EnforcementFineTip() {
       {/* 설명 최소 폭 확보 — 좁은 화면에선 버튼이 아래 줄로 내려간다 */}
       <div className="min-w-[220px] flex-1">
         <div className="text-[12.5px] font-bold text-amber-900">
-          💡 Tip · 위반건축물 이행강제금 계산하기
+          <Icon name="idea" /> Tip · 위반건축물 이행강제금 계산하기
         </div>
         <p className="text-[11px] text-amber-900/80 mt-0.5 leading-relaxed">
           무허가·건폐율·용적률 초과·용도변경 등 위반 유형별로 1회 부과액과 연간 누적액을 법 80조·별표15 기준으로 산정합니다.
@@ -176,7 +177,7 @@ export function EnforcementFineSheet({
   const toggle = <T extends string>(list: T[], v: T, set: (x: T[]) => void) =>
     set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
-  /** 📄 결과 보고서 PDF — 입력 조건 스냅샷 + 계산 결과를 그대로 싣는다. 이벤트 안에서 생성·즉시 해제. */
+  /** <Icon name="document" /> 결과 보고서 PDF — 입력 조건 스냅샷 + 계산 결과를 그대로 싣는다. 이벤트 안에서 생성·즉시 해제. */
   async function handleDownloadPdf() {
     if (!result || pdfBusy) return;
     setPdfBusy(true);
@@ -410,7 +411,7 @@ export function EnforcementFineSheet({
                 {result.warnings.length > 0 && (
                   <ul className="space-y-1 pt-1">
                     {result.warnings.map((w, i) => (
-                      <li key={i} className="text-[10.5px] text-red-800 leading-snug">⚠ {w}</li>
+                      <li key={i} className="text-[10.5px] text-red-800 leading-snug"><Icon name="warning" /> {w}</li>
                     ))}
                   </ul>
                 )}
@@ -421,7 +422,7 @@ export function EnforcementFineSheet({
                   className="w-full gap-1.5 bg-amber-800 hover:bg-amber-900 text-white mt-1"
                 >
                   <FileDownIcon className="size-3.5" />
-                  <span>{pdfBusy ? "PDF 생성 중…" : "📄 계산결과 보고서 PDF 다운로드"}</span>
+                  <span>{pdfBusy ? "PDF 생성 중…" : "계산결과 보고서 PDF 다운로드"}</span>
                 </Button>
                 <p className="text-[10px] text-muted-foreground text-center">
                   입력 조건·산정 과정·근거 법령이 담긴 A4 1~2쪽 보고서 (브랜드 설정 반영)

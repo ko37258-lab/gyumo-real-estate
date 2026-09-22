@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import Link from "next/link";
 import { LandLookup } from "@/components/simulator/LandLookup";
 import { ProjectHistory } from "@/components/simulator/ProjectHistory";
@@ -78,7 +79,7 @@ export default function SimulatorPage() {
               aria-label="아파트 일조 보기"
               title="아파트 일조 보기 — 단지 검색 → 시간대별 햇빛·그림자"
             >
-              ☀️
+              <Icon name="star" />
             </Link>
             <Link
               href="/settings"
@@ -86,7 +87,7 @@ export default function SimulatorPage() {
               aria-label="설정"
               title="설정"
             >
-              ⚙️
+              <Icon name="gear" />
             </Link>
           </div>
         </header>
@@ -150,7 +151,7 @@ function ProceedToScale({ onProceed }: { onProceed: () => void }) {
       <div className="min-w-0">
         <div className="text-[13px] font-bold text-foreground">
           {land
-            ? `📍 ${land.address} — 토지가치분석 완료`
+            ? `${land.address} — 토지가치분석 완료`
             : "지도를 클릭하거나 지번을 입력해 토지가치를 먼저 확인하세요"}
         </div>
         <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -164,7 +165,7 @@ function ProceedToScale({ onProceed }: { onProceed: () => void }) {
         size="lg"
         className="shrink-0 bg-[#993C1D] hover:bg-[#7A2F16] text-white font-bold"
       >
-        🏗️ 규모검토 하기 →
+        <Icon name="crane" /> 규모검토 하기 →
       </Button>
     </div>
   );

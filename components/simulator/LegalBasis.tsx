@@ -1,8 +1,9 @@
+import { Icon } from '@/components/ui/icon'
 export function LegalBasis() {
   return (
     <div className="bg-card border border-border rounded-md px-3.5 py-3 text-[11px] text-muted-foreground leading-relaxed">
       <div className="font-medium text-foreground mb-1.5 text-xs">
-        ⚖️ 법적 근거
+        <Icon name="scale" /> 법적 근거
       </div>
       <ul className="space-y-0.5">
         <li>

@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { Icon } from '@/components/ui/icon'
 import { useSimulatorStore } from "@/store/simulator";
 import { usePlan } from "@/lib/plan/usePlan";
 import { ZONES } from "@/lib/zones";
@@ -537,7 +538,7 @@ export function ScaleVisualizer() {
                 className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded"
                 style={{ background: "#2563EB18", color: "#2563EB" }}
               >
-                📐 {parcelShape.isMerged
+                <Icon name="ruler" /> {parcelShape.isMerged
                   ? `합필 ${parcelShape.members?.length ?? 0}필지 실형상`
                   : "실제 지적 형상 반영"} ({parcelShape.areaSqm.toLocaleString("ko-KR")}㎡)
               </span>
@@ -916,7 +917,7 @@ export function ScaleVisualizer() {
                           strokeWidth: 2.5,
                         }}
                       >
-                        🚗 주차 {day10.groundSpaces}대 · {fmt(day10.groundParkingArea, 0)}㎡
+                        <Icon name="car" /> 주차 {day10.groundSpaces}대 · {fmt(day10.groundParkingArea, 0)}㎡
                       </text>
                     )}
                   </>
@@ -949,7 +950,7 @@ export function ScaleVisualizer() {
                     strokeWidth: 2.5,
                   }}
                 >
-                  {useStyle.icon} {useStyle.usageLabel}
+                  <Icon name={useStyle.icon} /> {useStyle.usageLabel}
                 </text>
               </>
             );
@@ -1039,7 +1040,7 @@ export function ScaleVisualizer() {
                           strokeWidth: 2.5,
                         }}
                       >
-                        🚗 주차 {day10.groundSpaces}대 · {fmt(day10.groundParkingArea, 0)}㎡
+                        <Icon name="car" /> 주차 {day10.groundSpaces}대 · {fmt(day10.groundParkingArea, 0)}㎡
                       </text>
                     )}
                   </>
@@ -1111,7 +1112,7 @@ export function ScaleVisualizer() {
                     strokeWidth: 2.5,
                   }}
                 >
-                  {useStyle.icon} {useStyle.usageLabel}
+                  <Icon name={useStyle.icon} /> {useStyle.usageLabel}
                 </text>
               </>
             )}
@@ -1193,7 +1194,7 @@ export function ScaleVisualizer() {
                 strokeWidth: 2.5,
               }}
             >
-              🔗 합필 {mergedParcels.length}필지
+              <Icon name="link" /> 합필 {mergedParcels.length}필지
             </text>,
           );
           return <g>{items}</g>;
@@ -1363,7 +1364,7 @@ export function ScaleVisualizer() {
             strokeWidth: 3,
           }}
         >
-          {useStyle.icon} {useStyle.usageLabel}
+          <Icon name={useStyle.icon} /> {useStyle.usageLabel}
         </text>
 
         {/* 지상 주차장 (필로티) 오버레이 */}
@@ -1442,7 +1443,7 @@ export function ScaleVisualizer() {
                 textAnchor="middle"
                 style={{ fontSize: 8, fontWeight: 700, fill: "#993C1D" }}
               >
-                🚗 1층 주차 {day10.groundSpaces}대
+                <Icon name="car" /> 1층 주차 {day10.groundSpaces}대
               </text>
             )}
           </g>
@@ -1543,7 +1544,7 @@ export function ScaleVisualizer() {
             className="inline-block w-2.5 h-2.5"
             style={{ background: useStyle.gradMid }}
           />
-          {useStyle.icon} {useStyle.usageLabel} 매스
+          <Icon name={useStyle.icon} /> {useStyle.usageLabel} 매스
         </span>
         <span className="inline-flex items-center gap-1">
           <span
@@ -1586,7 +1587,7 @@ export function ScaleVisualizer() {
       </div>
       {(parkingMode === "ground" || parkingMode === "mixed") && (
         <p className="text-[10.5px] text-muted-foreground mt-1.5 leading-relaxed">
-          🚗 평면도의 자동차는 산정된 <b>지상 주차 대수</b>를 실제 주차칸 규격(2.6×5.5m)으로
+          <Icon name="car" /> 평면도의 자동차는 산정된 <b>지상 주차 대수</b>를 실제 주차칸 규격(2.6×5.5m)으로
           도로(남측) 쪽부터 배치한 예시입니다. 1대당 점유 면적에는 주차칸 외에 차로·회전
           공간이 포함되며, 필로티 구조면 이 면적이 연면적 산정에서 제외됩니다(시행령 제119조①4).
         </p>

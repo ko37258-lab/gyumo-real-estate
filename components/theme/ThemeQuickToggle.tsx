@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Icon } from '@/components/ui/icon'
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { setActiveThemeId, useActiveThemeId } from "@/lib/theme/storage";
@@ -46,9 +47,9 @@ export function ThemeQuickToggle() {
         aria-expanded={open}
         title="화면 색상 테마 선택"
       >
-        <span className="text-base">🎨</span>
+        <span className="text-base"><Icon name="palette" /></span>
         <span className="hidden md:inline text-[11px] text-muted-foreground">
-          {current.emoji} {current.name.replace(" (추천)", "")}
+          <Icon name={current.emoji} /> {current.name.replace(" (추천)", "")}
         </span>
       </Button>
 
@@ -59,7 +60,7 @@ export function ThemeQuickToggle() {
           className="absolute right-0 top-full mt-2 z-[1200] w-72 rounded-lg border border-border bg-card shadow-xl overflow-hidden"
         >
           <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground bg-secondary/60 border-b border-border">
-            🎨 화면 색상 테마 선택
+            <Icon name="palette" /> 화면 색상 테마 선택
           </div>
           <ul className="py-1">
             {THEMES.map((theme) => {
@@ -94,7 +95,7 @@ export function ThemeQuickToggle() {
                     </span>
                     <span className="flex-1 min-w-0">
                       <span className="flex items-center gap-1 text-[12.5px] font-semibold">
-                        {theme.emoji} {theme.name}
+                        <Icon name={theme.emoji} /> {theme.name}
                         {isActive && (
                           <span className="ml-auto text-[var(--success)] text-[11px]">
                             ✓
@@ -116,7 +117,7 @@ export function ThemeQuickToggle() {
               onClick={() => setOpen(false)}
               className="block px-3 py-2 text-[11px] text-muted-foreground hover:bg-secondary/60 transition"
             >
-              ⚙️ 자세한 설정으로...
+              <Icon name="gear" /> 자세한 설정으로...
             </Link>
           </div>
         </div>
