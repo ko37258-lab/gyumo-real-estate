@@ -254,6 +254,23 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-09-23** — **등급별 이용 규칙 정비: 무제한 등급 + 월 15회 자동 지급** (대표님 지시).
+  - 증상: 등급은 '정회원'인데 "크레딧이 부족합니다 — 정회원 신청" 이 뜬다(7명). 원인은 **등급과 크레딧이 따로**였기 때문 — gyumo 는 `allowed = credits > 0` 로만 판단하고 무제한은 관리자·스텝뿐이었는데, 유료 등급 12명 중 입금 승인으로 크레딧이 나간 건 2건뿐이고 나머지는 등급만 올려 둔 상태였다(잔액 0인 10명 전원 "가입 보너스 3개만 쓰고 0").
+  - 규칙(단일 출처 = DB `gyumo_role_unlimited`/`gyumo_role_monthly_credits` + `lib/membership.ts` `UNLIMITED_ROLES`/`MONTHLY_CREDIT_ROLES`, **둘을 항상 같이 고칠 것**):
+    · 무제한 — VIP · **평생회원(신설)** · 미스터홈즈센터 · 스텝 · 관리자
+    · 매달 15개(그 달 한도, 이월 없음) — 정회원 · 멘토스쿨
+    · 일반회원 — 가입 3개 + 충전분
+  - 구현: `supabase/schema_monthly_credits.sql`. 월 지급은 `source='monthly:YYYY-MM'` + 유니크 인덱스로 한 달 1회만, 만료는 그 달 말일(KST) → 자동 초기화. `gyumo_credit_balance_ensured`/`gyumo_consume_credit` 이 조회·차감 직전에 그달 분을 채우므로 **크론이 필요 없다**. 소비 순서는 만료 임박 우선이라 월 지급분이 구매분보다 먼저 쓰인다(구매분 보존).
+  - 화면: 월 지급 등급에는 "이번 달 15회를 모두 사용했습니다 — 다음 달 1일에 다시 채워집니다"로 문구 분기(예전엔 정회원에게도 "정회원 신청하세요"), 관리자 회원표 등급 버튼에 `무제한/매달 15회/충전분만` 표기.
+  - 검증: DB 롤백 테스트 — 정회원 15회 후 16번째 `-1`(차단), 센터 consume `9999`(배치 불변), 일반회원 5→4, 월 배치 중복 지급 0. tsc 0 / next build ✓ / vitest 49. 적용 후 정회원 9명·센터 2명·멘토스쿨 1명에게 이번 달분 지급됨.
+  - ⚠ 로컬은 `DEV_BYPASS_USAGE=1` 이라 /api/usage 가 항상 스텝으로 응답 — 등급 로직은 DB 테스트나 운영에서 확인해야 한다.
+
+- **2026-09-23 (2)** — **AI 분석 키는 회원 본인 키 — 발급 바로가기·절차 안내** (대표님 지시 "api 키는 각자 자기가 넣는걸로").
+  - 구조 확인: **지번·지도·실거래·건축물대장은 회사 키**(VWORLD_KEY·DATAGO_KEY·KAKAO_KEY, 운영 등록됨) / **AI 종합 분석만 BYOK**(브라우저 LocalStorage) + 서버 키 폴백. 운영에 `GEMINI_API_KEY`·`ANTHROPIC_API_KEY` **미등록** → 실제로 지금도 회원 키로만 동작(회사 AI 비용 0). 폴백 코드는 남겨 둔다(운영자가 나중에 켤 수 있게).
+  - `/settings`: 제목 "AI 분석 키 설정 (회원 본인 키)", 3단계 안내 카드(로그인 → Create API key → 붙여넣고 저장·테스트), 카드마다 **[키 발급받기] 버튼**(Gemini: aistudio.google.com/apikey 무료 / Claude: console.anthropic.com 유료) + 사이트별 실제 버튼 이름을 적은 한 줄 절차. "이 키는 보고서 AI 분석에만 쓰고 지번·지도 자료는 회사 제공" 명시.
+  - 보고서 창: 키 없을 때 "본인 키를 한 번만 등록하면 됩니다" + **[무료 키 발급받기(Gemini)]** + [발급받은 키 등록] 두 버튼.
+  - 검증: tsc 0 / next build ✓ / 로컬 /settings 렌더 — 발급 링크 2개 정상(aistudio, console.anthropic), 375px 넘침 0.
+
 - **2026-09-22** — **이모지 전면 제거 → 우리 아이콘 72종(힉스필드 벡터 SVG)** (브랜치 `feature/own-icons`, 372law 와 같은 세트).
   - `lib/icons/svg/*.svg` 72종 → `lib/icons/build.py` 가 `icons.generated.ts`(name→svg 문자열)로 굽는다(Next/Turbopack 은 import.meta.glob 없음). `components/ui/icon.tsx` `<Icon name="house" />`, `app/globals.css .ico`. 남색은 currentColor·금색 고정·흰 판은 `--icon-bg`.
   - 코드모드 `scripts/emoji-to-icon.py`(매핑 `lib/icons/emojiIcons.ts`): JSX 텍스트 124곳 → `<Icon>`, 문자열 안 59곳 삭제, 이모지 하나짜리 문자열 38곳 → 아이콘 이름(`{x.emoji}`/`{x.icon}` 렌더 8곳은 `<Icon name={…}/>`). `.ts` 파일은 태그 대신 삭제.
