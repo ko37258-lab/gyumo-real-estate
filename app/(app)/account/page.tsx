@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { Icon } from '@/components/ui/icon'
-import { roleColor, roleDesc } from "@/lib/membership";
+import { roleColor, roleDesc, isUnlimitedRole, monthlyCreditsFor } from "@/lib/membership";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
 import { saveProfileInfoForm } from "@/app/actions/profile";
@@ -33,14 +33,16 @@ export default async function AccountPage({
   const badgeColor = roleColor(role);
 
   // 크레딧 잔액·임박 만료일 (1회 조회 = 1크레딧)
-  const { data: balanceRaw } = await supabase.rpc("gyumo_credit_balance", {
+  const { data: balanceRaw } = await supabase.rpc("gyumo_credit_balance_ensured", {
     p_user: user.id,
   });
   const { data: nextExpiry } = await supabase.rpc("gyumo_credit_next_expiry", {
     p_user: user.id,
   });
   const credits = Number(balanceRaw) || 0;
-  const isUnlimited = Boolean(profile?.is_admin) || role === "스텝";
+  // 무제한 등급(VIP·평생회원·미스터홈즈센터·스텝)·관리자는 크레딧 표시 대신 "무제한" (2026-09-23)
+  const isUnlimited = isUnlimitedRole(role, Boolean(profile?.is_admin));
+  const monthlyCredits = monthlyCreditsFor(role);
 
   // 구글 가입자는 가입 폼을 거치지 않아 이름·전화가 비어 있다 — 채우면 3크레딧.
   const isGoogle = (user.app_metadata as { provider?: string } | null)?.provider === "google";
@@ -182,7 +184,9 @@ export default async function AccountPage({
               )}
               {credits === 0 && (
                 <p className="text-xs" style={{ color: "#f87171" }}>
-                  크레딧이 모두 소진됐습니다. 정회원 신청으로 충전해주세요.
+                  {monthlyCredits > 0
+                    ? `이번 달 ${monthlyCredits}회를 모두 사용했습니다. 다음 달 1일에 ${monthlyCredits}회가 다시 채워집니다.`
+                    : "크레딧이 모두 소진됐습니다. 정회원 신청으로 충전해주세요."}
                 </p>
               )}
               <Link

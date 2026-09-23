@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Icon } from '@/components/ui/icon'
 import { useRouter } from "next/navigation";
-import { ALL_ROLES } from "@/lib/membership";
+import { ALL_ROLES, roleColor, isUnlimitedRole, monthlyCreditsFor } from "@/lib/membership";
 import { formatDateKST } from "@/lib/utils";
 
 type Profile = {
@@ -22,14 +22,17 @@ type Profile = {
   name_registered_at?: string | null;
 };
 
-const ROLE_COLOR: Record<string, string> = {
-  "일반회원":       "#6b7280",
-  "정회원":         "#FFCF0D",
-  "VIP":            "#c4b5fd",
-  "미스터홈즈센터": "#34d399",
-  "멘토스쿨":       "#fb923c",
-  "스텝":           "#a78bfa",
-};
+// 색·등급 정의는 lib/membership 단일 출처를 쓴다 (예전엔 여기 따로 적어 두어 새 등급이 빠졌다)
+const ROLE_COLOR: Record<string, string> = Object.fromEntries(
+  ALL_ROLES.map((r) => [r, roleColor(r)]),
+);
+
+/** 등급 옆에 이용 규칙을 적어 둔다 — 무제한인지 매달 몇 회인지 (2026-09-23) */
+function roleRuleText(role: string): string {
+  if (isUnlimitedRole(role)) return "무제한";
+  const m = monthlyCreditsFor(role);
+  return m > 0 ? `매달 ${m}회` : "충전분만";
+}
 
 export function UserTable({
   profiles,
@@ -281,6 +284,7 @@ export function UserTable({
                               aria-pressed={active}
                               disabled={savingId === p.id || isPending}
                               onClick={() => setRole(p.id, r, current)}
+                              title={`${r} — ${roleRuleText(r)}`}
                               className="text-[11px] font-semibold px-2 py-1 rounded-md transition-colors disabled:cursor-not-allowed"
                               style={
                                 active
@@ -293,11 +297,9 @@ export function UserTable({
                           );
                         })}
                       </div>
-                      {savingId === p.id && (
-                        <div className="text-[10px] mt-1" style={{ color: "var(--muted-foreground)" }}>
-                          저장 중...
-                        </div>
-                      )}
+                      <div className="text-[10px] mt-1" style={{ color: "var(--muted-foreground)" }}>
+                        {savingId === p.id ? "저장 중..." : `현재: ${roleRuleText(rowRoles[p.id] ?? p.role)}`}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {/* 크레딧 잔액 — 일 3건 리셋 모델 폐기 후 daily_count 는 죽은 데이터라 교체 */}
