@@ -142,7 +142,7 @@ export function ReportDialog() {
     const activeProvider = getActiveProvider();
     if (!activeProvider && !serverReady) {
       setErrorMsg(
-        "분석 키가 없습니다. 설정 페이지에서 개인 키를 등록하거나, 운영자에게 서버 분석 활성화를 요청하세요.",
+        "분석 키가 없습니다. 설정에서 본인 API 키를 등록해주세요 (Gemini 무료 키로 충분합니다).",
       );
       setStatus("error");
       return;
@@ -513,13 +513,22 @@ function IdleView({
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-amber-700 text-[13px] font-medium">
               <AlertCircleIcon className="size-4" />
-              분석 도구가 설정되지 않았습니다
+              AI 분석 키가 없습니다 — 본인 키를 한 번만 등록하면 됩니다
             </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/settings"><Icon name="gear" /> 설정 페이지로</Link>
-            </Button>
-            <div className="text-[11px] text-muted-foreground">
-              설정 없이 PDF만 받으려면 아래 &ldquo;분석 없이 PDF만&rdquo;을 사용하세요.
+            {/* 회원 각자 키 정책 (2026-09-23) — 발급처로 바로 보내 준다 */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" asChild style={{ background: "#993C1D", color: "#fff" }}>
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer noopener">
+                  <Icon name="external" /> 무료 키 발급받기 (Gemini)
+                </a>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/settings"><Icon name="gear" /> 발급받은 키 등록</Link>
+              </Button>
+            </div>
+            <div className="text-[11px] text-muted-foreground leading-relaxed">
+              구글 계정으로 로그인 → <b>Create API key</b> → 나온 키를 복사해 설정에 붙여넣으면 끝입니다.
+              분석 없이 PDF만 받으시려면 아래 &ldquo;분석 없이 PDF만&rdquo;을 쓰세요.
             </div>
           </div>
         )}
