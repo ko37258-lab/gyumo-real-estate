@@ -254,6 +254,11 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-09-27** — **② 규모 검토 9개 섹션 "하나씩 보기(기본)" ↔ "한번에 보기" 전환** (대표님 피드백: "위에서 내려가면서 보니 바로바로 볼 수가 없다").
+  - `app/(app)/simulator/page.tsx`에 `ScaleSections` 컴포넌트 신설 — 용도지역·건폐율/용적률·2D/3D·일조·산정결과·주차장·가설계·법령근거·이행강제금 Tip 9개를 배열로 관리.
+  - 기본값(하나씩 보기): 아코디언 — 번호 배지 헤더만 나열, 클릭한 섹션만 펼쳐지고 나머지는 접힘 + "다음: OOO →" 버튼으로 순서대로 진행. [한번에 보기] 클릭 시 기존처럼 9개 전부 펼쳐서 스크롤(예전 동작 그대로).
+  - 검증: tsc 0 / 로컬 렌더 — 하나씩 보기에서 섹션 2 클릭 → 1은 접히고 2만 펼쳐짐 확인, 한번에 보기 클릭 → 기존 스택형 화면과 동일하게 전부 펼쳐짐 확인, 375px 모바일 레이아웃도 정상.
+
 - **2026-09-22** — **이모지 전면 제거 → 우리 아이콘 72종(힉스필드 벡터 SVG)** (브랜치 `feature/own-icons`, 372law 와 같은 세트).
   - `lib/icons/svg/*.svg` 72종 → `lib/icons/build.py` 가 `icons.generated.ts`(name→svg 문자열)로 굽는다(Next/Turbopack 은 import.meta.glob 없음). `components/ui/icon.tsx` `<Icon name="house" />`, `app/globals.css .ico`. 남색은 currentColor·금색 고정·흰 판은 `--icon-bg`.
   - 코드모드 `scripts/emoji-to-icon.py`(매핑 `lib/icons/emojiIcons.ts`): JSX 텍스트 124곳 → `<Icon>`, 문자열 안 59곳 삭제, 이모지 하나짜리 문자열 38곳 → 아이콘 이름(`{x.emoji}`/`{x.icon}` 렌더 8곳은 `<Icon name={…}/>`). `.ts` 파일은 태그 대신 삭제.
