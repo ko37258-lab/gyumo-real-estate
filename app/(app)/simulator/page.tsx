@@ -30,6 +30,101 @@ import {
 } from "@/components/ui/tabs";
 import { useLandInfoStore } from "@/store/landinfo";
 
+/**
+ * ② 규모 검토 섹션 9개를 순서대로 하나씩 열어보게(기본) / 한번에 펼쳐보게 전환.
+ * 대표님 피드백(2026-09-27): "위에서 내려가면서 보니 바로바로 볼 수가 없다" —
+ * 섹션이 한 번에 다 펼쳐져 있어 원하는 항목을 찾으려면 계속 스크롤해야 했음.
+ */
+const SCALE_SECTIONS = [
+  { key: "zone", title: "용도지역 선택", node: <ZoneSelector /> },
+  { key: "control", title: "건폐율·용적률·도로 설정", node: <ControlPanel /> },
+  { key: "visual", title: "2D/3D 시각화", node: <ScaleVisualizer /> },
+  { key: "sunlight", title: "일조 영향", node: <SunlightImpactCard /> },
+  { key: "result", title: "산정 결과", node: <ResultMetrics /> },
+  { key: "parking", title: "주차장 산정", node: <ParkingCalculator /> },
+  { key: "schematic", title: "가설계(기획설계 개요)", node: <SchematicPlanner /> },
+  { key: "legal", title: "법령 근거", node: <LegalBasis /> },
+  { key: "fine", title: "위반건축물 이행강제금 Tip", node: <EnforcementFineTip /> },
+] as const;
+
+function ScaleSections() {
+  const [mode, setMode] = useState<"step" | "all">("step");
+  const [openIndex, setOpenIndex] = useState(0);
+
+  return (
+    <div className="space-y-3.5">
+      <div className="flex items-center justify-end gap-2">
+        <div className="inline-flex rounded-lg border border-border overflow-hidden text-[11px] font-bold">
+          <button
+            type="button"
+            onClick={() => setMode("step")}
+            className={
+              mode === "step"
+                ? "px-3 py-1.5 bg-[var(--info)] text-white"
+                : "px-3 py-1.5 bg-card text-muted-foreground hover:bg-secondary"
+            }
+          >
+            하나씩 보기
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("all")}
+            className={
+              mode === "all"
+                ? "px-3 py-1.5 bg-[var(--info)] text-white"
+                : "px-3 py-1.5 bg-card text-muted-foreground hover:bg-secondary"
+            }
+          >
+            한번에 보기
+          </button>
+        </div>
+      </div>
+
+      {mode === "all"
+        ? SCALE_SECTIONS.map((s) => <div key={s.key}>{s.node}</div>)
+        : SCALE_SECTIONS.map((s, i) => {
+            const open = i === openIndex;
+            return (
+              <div key={s.key} className="rounded-xl border border-border bg-card overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setOpenIndex(i)}
+                  aria-expanded={open}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-secondary/60 transition-colors"
+                >
+                  <span
+                    className={
+                      "shrink-0 w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center " +
+                      (open ? "bg-[var(--info)] text-white" : "bg-muted-foreground/60 text-white")
+                    }
+                  >
+                    {i + 1}
+                  </span>
+                  <span className={"flex-1 text-[13px] font-bold " + (open ? "text-foreground" : "text-muted-foreground")}>
+                    {s.title}
+                  </span>
+                  <span className="text-muted-foreground text-[12px]">{open ? "▾" : "▸"}</span>
+                </button>
+                {open && <div className="px-4 pb-4">{s.node}</div>}
+              </div>
+            );
+          })}
+
+      {mode === "step" && openIndex < SCALE_SECTIONS.length - 1 && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => setOpenIndex((i) => Math.min(i + 1, SCALE_SECTIONS.length - 1))}
+            className="bg-[#993C1D] hover:bg-[#7A2F16] text-white font-bold"
+          >
+            다음: {SCALE_SECTIONS[openIndex + 1].title} →
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SimulatorPage() {
   // 플렉시티식 단계 흐름: ① 토지가치분석(지도·추정가) → ② 규모검토 → ③ 비용 → ④ 사업성
   const [tab, setTab] = useState("land");
@@ -111,19 +206,9 @@ export default function SimulatorPage() {
             </div>
           </TabsContent>
 
-          {/* ② 규모 검토 */}
+          {/* ② 규모 검토 — 9개 섹션을 하나씩(기본)/한번에 보기 전환 */}
           <TabsContent value="scale">
-            <div className="space-y-3.5">
-              <ZoneSelector />
-              <ControlPanel />
-              <ScaleVisualizer />
-              <SunlightImpactCard />
-              <ResultMetrics />
-              <ParkingCalculator />
-              <SchematicPlanner />
-              <LegalBasis />
-              <EnforcementFineTip />
-            </div>
+            <ScaleSections />
           </TabsContent>
 
           <TabsContent value="cost">
