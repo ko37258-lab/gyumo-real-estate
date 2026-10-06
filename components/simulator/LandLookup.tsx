@@ -236,9 +236,22 @@ export function LandLookup({
   const [usage, setUsage] = useState<{
     isLoggedIn: boolean; used: number; limit: number; remaining: number; allowed: boolean; role: string;
     credits?: number; unlimited?: boolean; nextExpiry?: string | null;
+    /** 이 등급이 매달 받는 크레딧 수(정회원·멘토스쿨 15). 0이면 월 지급 없음 */
+    monthlyCredits?: number;
     /** 이력 계정별 분리용 */
     userId?: string | null;
   } | null>(null);
+
+    /**
+   * 크레딧 소진 안내 — 등급마다 다르다 (2026-09-23).
+   *   월 지급 등급(정회원·멘토스쿨): 이번 달 한도를 다 쓴 것 → 다음 달 1일 자동 충전
+   *   일반회원: 충전(정회원 신청)이 필요
+   * 예전엔 정회원에게도 "정회원 신청하세요"가 떠서 이미 회원인 분들이 혼란스러웠다.
+   */
+  const monthly = usage?.monthlyCredits ?? 0;
+  const creditMessage = monthly > 0
+    ? `이번 달 ${monthly}회를 모두 사용했습니다. 다음 달 1일에 ${monthly}회가 다시 채워집니다.`
+    : "크레딧이 부족합니다. 정회원 신청으로 크레딧을 충전해주세요.";
 
   useEffect(() => {
     fetch("/api/usage", { cache: "no-store" })
@@ -258,9 +271,9 @@ export function LandLookup({
       return;
     }
 
-    // 크레딧 체크 (클라이언트 사전 검사)
+  // 크레딧 체크 (클라이언트 사전 검사)
     if (usage !== null && usage.isLoggedIn && !usage.allowed) {
-      setError("크레딧이 부족합니다. 정회원 신청으로 크레딧을 충전해주세요.");
+      setError(creditMessage);
       return;
     }
 
@@ -275,7 +288,7 @@ export function LandLookup({
     if (usage?.isLoggedIn) {
       const incRes = await fetch("/api/usage", { method: "POST" });
       if (incRes.status === 429) {
-        setError("크레딧이 부족합니다. 정회원 신청으로 크레딧을 충전해주세요.");
+        setError(creditMessage);
         setLoading(false);
         setUsage((prev) => prev ? { ...prev, allowed: false, remaining: 0, credits: 0 } : prev);
         return;
@@ -808,17 +821,28 @@ export function LandLookup({
         <div className="mt-2 px-3 py-2.5 rounded-md text-[12px] flex items-center justify-between gap-2 border"
           style={{ background: "rgba(153,60,29,0.06)", borderColor: "rgba(153,60,29,0.35)" }}>
           <span>
-            <b style={{ color: "#993C1D" }}>크레딧이 모두 소진됐습니다.</b>{" "}
-            <span className="text-muted-foreground">
-              정회원 신청으로 충전하면 계속 조회할 수 있습니다.
-            </span>
+            {monthly > 0 ? (
+              <>
+                <b style={{ color: "#993C1D" }}>이번 달 {monthly}회를 모두 사용했습니다.</b>{" "}
+                <span className="text-muted-foreground">
+                  다음 달 1일에 {monthly}회가 다시 채워집니다. 더 필요하시면 충전하거나 관리자에게 문의하세요.
+                </span>
+              </>
+            ) : (
+              <>
+                <b style={{ color: "#993C1D" }}>크레딧이 모두 소진됐습니다.</b>{" "}
+                <span className="text-muted-foreground">
+                  정회원 신청으로 충전하면 계속 조회할 수 있습니다.
+                </span>
+              </>
+            )}
           </span>
           <a
             href="/credits"
             className="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-md"
             style={{ background: "#993C1D", color: "#fff" }}
           >
-            정회원 신청 →
+            {monthly > 0 ? "추가 충전 →" : "정회원 신청 →"}
           </a>
         </div>
       )}

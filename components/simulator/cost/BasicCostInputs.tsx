@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/icon'
 import { useCostSnapshot } from "@/lib/plan/useSnapshots";
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
 import { pyeongToSqmDisplay } from "@/lib/utils/area";
+import { AREA_TERMS } from "@/lib/report/areaTerms";
 
 export function BasicCostInputs() {
   const s = useCostStore();
@@ -34,7 +35,7 @@ export function BasicCostInputs() {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         <SliderInputPair
-          label="지상 연면적"
+          label={AREA_TERMS.aboveGroundGfa}
           hint={link("abovePyeong")}
           value={Math.round(eff.abovePyeong * 10) / 10}
           onChange={(v) => s.set("abovePyeong", v)}
@@ -47,7 +48,7 @@ export function BasicCostInputs() {
           inputMax={10000}
         />
         <SliderInputPair
-          label="지하 연면적"
+          label={AREA_TERMS.basementGfa}
           hint={link("basementPyeong")}
           value={Math.round(eff.basementPyeong * 10) / 10}
           onChange={(v) => s.set("basementPyeong", v)}

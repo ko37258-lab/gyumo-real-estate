@@ -162,15 +162,18 @@ export function computeProfitSnapshot(p: {
   ) reasons.push("주거 시세를 비주거 용도(업무·근생 등) 분양가로 쓰고 있습니다 — 해당 용도 비교사례로 바꾸세요.");
   for (const r of p.unresolvedRegulations ?? []) reasons.push(`미확인 규제: ${r} — 규모 자체가 바뀔 수 있습니다.`);
 
+  // 제목은 화면·PDF가 별도로 보여주는 상태 배지(판정 보류/손실/여유 부족/이익 발생)를
+  // 다시 반복하지 않는다 — "판정 보류 — 사업성 판정 보류 — 주요 가정 확인 전"처럼 같은 말이
+  // 두 번 찍히던 문제. 배지는 kind로 그려지고, title은 배지에 없는 내용만 담는다.
   let verdict: ProfitVerdict;
   if (reasons.length > 0) {
-    verdict = { kind: "hold", title: "사업성 판정 보류 — 주요 가정 확인 전", reasons };
+    verdict = { kind: "hold", title: "주요 가정 확인 전", reasons };
   } else if (result.isLoss) {
-    verdict = { kind: "loss", title: "입력 가정에서 손실", reasons: ["분양가·공사비·토지가·대출 조건을 재검토하세요."] };
+    verdict = { kind: "loss", title: "분양가·공사비·토지가·대출 조건 재검토 필요", reasons: ["입력 가정을 그대로 적용하면 손실입니다."] };
   } else if (result.isHighRisk) {
-    verdict = { kind: "risk", title: "입력 가정에서 손익분기 여유 부족", reasons: [`손익분기 분양률 ${result.breakEvenSalesRate.toFixed(1)}%`] };
+    verdict = { kind: "risk", title: `손익분기 분양률 ${result.breakEvenSalesRate.toFixed(1)}%까지 — 민감도 확인 권장`, reasons: ["분양률이 조금만 떨어져도 손익분기 아래로 내려갈 수 있습니다."] };
   } else {
-    verdict = { kind: "ok", title: "입력 가정에서는 이익 발생", reasons: ["민감도(공사비·금리·분양률)를 함께 확인하세요. 인허가·금융 조건은 별도 확인이 필요합니다."] };
+    verdict = { kind: "ok", title: "민감도(공사비·금리·분양률) 확인 권장", reasons: ["인허가·금융 조건은 별도 확인이 필요합니다."] };
   }
 
   return {
@@ -189,4 +192,94 @@ export function computeProfitSnapshot(p: {
     salesPriceSource,
     verdict,
   };
+}
+
+export interface LandPriceScenario {
+  key: "input" | "jiga" | "trade";
+  label: string;
+  /** 만원/평 */
+  landPricePerPyeong: number;
+  sourceLabel: string;
+  totalProjectCost: number;
+  netProfit: number;
+  roe: number;
+  breakEvenSalesRate: number;
+}
+
+/**
+ * 토지가 가정값 게이트(C1) — 입력 토지가가 초기 기본값이면 IRR·ROE 큰 숫자 카드 하나만
+ * 보여주는 대신, [입력 가정값 / 공시지가 기준 / 실거래 추정 기준] 3가지 토지가로 같은
+ * 계산(calculateProfit)을 다시 돌려 시나리오 표로 보여준다. 계산 함수는 그대로 재사용하고
+ * 토지 평당가만 바꾼다 — "계산 엔진은 바꾸지 않는다"는 원칙 유지.
+ */
+export function computeLandPriceScenarios(p: {
+  plan: PlanResult;
+  cost: CostSnapshot;
+  profit: ProfitStoreLike;
+  land?: { publicPricePerSqm?: number; landTrades?: { estimatedPrice: number; sampleCount: number } } | null;
+}): LandPriceScenario[] | null {
+  const landAreaPyeong = p.plan.lotPy;
+  const saleableAreaPyeong = p.plan.estimatedFarAreaSqm / SQM_PER_PYEONG;
+  if (landAreaPyeong <= 0) return null;
+
+  const run = (landPricePerPyeong: number) => {
+    const landCostBase = landAreaPyeong * landPricePerPyeong * 10000 * (1 + p.profit.landAcquisitionCost / 100);
+    const baseProjectCost = landCostBase + p.cost.buildingSubtotal + p.cost.fees;
+    const loanAmountEok = (baseProjectCost * (p.profit.ltvRatio / 100)) / 1e8;
+    return calculateProfit({
+      landAreaPyeong,
+      totalBuildingCost: p.cost.buildingSubtotal,
+      totalFees: p.cost.fees,
+      salesAvailableAreaPyeong: saleableAreaPyeong,
+      landPricePerPyeong,
+      landAcquisitionCost: p.profit.landAcquisitionCost,
+      revenueModel: p.profit.revenueModel,
+      salesPricePerPyeong: p.profit.salesPricePerPyeong,
+      salesRate: p.profit.salesRate,
+      monthlyRentPerPyeong: p.profit.monthlyRentPerPyeong,
+      deposit: p.profit.deposit,
+      annualOccupancy: p.profit.annualOccupancy,
+      ltvRatio: p.profit.ltvRatio,
+      loanAmountEok,
+      annualInterestRate: p.profit.annualInterestRate,
+      loanPeriodYears: p.profit.loanPeriodYears,
+      repaymentMethod: p.profit.repaymentMethod,
+      projectDurationMonths: p.profit.projectDurationMonths,
+      salesStartMonth: p.profit.salesStartMonth,
+    });
+  };
+
+  const toRow = (
+    key: LandPriceScenario["key"],
+    label: string,
+    landPricePerPyeong: number,
+    sourceLabel: string,
+  ): LandPriceScenario => {
+    const r = run(landPricePerPyeong);
+    return {
+      key,
+      label,
+      landPricePerPyeong,
+      sourceLabel,
+      totalProjectCost: r.totalProjectCost,
+      netProfit: r.netProfit,
+      roe: r.roe,
+      breakEvenSalesRate: r.breakEvenSalesRate,
+    };
+  };
+
+  const scenarios: LandPriceScenario[] = [
+    toRow("input", "입력 가정값", p.profit.landPricePerPyeong, "사용자 입력(초기 기본값 포함) — 실제 매입가 아님"),
+  ];
+  if (p.land?.publicPricePerSqm && p.land.publicPricePerSqm > 0) {
+    const perPy = (p.land.publicPricePerSqm * SQM_PER_PYEONG) / 10000;
+    scenarios.push(toRow("jiga", "공시지가 기준", perPy, "개별공시지가 환산값(시세 아님, 통상 시세보다 낮음)"));
+  }
+  if (p.land?.landTrades && p.land.landTrades.estimatedPrice > 0) {
+    const perPy = (p.land.landTrades.estimatedPrice / landAreaPyeong) / 10000;
+    scenarios.push(
+      toRow("trade", "실거래 추정 기준", perPy, `인근 실거래 ${p.land.landTrades.sampleCount}건 중앙값 기반 추정`),
+    );
+  }
+  return scenarios.length > 1 ? scenarios : null;
 }

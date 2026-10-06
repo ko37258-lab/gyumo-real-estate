@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/icon'
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircleIcon,
+  AlertTriangleIcon,
   CheckIcon,
   FileTextIcon,
   Loader2Icon,
@@ -37,8 +38,11 @@ import {
   type AIProvider,
 } from "@/lib/ai/keys";
 import { buildReportInputs } from "@/lib/report/buildInput";
-import { tryCapture3D } from "@/lib/report/capture3d";
-import { buildLocationMap } from "@/lib/report/locationMap";
+import {
+  captureReportImages,
+  describeCaptureFailure,
+  type ImageCaptureResult,
+} from "@/lib/report/captureImages";
 import { warmUpPdfWorker, generatePdfInWorker } from "@/lib/pdf/pdfWorkerClient";
 import { getBrandConfig } from "@/lib/branding/storage";
 import { useLandInfoStore } from "@/store/landinfo";
@@ -58,7 +62,7 @@ type ReportSections = {
   viz3d: boolean; // 3D 매스 캡쳐
 };
 
-type ReportStatus = "idle" | "analyzing" | "ready" | "error";
+type ReportStatus = "idle" | "analyzing" | "image-warning" | "ready" | "error";
 type PdfStatus = "idle" | "generating" | "error";
 
 /** 시뮬레이터 헤더에 박는 단일 컴포넌트. trigger + content를 같은 Dialog root에 통합. */
@@ -70,6 +74,9 @@ export function ReportDialog() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [input, setInput] = useState<ReportInputs | null>(null);
   const [pdfStatus, setPdfStatus] = useState<PdfStatus>("idle");
+  const [imageWarningMsg, setImageWarningMsg] = useState("");
+  // 이미지 캡쳐가 실패해 잠시 멈췄을 때, "다시 시도"가 이어서 할 작업(분석/분석 없이)을 기억
+  const [pendingAction, setPendingAction] = useState<"analyze" | "skip" | null>(null);
   // useSyncExternalStore로 LocalStorage 키 상태를 SSR-safe하게 구독.
   const provider: AIProvider = useActiveProvider();
   // 서버 내장 분석 키 (GEMINI_API_KEY/ANTHROPIC_API_KEY 환경변수) 가용 여부 — 열 때 1회 확인.
@@ -112,9 +119,11 @@ export function ReportDialog() {
     if (next && serverKeys === null) {
       void fetchServerKeys().then(setServerKeys);
     }
-    if (next && status === "error") {
+    if (next && (status === "error" || status === "image-warning")) {
       setStatus("idle");
       setErrorMsg("");
+      setImageWarningMsg("");
+      setPendingAction(null);
     }
   };
 
@@ -142,31 +151,72 @@ export function ReportDialog() {
     const activeProvider = getActiveProvider();
     if (!activeProvider && !serverReady) {
       setErrorMsg(
-        "분석 키가 없습니다. 설정 페이지에서 개인 키를 등록하거나, 운영자에게 서버 분석 활성화를 요청하세요.",
+        "분석 키가 없습니다. 설정에서 본인 API 키를 등록해주세요 (Gemini 무료 키로 충분합니다).",
       );
       setStatus("error");
       return;
     }
+    setPendingAction("analyze");
+    await captureThenProceed("analyze");
+  }
 
-    setStatus("analyzing");
-    setStep("1/4 3D 매스 캡쳐 중...");
-    setErrorMsg("");
-
+  async function handleSkip() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setPendingAction("skip");
     try {
-      // ★ 1/4: 3D 캡쳐 (체크 시에만 — 탭 자동 활성 + 렌더 대기 + toDataURL)
-      const visualization3D = sections.viz3d ? await tryCapture3D() : null;
+      await captureThenProceed("skip");
+    } finally {
+      busyRef.current = false;
+    }
+  }
+
+  /**
+   * 이미지(3D·위치도)를 먼저 캡쳐 — 체크했는데 조용히 빠지지 않게, 실패가 있으면
+   * "다시 시도/이미지 없이 계속"을 먼저 물어본 뒤에만 분석·PDF 데이터 고정으로 넘어간다.
+   */
+  async function captureThenProceed(action: "analyze" | "skip") {
+    setStatus("analyzing");
+    setStep(action === "analyze" ? "1/4 3D 매스 캡쳐 중..." : "보고서 데이터를 고정하는 중... (분석 없음)");
+    setErrorMsg("");
+    try {
+      const cap = await captureReportImages({ want3D: sections.viz3d, wantLocation: true });
       console.log(
         "[3D Capture]",
-        visualization3D ? `성공 (${Math.round(visualization3D.iso.length / 1024)}KB ×${1 + (visualization3D.south ? 1 : 0) + (visualization3D.north ? 1 : 0)}컷)` : "건너뜀",
+        cap.visualization3D ? `성공 (${Math.round(cap.visualization3D.iso.length / 1024)}KB)` : "건너뜀/실패",
       );
+      const warn = describeCaptureFailure(cap);
+      if (warn) {
+        setImageWarningMsg(warn);
+        setStatus("image-warning");
+        return;
+      }
+      await proceedWithImages(cap, action);
+    } catch (err) {
+      console.error("[ReportDialog] 이미지 캡쳐 실패:", err);
+      setErrorMsg(err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.");
+      setStatus("error");
+    }
+  }
 
-      setStep("2/4 데이터 수집 중...");
-      await new Promise((r) => setTimeout(r, 200));
-      const locationMap = await buildLocationMap().catch(() => null);
+  /** 캡쳐 결과(또는 null = 이미지 없이)로 분석·PDF 데이터 고정까지 마친다. */
+  async function proceedWithImages(cap: ImageCaptureResult | null, action: "analyze" | "skip") {
+    setStatus("analyzing");
+    try {
       // ★ 입력 스냅샷 — 이 시점 값으로 고정. 이후 화면을 바꿔도 이 보고서(PDF·인쇄)엔 섞이지 않는다.
       const built0 = applySections(buildReportInputs());
-      const built = locationMap ? { ...built0, locationMap } : built0;
-      console.log("[ReportDialog] input:", built);
+      const built = cap?.locationMap ? { ...built0, locationMap: cap.locationMap } : built0;
+      const withImages = (status: "done" | "skipped"): ReportInputs =>
+        cap?.visualization3D
+          ? { ...built, aiStatus: status, visualization3D: cap.visualization3D.iso, visualization3DViews: cap.visualization3D }
+          : { ...built, aiStatus: status };
+
+      if (action === "skip") {
+        setInput(withImages("skipped"));
+        setAnalysis(null);
+        setStatus("ready");
+        return;
+      }
 
       setStep("3/4 전문 종합 분석 중... (약 10~30초)");
       // ★ AI 호출은 이미지 없이 — 본문 가벼움 유지
@@ -175,11 +225,7 @@ export function ReportDialog() {
 
       setStep("4/4 보고서 생성 중...");
       await new Promise((r) => setTimeout(r, 300));
-      // ★ 결과 입력에 3D 이미지 주입 (PDF 임베드용, AI에는 안 보냄)
-      const finalInput: ReportInputs = visualization3D
-        ? { ...built, aiStatus: "done", visualization3D: visualization3D.iso, visualization3DViews: visualization3D }
-        : { ...built, aiStatus: "done" };
-      setInput(finalInput);
+      setInput(withImages("done"));
       setAnalysis(result);
       setStatus("ready");
     } catch (err) {
@@ -191,25 +237,20 @@ export function ReportDialog() {
     }
   }
 
-  async function handleSkip() {
-    if (busyRef.current) return;
+  function handleRetryImages() {
+    if (busyRef.current || !pendingAction) return;
     busyRef.current = true;
-    setStatus("analyzing");
-    setStep("보고서 데이터를 고정하는 중... (분석 없음)");
-    try {
-      const visualization3D = sections.viz3d ? await tryCapture3D() : null;
-      const locationMap = await buildLocationMap().catch(() => null);
-      const built0 = applySections(buildReportInputs());
-      const built = locationMap ? { ...built0, locationMap } : built0;
-      const finalInput: ReportInputs = visualization3D
-        ? { ...built, aiStatus: "skipped", visualization3D: visualization3D.iso, visualization3DViews: visualization3D }
-        : { ...built, aiStatus: "skipped" };
-      setInput(finalInput);
-      setAnalysis(null);
-      setStatus("ready");
-    } finally {
+    captureThenProceed(pendingAction).finally(() => {
       busyRef.current = false;
-    }
+    });
+  }
+
+  function handleContinueWithoutImages() {
+    if (busyRef.current || !pendingAction) return;
+    busyRef.current = true;
+    proceedWithImages(null, pendingAction).finally(() => {
+      busyRef.current = false;
+    });
   }
 
   function handleReset() {
@@ -217,6 +258,8 @@ export function ReportDialog() {
     setAnalysis(null);
     setInput(null);
     setErrorMsg("");
+    setImageWarningMsg("");
+    setPendingAction(null);
   }
 
   /**
@@ -340,6 +383,13 @@ export function ReportDialog() {
           )}
           {status === "analyzing" && (
             <AnalyzingView step={step} provider={provider} />
+          )}
+          {status === "image-warning" && (
+            <ImageWarningView
+              message={imageWarningMsg}
+              onRetry={handleRetryImages}
+              onContinue={handleContinueWithoutImages}
+            />
           )}
           {status === "ready" && (
             <ReadyView analysis={analysis} input={input} />
@@ -513,13 +563,22 @@ function IdleView({
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-amber-700 text-[13px] font-medium">
               <AlertCircleIcon className="size-4" />
-              분석 도구가 설정되지 않았습니다
+              AI 분석 키가 없습니다 — 본인 키를 한 번만 등록하면 됩니다
             </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/settings"><Icon name="gear" /> 설정 페이지로</Link>
-            </Button>
-            <div className="text-[11px] text-muted-foreground">
-              설정 없이 PDF만 받으려면 아래 &ldquo;분석 없이 PDF만&rdquo;을 사용하세요.
+            {/* 회원 각자 키 정책 (2026-09-23) — 발급처로 바로 보내 준다 */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" asChild style={{ background: "#993C1D", color: "#fff" }}>
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer noopener">
+                  <Icon name="external" /> 무료 키 발급받기 (Gemini)
+                </a>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/settings"><Icon name="gear" /> 발급받은 키 등록</Link>
+              </Button>
+            </div>
+            <div className="text-[11px] text-muted-foreground leading-relaxed">
+              구글 계정으로 로그인 → <b>Create API key</b> → 나온 키를 복사해 설정에 붙여넣으면 끝입니다.
+              분석 없이 PDF만 받으시려면 아래 &ldquo;분석 없이 PDF만&rdquo;을 쓰세요.
             </div>
           </div>
         )}
@@ -590,6 +649,34 @@ function AnalyzingView({ step }: { step: string; provider: AIProvider }) {
           경과 {elapsed}초 · 평균 15~30초 소요
         </p>
         <p className="text-[11px] text-muted-foreground">{reassurance}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ── 이미지 캡쳐 실패 — 조용히 넘어가지 않고 다시 시도/이미지 없이 계속을 물어본다 ─── */
+function ImageWarningView({
+  message,
+  onRetry,
+  onContinue,
+}: {
+  message: string;
+  onRetry: () => void;
+  onContinue: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-3 text-[12.5px] text-amber-900 space-y-2.5">
+      <div className="flex items-start gap-2 font-medium">
+        <AlertTriangleIcon className="size-4 mt-0.5 shrink-0" />
+        {message}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={onRetry}>
+          다시 시도
+        </Button>
+        <Button size="sm" className="bg-[#993C1D] hover:bg-[#7A2F16]" onClick={onContinue}>
+          이미지 없이 계속
+        </Button>
       </div>
     </div>
   );

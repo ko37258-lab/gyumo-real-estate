@@ -11,6 +11,17 @@ import { useSimulatorStore } from "@/store/simulator";
 const TILE = 256;
 const Z = 17; // 3×3 타일 ≈ 주변 460m — 동네 맥락이 보이는 배율
 
+/**
+ * 위치도 생성이 가능한 상태인지 — 실형상(parcelShape.ringLonLat)이 있어야 한다.
+ * 지번 조회 전(예시값)에는 항상 없어서 buildLocationMap()이 매번 null을 반환했는데,
+ * 그 실패를 "캡쳐 실패"로 안내하면 사용자가 혼란스럽다("또 눌러보면 될까?"). 그래서
+ * 호출 전에 가능 여부를 먼저 확인해 "지번 조회 후에만 가능"이라고 정확히 안내한다.
+ */
+export function canBuildLocationMap(): boolean {
+  const shape = useSimulatorStore.getState().parcelShape;
+  return Boolean(shape && shape.ringLonLat && shape.ringLonLat.length >= 3);
+}
+
 export async function buildLocationMap(): Promise<string | null> {
   try {
     const shape = useSimulatorStore.getState().parcelShape;

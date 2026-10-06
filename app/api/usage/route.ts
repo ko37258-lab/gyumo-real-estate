@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { isUnlimitedRole, monthlyCreditsFor } from "@/lib/membership";
 
 // 크레딧 기반 사용량 API.
 //   · 비로그인: 로그인 필요 (allowed=false)
@@ -67,7 +68,8 @@ export async function GET() {
   }
 
   const profile = await loadProfile(user.id);
-  const isStaff = Boolean(profile?.is_admin) || profile?.role === "스텝";
+  // 무제한 등급(VIP·평생회원·미스터홈즈센터·스텝)과 관리자는 크레딧을 보지 않는다 (2026-09-23)
+  const isStaff = isUnlimitedRole(profile?.role, Boolean(profile?.is_admin));
   const role = profile?.role ?? "일반회원";
 
   if (isStaff) {
@@ -88,7 +90,8 @@ export async function GET() {
     );
   }
 
-  const { data: balance } = await supabase.rpc("gyumo_credit_balance", {
+  // 월 지급 등급이면 이번 달분을 먼저 채우고 잔액을 읽는다(매달 1일 자동 충전)
+  const { data: balance } = await supabase.rpc("gyumo_credit_balance_ensured", {
     p_user: user.id,
   });
   const { data: nextExpiry } = await supabase.rpc("gyumo_credit_next_expiry", {
@@ -106,6 +109,7 @@ export async function GET() {
       remaining: credits,
       allowed: credits > 0,
       role,
+      monthlyCredits: monthlyCreditsFor(role),
       nextExpiry: nextExpiry ?? null,
     },
     NO_STORE,
@@ -124,7 +128,8 @@ export async function POST() {
   }
 
   const profile = await loadProfile(user.id);
-  const isStaff = Boolean(profile?.is_admin) || profile?.role === "스텝";
+  // 무제한 등급(VIP·평생회원·미스터홈즈센터·스텝)과 관리자는 크레딧을 보지 않는다 (2026-09-23)
+  const isStaff = isUnlimitedRole(profile?.role, Boolean(profile?.is_admin));
   const role = profile?.role ?? "일반회원";
 
   // 관리자·스텝: 무제한 (차감 없음)
@@ -152,7 +157,17 @@ export async function POST() {
   const remaining = Number(after);
   if (remaining < 0) {
     return NextResponse.json(
-      { error: "크레딧이 부족합니다", credits: 0, remaining: 0, allowed: false },
+      {
+        error:
+          monthlyCreditsFor(role) > 0
+            ? `이번 달 ${monthlyCreditsFor(role)}회를 모두 사용했습니다. 다음 달 1일에 ${monthlyCreditsFor(role)}회가 다시 채워집니다.`
+            : "크레딧이 부족합니다",
+        credits: 0,
+        remaining: 0,
+        allowed: false,
+        role,
+        monthlyCredits: monthlyCreditsFor(role),
+      },
       { status: 429 },
     );
   }
@@ -164,5 +179,6 @@ export async function POST() {
     remaining,
     allowed: remaining > 0,
     role,
+    monthlyCredits: monthlyCreditsFor(role),
   });
 }

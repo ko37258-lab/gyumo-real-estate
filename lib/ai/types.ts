@@ -71,6 +71,13 @@ export interface ReportUsePrices {
 
 export interface ReportInputs {
   address?: string;
+  /**
+   * 주소 조회 상태 — 지번 조회 완료(fetched) / 조회했으나 재확인 필요한 사용자 입력(manual) /
+   * 조회 전 초기 예시값(example). lib/report/dataStatus.determineAddressStatus 가 유일한 판정원.
+   * 화면·한장 보고서·상세 보고서가 전부 이 값으로 제목·배지를 만든다(조회 전 상태를 조회완료로
+   * 오인해 보고서 제목에 예시 주소를 실제 조회 결과처럼 찍던 문제의 재발 방지).
+   */
+  addressStatus?: import("@/lib/report/dataStatus").AddressStatus;
   reviewDate: string;
   /** 비용·부담금 페이지 포함 여부 (기본 true — 보고서 생성 시 체크 해제 가능) */
   includeCostPage?: boolean;
@@ -165,7 +172,10 @@ export interface ReportInputs {
     officialLotSqm?: number | null;
     /** 지적도 도형면적(참고) */
     shapeAreaSqm?: number | null;
-    roadWidthSource?: "assumed" | "input";
+    /** assumed: 접도만 확인(실측 아님) · input: 사용자 입력 · roadside: 도로접면 코드(광대/중로/소로/세로) 기준 추정 */
+    roadWidthSource?: "assumed" | "input" | "roadside";
+    /** 주차 설치 기준의 실제 법적 근거 — 지자체 조례 강화 여부까지 반영(lib/parking-regions describeParkingLegalBasis) */
+    parkingLegalBasis?: string;
     /** 일조 규칙 기준일(신청 예정일 또는 검토일) */
     ruleBasisDate?: string;
     ruleBasisIsPermitDate?: boolean;
@@ -251,6 +261,8 @@ export interface ReportInputs {
     definitions?: { margin: string; irr: string; interest: string; tax: string; saleableArea: string };
     landPriceSource?: string;
     salesPriceSource?: string;
+    /** 토지가 가정값 게이트(C1) — 입력 토지가가 기본값일 때 [입력/공시지가/실거래] 3가지 시나리오 비교 */
+    landScenarios?: import("@/lib/plan/finance").LandPriceScenario[];
   };
 
   /** 주변 시세·임대료 (국토교통부 실거래가, 시군구 단위) — 사업성 탭에서 조회된 경우 포함. */

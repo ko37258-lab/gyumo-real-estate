@@ -24,6 +24,7 @@ import {
   type OnePagerRow,
 } from "@/lib/report/onePager";
 import { EMPTY_REPORTER, hasReporterInfo, type ReporterProfile } from "@/lib/report/reporter";
+import { buildReportTitle } from "@/lib/report/dataStatus";
 
 ensurePdfFonts();
 
@@ -49,6 +50,16 @@ const s = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   title: { fontSize: 17, fontWeight: 700, letterSpacing: -0.3 },
   subtitle: { fontSize: 8.5, color: COLORS.GRAY, marginTop: 3 },
+  unverifiedBadge: {
+    alignSelf: "flex-start",
+    marginBottom: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 3,
+    backgroundColor: "#F59E0B",
+  },
+  unverifiedBadgeText: { fontSize: 7.5, fontWeight: 700, color: COLORS.WHITE },
+  addressNote: { fontSize: 7.5, color: "#8A5A12", marginTop: 2 },
   brandBox: { alignItems: "flex-end" },
   brandName: { fontSize: 10, fontWeight: 700, color: COLORS.CORAL_DARK },
   brandSub: { fontSize: 7.5, color: COLORS.GRAY, marginTop: 2 },
@@ -104,7 +115,19 @@ const s = StyleSheet.create({
     borderBottomColor: "#EFEDE9",
     gap: 6,
   },
+  // 층별 개요처럼 행 수가 많을 수 있는 표에 쓰는 압축 행 — 위아래 여백만 줄인다(글자 크기는 그대로).
+  rowCompact: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexGrow: 1,
+    paddingVertical: 1,
+    borderBottomWidth: 0.4,
+    borderBottomColor: "#EFEDE9",
+    gap: 6,
+  },
   rowLabel: { fontSize: 8, color: COLORS.GRAY, width: 74 },
+  rowLabelNarrow: { fontSize: 8, color: COLORS.GRAY, width: 44 },
   rowValueBox: { flex: 1, alignItems: "flex-end" },
   rowValue: { fontSize: 8.8, fontWeight: 700, textAlign: "right" },
   rowNote: { fontSize: 6.6, color: "#8C867C", textAlign: "right", marginTop: 1.2, lineHeight: 1.25 },
@@ -114,19 +137,19 @@ const s = StyleSheet.create({
   verdictTitle: { fontSize: 8.6, fontWeight: 700 },
   verdictReason: { fontSize: 6.9, marginTop: 2, lineHeight: 1.35 },
 
-  /* 이미지 */
+  /* 이미지 — 칸을 남는 높이만큼 늘리지 않는다(이미지 위아래 빈 공간이 커지는 원인이었음).
+     칸 높이는 이미지 자체 높이(+캡션)만큼만 차지하고, 같은 열 아래의 사업비·사업성 카드가
+     나머지 공간을 가져간다. */
   imgBox: {
     borderWidth: 0.8,
     borderColor: COLORS.LIGHT_GRAY,
     borderRadius: 3,
     padding: 4,
-    marginBottom: 7,
-    // 사진 칸도 남는 높이를 받아 바닥까지 — 이미지 자체는 고정 높이(비율 유지), 칸 안에서 가운데
+    marginBottom: 5,
     flexDirection: "column",
     justifyContent: "center",
-    flexGrow: 1,
   },
-  img: { width: "100%", height: 152, objectFit: "contain" },
+  img: { width: "100%", objectFit: "contain" },
   imgCap: { fontSize: 6.8, color: COLORS.GRAY, marginTop: 3, textAlign: "center" },
 
   /* 전제 */
@@ -168,16 +191,30 @@ const s = StyleSheet.create({
   disclaimer: { fontSize: 6.2, color: "#9A948B", marginTop: 4, lineHeight: 1.35 },
 });
 
-function Rows({ rows, max }: { rows: OnePagerRow[]; max: number }) {
+function Rows({
+  rows,
+  max,
+  compact,
+  narrowLabel,
+}: {
+  rows: OnePagerRow[];
+  max: number;
+  /** 행이 많을 수 있는 표(예: 층별 개요)용 — 위아래 여백만 줄인다 */
+  compact?: boolean;
+  /** 라벨이 짧은 표(예: "1F~13F")용 — 라벨 칸 폭을 줄여 값·비고에 더 넓은 공간을 준다 */
+  narrowLabel?: boolean;
+}) {
+  const rowStyle = compact ? s.rowCompact : s.row;
+  const labelStyle = narrowLabel ? s.rowLabelNarrow : s.rowLabel;
   return (
     <>
       {rows.slice(0, max).map((r, i) => (
         <View
           key={`${r.label}-${i}`}
-          style={[s.row, i === Math.min(rows.length, max) - 1 ? { borderBottomWidth: 0 } : {}]}
+          style={[rowStyle, i === Math.min(rows.length, max) - 1 ? { borderBottomWidth: 0 } : {}]}
           wrap={false}
         >
-          <Text style={s.rowLabel}>{r.label}</Text>
+          <Text style={labelStyle}>{r.label}</Text>
           <View style={s.rowValueBox}>
             <Text style={s.rowValue}>{r.value}</Text>
             {r.note ? <Text style={s.rowNote}>{r.note}</Text> : null}
@@ -240,10 +277,17 @@ export function OnePagerDocument({
   const cautionShown = f.cautions.slice(0, 4);
   const cautionRest = f.cautions.length - cautionShown.length;
   const hasReporter = hasReporterInfo(reporter);
+  // 제목 — 조회 전(예시값·미조회 입력)이면 주소를 제목으로 쓰지 않고, 사용자가 상단 제목을
+  // 직접 입력했어도 "예시 조건 검토" 배지는 그대로 남긴다(단일 판정원: lib/report/dataStatus).
+  const titleInfo = buildReportTitle({
+    status: input.addressStatus ?? f.addressStatus,
+    address: input.address ?? "",
+    userHeadline: headline,
+  });
 
   return (
     <Document
-      title={`${f.title} 규모검토 요약`}
+      title={`${titleInfo.title} 규모검토 요약`}
       author={reporter.name || brand.authorName}
       creator="MR.K 건축가능 규모검토"
     >
@@ -251,7 +295,15 @@ export function OnePagerDocument({
         {/* 머리말 */}
         <View style={s.head}>
           <View style={{ flex: 1, paddingRight: 12 }}>
-            <Text style={s.title}>{headline?.trim() || f.title}</Text>
+            {!titleInfo.isVerified && titleInfo.badgeLabel ? (
+              <View style={s.unverifiedBadge}>
+                <Text style={s.unverifiedBadgeText}>⚠ {titleInfo.badgeLabel}</Text>
+              </View>
+            ) : null}
+            <Text style={s.title}>{titleInfo.title}</Text>
+            {titleInfo.addressNote ? (
+              <Text style={s.addressNote}>{titleInfo.addressNote}</Text>
+            ) : null}
             <Text style={s.subtitle}>{f.subtitle}</Text>
           </View>
           <View style={s.brandBox}>
@@ -275,20 +327,25 @@ export function OnePagerDocument({
           ))}
         </View>
 
-        {/* 3열 */}
+        {/* 3열 — 각 열에 "고정 내용 카드"는 grow 없이(자기 내용만큼만), 그 아래 "남는 공간을
+            받는 요소" 하나만 grow=1을 준다. 두 요소가 같은 열에서 grow를 나눠 가지면(예: 토지
+            개요 grow=3 + 확인 전 전제 grow=1) 내용이 적은 카드가 여백을 거의 다 먹어버려서
+            빈 공간이 커지고, 다른 열이 길어지면 그 카드까지 같이 2쪽으로 밀려난다 — 이번에
+            고친 버그. */}
         <View style={s.cols}>
           <View style={[s.col, { flex: 1 }]}>
-            <Card title="토지 개요" grow={3}>
+            <Card title="토지 개요">
               <Rows rows={f.landRows} max={8} />
             </Card>
             {comment?.trim() ? (
-              <Card title="검토 의견" grow={1}>
+              <Card title="검토 의견">
                 <Text style={{ fontSize: 7.8, lineHeight: 1.5, color: COLORS.DARK }}>
                   {comment.trim()}
                 </Text>
               </Card>
             ) : null}
-            {/* 확인 전 전제 — 좌측 열 안에 둔다(전폭 블록으로 두면 1장을 넘김) */}
+            {/* 확인 전 전제 — 좌측 열 안에 둔다(전폭 블록으로 두면 1장을 넘김). 이 열에서
+                유일하게 남는 세로 공간을 받는 요소. */}
             {cautionShown.length > 0 ? (
               <View style={[s.cautionBox, { flexGrow: 1 }]} wrap={false}>
                 <Text style={s.cautionHead}>확인 전 전제 — 바뀌면 규모·사업성이 달라집니다</Text>
@@ -305,34 +362,66 @@ export function OnePagerDocument({
           </View>
 
           <View style={[s.col, { flex: 1.08 }]}>
-            <Card title="건축 가능 규모 (입력 조건 기준 추정)" grow={3}>
+            <Card title="건축 가능 규모 (입력 조건 기준 추정)">
               <Rows rows={f.scaleRows} max={8} />
             </Card>
-            {f.costRows.length > 0 ? (
-              <Card title="사업비 · 사업성" grow={2}>
-                <Rows rows={f.costRows} max={4} />
-                {v && f.verdict ? (
-                  <View style={[s.verdict, { backgroundColor: v.bg }]}>
-                    <Text style={[s.verdictTitle, { color: v.fg }]}>
-                      {v.label} — {f.verdict.title}
-                    </Text>
-                    {f.verdict.reason ? (
-                      <Text style={[s.verdictReason, { color: v.fg }]}>{f.verdict.reason}</Text>
-                    ) : null}
-                  </View>
+            {/* 층별 개요 — 이 열에서 남는 공간을 받는 요소. 행이 많아질 수 있어 압축 행(rowCompact)
+                + 짧은 라벨 칸(narrowLabel)을 쓴다. */}
+            {f.floorRows.length > 0 ? (
+              <Card title="층별 개요 (요약)" grow={1}>
+                <Rows rows={f.floorRows} max={6} compact narrowLabel />
+                {f.floorRowsOmitted > 0 ? (
+                  <Text style={{ fontSize: 6.4, color: COLORS.GRAY, marginTop: 1 }}>
+                    외 {f.floorRowsOmitted}개 구간 — 상세 보고서 참조
+                  </Text>
                 ) : null}
               </Card>
             ) : null}
           </View>
 
-          {images.length > 0 ? (
+          {images.length > 0 || f.costRows.length > 0 ? (
             <View style={[s.col, { flex: 1.02 }]}>
               {images.map((im) => (
                 <View key={im.cap} style={s.imgBox} wrap={false}>
-                  <PdfImage src={im.src} style={s.img} />
+                  <PdfImage
+                    src={im.src}
+                    style={[s.img, { height: images.length > 1 ? 86 : 116 }]}
+                  />
                   <Text style={s.imgCap}>{im.cap}</Text>
                 </View>
               ))}
+              {/* 사업비·사업성 — 위에 이미지가 있으면 그 아래에, 없으면 이 열 전체를 쓴다.
+                  이 열에서 남는 공간을 받는 요소라, 예전처럼 이미지 칸 위아래가 비지 않는다. */}
+              {f.costRows.length > 0 ? (
+                <Card title="사업비 · 사업성" grow={1}>
+                  <Rows rows={f.costRows} max={4} />
+                  {v && f.verdict ? (
+                    <View style={[s.verdict, { backgroundColor: v.bg }]}>
+                      {/* 배지(판정 종류)와 제목을 한 번씩만 — "판정 보류 — 사업성 판정 보류…" 처럼
+                          같은 말이 중복 출력되던 문제를 막기 위해 제목 문구에 배지 라벨을 섞지 않는다. */}
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                        <Text
+                          style={{
+                            fontSize: 6.8,
+                            fontWeight: 700,
+                            color: COLORS.WHITE,
+                            backgroundColor: v.fg,
+                            paddingHorizontal: 5,
+                            paddingVertical: 1.5,
+                            borderRadius: 2,
+                          }}
+                        >
+                          {v.label}
+                        </Text>
+                        <Text style={[s.verdictTitle, { color: v.fg }]}>{f.verdict.title}</Text>
+                      </View>
+                      {f.verdict.reason ? (
+                        <Text style={[s.verdictReason, { color: v.fg }]}>{f.verdict.reason}</Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </Card>
+              ) : null}
             </View>
           ) : null}
         </View>
