@@ -160,3 +160,43 @@ export function computeFloorTable(p: {
 
   return { rows, basement, sumGroundSqm: sum, precise: Boolean(p.shape && p.shape.pts.length >= 3) };
 }
+
+export interface GroupableFloorRow {
+  label: string;
+  area: number;
+  setback: number;
+  note: string;
+}
+
+export interface GroupedFloorRow extends GroupableFloorRow {
+  count: number;
+}
+
+/**
+ * 같은 면적·이격·비고의 연속 층을 "2F~13F"처럼 한 행으로 묶는다 — 상세 보고서의
+ * 층별표와 한장 보고서의 압축 층별 요약이 같은 그룹화 규칙을 쓰게 하는 단일 출처
+ * (표와 요약이 서로 다른 기준으로 묶여 숫자가 어긋나는 것을 방지).
+ */
+export function groupFloorRows(rows: GroupableFloorRow[]): GroupedFloorRow[] {
+  const out: GroupedFloorRow[] = [];
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (
+      last &&
+      Math.abs(last.area - r.area) < 0.01 &&
+      Math.abs(last.setback - r.setback) < 0.001 &&
+      last.note === r.note
+    ) {
+      last.count += 1;
+      const first = last.label.split("~")[0];
+      last.label = `${first}~${r.label}`;
+    } else out.push({ ...r, count: 1 });
+  }
+  // "13F~2F" 처럼 내림차순으로 묶인 라벨은 "2F~13F" 로 뒤집는다 (지하 B1~B2는 그대로)
+  return out.map((g) => {
+    if (!g.label.includes("~")) return g;
+    const [a, b] = g.label.split("~");
+    const n = (x: string) => parseInt(x.replace(/[^0-9]/g, ""), 10);
+    return { ...g, label: n(a) > n(b) && !a.startsWith("B") ? `${b}~${a}` : g.label };
+  });
+}

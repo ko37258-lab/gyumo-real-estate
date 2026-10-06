@@ -173,7 +173,7 @@ describe("buildOnePagerFields", () => {
           isHighRisk: false,
           verdict: {
             kind: "hold",
-            title: "사업성 판정 보류 — 주요 가정 확인 전",
+            title: "주요 가정 확인 전",
             reasons: ["평당 토지가 12,000만원은 초기 기본값입니다."],
           },
           ltcPct: 60,
@@ -181,7 +181,10 @@ describe("buildOnePagerFields", () => {
       }),
     );
     expect(f.verdict?.kind).toBe("hold");
-    expect(f.verdict?.title).toContain("판정 보류");
+    // 제목이 "판정 보류"라는 배지 문구를 다시 반복하지 않는다 — 화면에서 배지(v.label)로
+    // 따로 그려지므로 title에는 그 말을 섞지 않는다(중복 표기 방지).
+    expect(f.verdict?.title).not.toContain("판정 보류");
+    expect(f.verdict?.title).toContain("주요 가정 확인 전");
     expect(f.verdict?.reason).toContain("기본값");
     expect(f.costRows.some((r) => r.label === "총사업비")).toBe(true);
   });
@@ -208,5 +211,72 @@ describe("buildOnePagerFields", () => {
   it("eok(): 억 이상은 억원, 그 아래는 만원", () => {
     expect(eok(13_242_000_000)).toBe("132.4억원");
     expect(eok(5_000_000)).toBe("500만원");
+  });
+
+  describe("층별 개요(요약) — 상세 보고서와 같은 floorTable·그룹화 규칙", () => {
+    const floorTableFixture = {
+      rows: [
+        ...Array.from({ length: 13 }, (_, i) => ({
+          floor: i + 1,
+          areaSqm: 236.88,
+          portion: 1,
+          legalSetbackM: 0,
+          note: "업무시설",
+        })),
+        { floor: 14, areaSqm: 78.17, portion: 0.33, legalSetbackM: 0, note: "업무시설 · 부분층 33%" },
+      ],
+      basement: [
+        { level: 1, areaSqm: 236.88, note: "주차장 — 용적률 산정 연면적 제외" },
+        { level: 2, areaSqm: 236.88, note: "주차장 — 용적률 산정 연면적 제외" },
+      ],
+      sumGroundSqm: 13 * 236.88 + 78.17,
+      precise: false,
+    };
+
+    it("같은 면적·비고의 연속 층은 한 행으로 묶이고, 다른 층(최상층 부분층)은 따로 나온다", () => {
+      const f = buildOnePagerFields(makeInput({ scale: { floorTable: floorTableFixture } as never }));
+      expect(f.floorRows.map((r) => r.label)).toEqual(["14F", "1F~13F", "B1~B2"]);
+      expect(f.floorRows[1].value).toContain("×13개 층");
+      expect(f.floorRows[2].value).toContain("×2개 층");
+      expect(f.floorRowsOmitted).toBe(0);
+    });
+
+    it("표의 합계(지상 그룹 면적×개수 합)는 floorTable 지상 합계와 일치한다 — 표와 요약 불일치 방지", () => {
+      const f = buildOnePagerFields(makeInput({ scale: { floorTable: floorTableFixture } as never }));
+      const groundRows = f.floorRows.filter((r) => !r.label.startsWith("B"));
+      const sum = groundRows.reduce((acc, r) => {
+        const m = r.value.match(/^([\d,.]+)㎡(?: ×(\d+)개 층)?$/);
+        if (!m) throw new Error(`unexpected value format: ${r.value}`);
+        const area = Number(m[1].replace(/,/g, ""));
+        const count = m[2] ? Number(m[2]) : 1;
+        return acc + area * count;
+      }, 0);
+      expect(sum).toBeCloseTo(floorTableFixture.sumGroundSqm, 0);
+    });
+
+    it("floorTable이 없으면 floorRows는 빈 배열(한장 보고서가 없는 값을 지어내지 않는다)", () => {
+      const f = buildOnePagerFields(makeInput());
+      expect(f.floorRows).toEqual([]);
+      expect(f.floorRowsOmitted).toBe(0);
+    });
+
+    it("그룹이 6개를 넘으면 6개만 담고 나머지 수를 floorRowsOmitted로 돌린다", () => {
+      const manyRows = Array.from({ length: 10 }, (_, i) => ({
+        floor: i + 1,
+        areaSqm: 100 + i, // 전부 면적이 달라 그룹화되지 않음 → 10개 그룹
+        portion: 1,
+        legalSetbackM: 0,
+        note: `${i}층 용도`,
+      }));
+      const f = buildOnePagerFields(
+        makeInput({
+          scale: {
+            floorTable: { rows: manyRows, basement: [], sumGroundSqm: 0, precise: false },
+          } as never,
+        }),
+      );
+      expect(f.floorRows).toHaveLength(6);
+      expect(f.floorRowsOmitted).toBe(4);
+    });
   });
 });

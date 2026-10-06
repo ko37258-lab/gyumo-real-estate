@@ -89,18 +89,24 @@ describe("주차 → 지하층 → 비용 연결", () => {
   it("주차 면적은 한 계수(30㎡)만 쓴다", () => {
     expect(p.parking.unitAreaSqm).toBe(30);
     expect(p.parking.planAreaSqm).toBe(960);
-    expect(p.basement.totalSqm).toBeCloseTo(960, 6);
   });
-  it("지하층 수와 면적 (1개 층 = 건축면적 가정)", () => {
-    expect(p.basement.levels.length).toBe(5);
-    expect(p.basement.levels[0].areaSqm).toBeCloseTo(236.88, 2);
+  it("지하층 수와 면적 — 대지면적×85%를 1개 층 바닥면적으로 본다(1층 건축면적 기준 아님)", () => {
+    // docs/report-trust-audit-20261006.md A5 — 건축면적(236.88㎡) 기준이면 960÷236.88이
+    // 딱 안 나눠져 마지막 층이 12.48㎡(4평)짜리로 남는다. 대지면적×85%(335.58㎡)를
+    // 쓰면 ceil(960/335.58)=3개 층으로, 모든 층이 같은 면적이다.
+    expect(p.basement.levelCapacitySqm).toBeCloseTo(394.8 * 0.85, 2);
+    expect(p.basement.levels.length).toBe(3);
+    for (const l of p.basement.levels) expect(l.areaSqm).toBeCloseTo(394.8 * 0.85, 2);
+    // 마지막 층이 다른 층보다 작아지는 일이 없다 (전부 동일 면적)
+    const areas = p.basement.levels.map((l) => l.areaSqm);
+    expect(Math.min(...areas)).toBeCloseTo(Math.max(...areas), 6);
   });
-  it("총연면적 = 지상 + 지하", () => {
-    expect(p.totalFloorAreaSqm).toBeCloseTo(3158.4 + 960, 3);
+  it("총연면적 = 지상 + 지하(올림한 층수 × 85% 바닥면적)", () => {
+    expect(p.totalFloorAreaSqm).toBeCloseTo(3158.4 + 3 * 394.8 * 0.85, 3);
   });
   it("비용 탭 지하 연면적이 0이 아니고 지하 공사비가 생긴다", () => {
     const c = computeCostSnapshot(COST, LINKED, p);
-    expect(c.inputs.basementPyeong).toBeCloseTo(960 / SQM_PER_PYEONG, 6);
+    expect(c.inputs.basementPyeong).toBeCloseTo((3 * 394.8 * 0.85) / SQM_PER_PYEONG, 6);
     expect(c.result.basementCost).toBeGreaterThan(0);
     // 지하 주차는 지하 구조체 공사비에 포함 → 대당 설치비는 지상 대수(0)만
     expect(c.inputs.parkingSpaces).toBe(0);
@@ -223,12 +229,70 @@ describe("사업성 — 미검증 기본값이면 판정 보류", () => {
   });
 });
 
+// 판정 배지(화면·PDF가 kind별로 따로 그리는 "판정 보류"/"손실"/"여유 부족"/"이익 발생")와
+// verdict.title 이 같은 말을 중복해서 담지 않는지 — "판정 보류 — 사업성 판정 보류 — ..." 재발 방지.
+describe("사업성 판정 — 제목이 배지 문구를 중복하지 않는다", () => {
+  const plan = computePlan(YEOKSAM);
+  const cost = computeCostSnapshot(COST, LINKED, plan);
+  const VERDICT_BADGE_TEXT: Record<string, string> = {
+    hold: "판정 보류",
+    loss: "손실",
+    risk: "여유 부족",
+    ok: "이익 발생",
+  };
+
+  function profitFor(overrides: Partial<Parameters<typeof computeProfitSnapshot>[0]["profit"]>) {
+    return {
+      landPricePerPyeong: 4000, landAcquisitionCost: 0, revenueModel: "sales" as const,
+      salesPricePerPyeong: 4500, salesRate: 95, monthlyRentPerPyeong: 0, deposit: 0, annualOccupancy: 0,
+      ltvRatio: 0, loanAmountOverride: 0, annualInterestRate: 0, loanPeriodYears: 1,
+      repaymentMethod: "bullet" as const, projectDurationMonths: 6, salesStartMonth: 0,
+      sources: { landPricePerPyeong: "user" as const, salesPricePerPyeong: "user" as const },
+      ...overrides,
+    };
+  }
+
+  it("hold(주요 가정 확인 전): 제목에 '판정 보류' 문구가 없다", () => {
+    const s = computeProfitSnapshot({ plan, cost, usage: "업무", profit: profitFor({ sources: {} }) });
+    expect(s.verdict.kind).toBe("hold");
+    expect(s.verdict.title).not.toContain(VERDICT_BADGE_TEXT.hold);
+  });
+
+  it("loss(손실 유도): 제목에 배지 라벨 '손실' 단어를 반복하지 않는다", () => {
+    const s = computeProfitSnapshot({
+      plan, cost, usage: "업무",
+      profit: profitFor({ salesPricePerPyeong: 10, salesRate: 10 }),
+    });
+    expect(s.verdict.kind).toBe("loss");
+    expect(s.verdict.title).not.toContain(VERDICT_BADGE_TEXT.loss);
+  });
+
+  it("ok(이익 발생 유도): 제목에 배지 라벨 문구를 반복하지 않는다", () => {
+    const s = computeProfitSnapshot({
+      plan, cost, usage: "업무",
+      profit: profitFor({ salesPricePerPyeong: 8000, salesRate: 100 }),
+    });
+    expect(s.verdict.kind).toBe("ok");
+    expect(s.verdict.title).not.toContain(VERDICT_BADGE_TEXT.ok);
+  });
+});
+
 import { scaleConstraintsFrom } from "@/lib/plan/scaleConstraints";
 describe("미확인 규제 목록", () => {
   const attrs = ["대공방어협조구역", "(한강)폐기물매립시설 설치제한지역(저촉)", "도시지역", "일반상업지역", "지구단위계획구역", "과밀억제권역", "토지거래계약에관한허가구역", "리모델링지구", "가로구역별 최고높이 제한지역"];
-  it("역삼동 825-3: 지구단위·최고높이·대공방어 3건, 폐기물 제한지역은 제외", () => {
+  it("역삼동 825-3: 지구단위·최고높이·대공방어 + 취득·보유 단계 리스크 3종(B7)", () => {
+    // docs/report-trust-audit-20261006.md B7 — 토지거래허가구역·과밀억제권역·폐기물매립시설
+    // 설치제한지역은 "대지가 줄어드는" 규제는 아니지만 취득 허가·취득세 중과·입지 제한처럼
+    // 사업성·취득 리스크에 영향을 주므로 미확인 목록에서 빠지면 안 된다(이전엔 누락됐었다).
     const r = scaleConstraintsFrom(attrs);
-    expect(r.items.map((i) => i.key).sort()).toEqual(["dup", "military", "street-height"]);
+    expect(r.items.map((i) => i.key).sort()).toEqual([
+      "dup",
+      "land-trade-permit",
+      "military",
+      "overconcentration",
+      "street-height",
+      "waste-facility",
+    ]);
   });
   it("도로 저촉은 잡는다", () => {
     expect(scaleConstraintsFrom(["소로2류(폭 8m~10m)(저촉)"]).items.map((i) => i.key)).toContain("conflict");

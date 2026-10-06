@@ -7,7 +7,13 @@
 //  - 작성자 인적사항은 브라우저에 저장(lib/report/reporter) — 사람마다 자기 이름으로 출력.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileTextIcon, Loader2Icon, PrinterIcon, DownloadIcon } from "lucide-react";
+import {
+  FileTextIcon,
+  Loader2Icon,
+  PrinterIcon,
+  DownloadIcon,
+  AlertTriangleIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,8 +26,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { buildReportInputs } from "@/lib/report/buildInput";
-import { buildLocationMap } from "@/lib/report/locationMap";
-import { tryCapture3D } from "@/lib/report/capture3d";
+import {
+  captureReportImages,
+  describeCaptureFailure,
+  type ImageCaptureResult,
+} from "@/lib/report/captureImages";
 import { warmUpPdfWorker, generateOnePagerInWorker } from "@/lib/pdf/pdfWorkerClient";
 import { getBrandConfig } from "@/lib/branding/storage";
 import {
@@ -30,8 +39,9 @@ import {
   type ReporterProfile,
 } from "@/lib/report/reporter";
 import type { ReportInputs } from "@/lib/ai/types";
+import { useSimulatorStore } from "@/store/simulator";
 
-type Status = "idle" | "building" | "ready" | "error";
+type Status = "idle" | "building" | "image-warning" | "ready" | "error";
 
 const FIELDS: Array<{ key: keyof ReporterProfile; label: string; placeholder: string }> = [
   { key: "officeName", label: "상호 (사무소·회사)", placeholder: "미스터홈즈부동산 부동산중개" },
@@ -53,8 +63,16 @@ export function OnePagerDialog() {
   const [comment, setComment] = useState("");
   const [withImages, setWithImages] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [imageWarningMsg, setImageWarningMsg] = useState("");
   const blobRef = useRef<Blob | null>(null);
   const busyRef = useRef(false);
+
+  // 위치도는 지번 조회(실형상 확인) 전엔 만들 수 없다 — 체크박스 단계에서 미리 안내해
+  // "체크했는데 왜 안 들어가지"를 없앤다. 지번 조회가 다이얼로그가 열린 동안 일어나는
+  // 경우는 거의 없지만, 그래도 최신 상태를 반영하도록 store를 구독한다.
+  const locationMapReady = useSimulatorStore(
+    (s) => Boolean(s.parcelShape?.ringLonLat && s.parcelShape.ringLonLat.length >= 3),
+  );
 
   useEffect(() => {
     warmUpPdfWorker();
@@ -83,28 +101,21 @@ export function OnePagerDialog() {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
       blobRef.current = null;
+      setImageWarningMsg("");
       setStatus("idle");
     }
   }
 
-  async function handleBuild() {
-    if (busyRef.current) return;
-    busyRef.current = true;
+  /** 입력 데이터 + (있으면) 캡쳐 이미지로 실제 PDF를 만든다. 캡쳐 성공/실패와 무관하게 호출. */
+  async function finishBuild(cap: ImageCaptureResult | null) {
     setStatus("building");
-    setErrorMsg("");
     try {
-      // 입력한 인적사항은 이 시점에 브라우저에 저장 — 다음에 열면 그대로 채워져 있다
-      saveReporterProfile(reporter);
-
-      const captured = withImages ? await tryCapture3D().catch(() => null) : null;
-      const locationMap = withImages ? await buildLocationMap().catch(() => null) : null;
       const base = buildReportInputs();
       const input: ReportInputs = {
         ...base,
-        locationMap: locationMap ?? undefined,
-        visualization3D: captured?.iso,
+        locationMap: cap?.locationMap ?? undefined,
+        visualization3D: cap?.visualization3D?.iso,
       };
-
       const blob = await buildBlob(input);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       blobRef.current = blob;
@@ -114,9 +125,60 @@ export function OnePagerDialog() {
       console.error("[한장 보고서] 생성 실패:", err);
       setErrorMsg(err instanceof Error ? err.message : "알 수 없는 오류");
       setStatus("error");
-    } finally {
-      busyRef.current = false;
     }
+  }
+
+  /** 체크박스가 켜져 있으면 이미지를 먼저 시도 — 실패가 있으면(가능한 경우만) 조용히 넘기지 않고
+   *  "다시 시도/이미지 없이 계속"을 먼저 물어본 뒤에만 PDF를 만든다. */
+  async function runCaptureAndBuild() {
+    setStatus("building");
+    setErrorMsg("");
+    try {
+      // 입력한 인적사항은 이 시점에 브라우저에 저장 — 다음에 열면 그대로 채워져 있다
+      saveReporterProfile(reporter);
+
+      if (!withImages) {
+        await finishBuild(null);
+        return;
+      }
+      const cap = await captureReportImages({ want3D: true, wantLocation: true });
+      const warn = describeCaptureFailure(cap);
+      if (warn) {
+        setImageWarningMsg(warn);
+        setStatus("image-warning");
+        return;
+      }
+      await finishBuild(cap);
+    } catch (err) {
+      console.error("[한장 보고서] 이미지 캡쳐/생성 실패:", err);
+      setErrorMsg(err instanceof Error ? err.message : "알 수 없는 오류");
+      setStatus("error");
+    }
+  }
+
+  function handleBuild() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    runCaptureAndBuild().finally(() => {
+      busyRef.current = false;
+    });
+  }
+
+  function handleRetryImages() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    runCaptureAndBuild().finally(() => {
+      busyRef.current = false;
+    });
+  }
+
+  function handleContinueWithoutImages() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    // 버튼 문구("이미지 없이 계속")대로 — 부분적으로 성공한 캡쳐가 있어도 전부 빼고 만든다.
+    finishBuild(null).finally(() => {
+      busyRef.current = false;
+    });
   }
 
   /** 워커 우선, 실패 시 메인스레드 폴백 (본 보고서와 같은 패턴) */
@@ -230,15 +292,43 @@ export function OnePagerDialog() {
           </section>
 
           {/* 옵션 */}
-          <label className="flex items-center gap-2 text-xs text-muted-foreground break-keep">
-            <input
-              type="checkbox"
-              checked={withImages}
-              onChange={(e) => setWithImages(e.target.checked)}
-              className="size-4"
-            />
-            위치도·3D 매스 이미지 넣기 (3D 탭을 잠깐 열어 캡쳐합니다)
-          </label>
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground break-keep">
+              <input
+                type="checkbox"
+                checked={withImages}
+                onChange={(e) => setWithImages(e.target.checked)}
+                className="size-4"
+              />
+              위치도·3D 매스 이미지 넣기 (3D 탭을 잠깐 열어 캡쳐합니다)
+            </label>
+            {withImages && !locationMapReady && (
+              <p className="text-[10.5px] text-amber-700 pl-6 break-keep">
+                위치도는 지번 조회(실형상 확인) 후에만 포함됩니다 — 지금은 3D 매스만 들어갑니다.
+              </p>
+            )}
+          </div>
+
+          {status === "image-warning" && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 space-y-2 break-keep">
+              <div className="flex items-start gap-1.5 font-medium">
+                <AlertTriangleIcon className="size-3.5 mt-0.5 shrink-0" />
+                {imageWarningMsg}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={handleRetryImages}>
+                  다시 시도
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 text-[11px] bg-[#993C1D] hover:bg-[#7A2F16]"
+                  onClick={handleContinueWithoutImages}
+                >
+                  이미지 없이 계속
+                </Button>
+              </div>
+            </div>
+          )}
 
           {status === "error" && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive break-keep">
@@ -261,7 +351,7 @@ export function OnePagerDialog() {
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
           <Button
             onClick={handleBuild}
-            disabled={status === "building"}
+            disabled={status === "building" || status === "image-warning"}
             className="gap-1.5 bg-[#993C1D] hover:bg-[#7A2F16]"
             size="sm"
           >

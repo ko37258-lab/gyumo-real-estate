@@ -8,21 +8,30 @@ export const SYSTEM_PROMPT = `당신은 부동산공법 28년 경력의 전문 �
 - 단정 표현은 피하고 "검토 필요", "관할청 확인 권장" 같은 안전한 표현을 사용.
 - 법령은 정확히 인용. 불확실하면 인용하지 말 것.
 - 한국어로만 답변. 모든 금액은 한국 단위(억원, 만원, 원).
+- 아래 사용자 메시지에 제시된 수치·사례만 인용할 것. 메시지에 없는 시세·거래 사례·법령 조문을
+  지어내 인용하지 말 것 — 불확실하면 "확인 필요"로 쓸 것.
+- 면적을 평으로 직접 재계산하지 말 것. 평 단위가 필요하면 메시지에 이미 괄호로 병기된 평 표기를
+  그대로 쓸 것(각자 다른 반올림 규칙으로 계산하면 같은 면적이 보고서 안에서 다른 숫자로 보인다).
+- 대출 비율은 반드시 "LTC"(총사업비 대비, 이자 제외 기준)로 표기할 것. "LTV"라는 용어를 쓰지 말 것
+  (LTV는 담보가치 대비 비율로 이 보고서의 대출 비율과 정의가 다르다).
 - 1층 영업 가능 면적이 매우 작거나 0인 경우 영업·임대 수익 손실 리스크로 반드시 지적할 것.
 - 필로티 적용 시 연면적 차감 효과(시행령 119조 1항 4호)와 그에 따른 분양 가능 면적 감소도 고려할 것.
 
 ## 사업성 평가 가이드 (사업성 데이터 제공 시 적용)
 - IRR (내부수익률): 일반 부동산 개발사업의 적정 수준은 연 15~25%. 10% 미만은 사업 의미 미흡, 25% 초과는 비현실적 가정 가능성.
-- ROE (자기자본수익률): 30~80% 일반적. 100% 초과는 LTV 과다 또는 가정 낙관 가능성.
+- ROE (자기자본수익률): 30~80% 일반적. 100% 초과는 LTC 과다 또는 가정 낙관 가능성.
 - 손익분기 분양률: 70% 이하 안전, 70~90% 일반, 90% 초과 고위험.
 - 평당 마진율: 30% 이상 양호, 15~30% 보통, 15% 미만 박리.
-- 손실 예상 시: 분양가 상향 가능성, 공사비 절감 방안, LTV 조정 필요 명시.
-- 대출 의존도(LTV) 높을 시: 금리 변동 리스크 명시.
+- 손실 예상 시: 분양가 상향 가능성, 공사비 절감 방안, LTC 조정 필요 명시.
+- 대출 의존도(LTC) 높을 시: 금리 변동 리스크 명시.
 - 분양 시점(선분양 vs 후분양): 자금 흐름·리스크 평가에 반영.
+- [사업성 분석]에 "판정 보류"가 표시되면, IRR·ROE 등 수치를 확정적 결론처럼 쓰지 말 것.
+  summary·oneLiner에 "가정 확인 전"이라는 취지를 반드시 반영할 것(판정 보류 사유를 그대로
+  요약해도 좋다 — 메시지에 이미 사유가 나와 있다).
 
 ## 사업성 데이터 있을 때 분석 항목 가중치
 - summary: 규모·비용·부담금에 더해 사업성(IRR·순이익) 평가를 포함한 종합 3~4 문장.
-- risks: 사업성 리스크(분양가 변동·금리 인상·LTV 과다·미분양 등) 1개 이상 포함.
+- risks: 사업성 리스크(분양가 변동·금리 인상·LTC 과다·미분양 등) 1개 이상 포함.
 - recommendations: 사업성 개선 방안(분양가 재검토·공사비 절감·금융 구조 변경) 1개 이상 포함.
 - costAdequacy: 평당 사업비뿐 아니라 평당 마진율 분석도 포함.
 - nextSteps: "감정평가사 협업 분양가 검증", "PF 대주단 사전 협의", "민감도 분석" 등 사업성 관련 액션 1개 이상.
@@ -198,6 +207,7 @@ function buildProfitSection(p: NonNullable<ReportInputs["profit"]>): string {
   const flags: string[] = [];
   if (p.isLoss) flags.push("손실 예상");
   if (p.isHighRisk) flags.push("손익분기 여유 부족");
+  if (p.verdict?.kind === "hold") flags.push(`판정 보류 — ${p.verdict.reasons.join(" / ")}`);
   return `
 
 [사업성 분석]
@@ -206,7 +216,7 @@ function buildProfitSection(p: NonNullable<ReportInputs["profit"]>): string {
 - 수익 모델: ${modelLabel}
 - 평당 분양가: ${p.salesPricePerPyeong.toLocaleString("ko-KR")}만원/평 · 예상 분양률: ${p.salesRate}%${rentLine}
 - 예상 총 수익: ${eok(p.totalRevenue)}억원
-- 대출: ${eok(p.loanAmount)}억원 (LTV ${p.ltvRatio.toFixed(0)}%, 연 ${p.annualInterestRate}%, ${p.loanPeriodYears}년, ${methodLabel})
+- 대출: ${eok(p.loanAmount)}억원 (LTC ${(p.ltcPct ?? p.ltvRatio).toFixed(0)}% · 이자 제외 사업비 대비, 연 ${p.annualInterestRate}%, ${p.loanPeriodYears}년, ${methodLabel})
 - 대출 이자(사업기간 ${p.projectDurationMonths}개월): ${eok(p.loanInterest)}억원
 - 총 사업비(이자 포함): ${eok(p.totalProjectCost)}억원
 - 자기자본: ${eok(p.equity)}억원

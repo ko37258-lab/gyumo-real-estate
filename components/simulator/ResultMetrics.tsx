@@ -8,6 +8,7 @@ import { usePlan } from "@/lib/plan/usePlan";
 import { floorLabel } from "@/lib/plan/computePlan";
 import { scaleConstraintsFrom, ALWAYS_UNVERIFIED } from "@/lib/plan/scaleConstraints";
 import { formatArea } from "@/lib/utils/area";
+import { AREA_TERMS } from "@/lib/report/areaTerms";
 
 const fmt = (n: number, d = 0) =>
   n.toLocaleString("ko-KR", {
@@ -84,12 +85,12 @@ export function ResultMetrics() {
           tone={isLockedOut ? "danger" : "info"}
         />
         <Card
-          label="용적률 산정 연면적 상한"
+          label={AREA_TERMS.farCapGfa}
           value={formatArea(plan.farCapSqm, 0)}
           sub={`${fmt(plan.farCapSqm / PY_TO_SQM, 0)}평 · 대지 × 용적률 (산술값)`}
         />
         <Card
-          label="입력 조건 기준 추정 연면적"
+          label={AREA_TERMS.farEstimateGfa}
           value={formatArea(plan.estimatedFarAreaSqm, 0)}
           sub={
             p.groundAreaSqm > 0
@@ -106,7 +107,7 @@ export function ResultMetrics() {
           sub={`${plan.topFloorPortion < 0.999 ? `최상층 부분층 ${Math.round(plan.topFloorPortion * 100)}% · ` : ""}H ${fmt(plan.heightM, 1)}m · 환산 ${fmt(plan.floorsEquivalent, 1)}층`}
         />
         <Card
-          label="총연면적 (지상+지하 추정)"
+          label={AREA_TERMS.totalGfa}
           value={formatArea(plan.totalFloorAreaSqm, 0)}
           sub={`지하 ${plan.basement.levels.length}개 층 ${fmt(plan.basement.totalSqm, 0)}㎡ 포함`}
         />

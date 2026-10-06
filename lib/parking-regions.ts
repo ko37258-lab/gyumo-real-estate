@@ -207,6 +207,26 @@ export function resolveAreaPerSpace(
   };
 }
 
+/**
+ * 보고서용 주차 산정 법적 근거 문구 — 실제 적용된 기준(서울 등 지자체 조례 강화값 /
+ * 조례 미수록 지자체의 시행령 값)을 그대로 밝힌다. docs/report-trust-audit-20261006.md A7 —
+ * "업무시설 100㎡당 1대"를 적용해 놓고 근거는 항상 "시행령 별표1"(150㎡당 1대)로 써서
+ * 수치와 근거 조문이 어긋나던 문제. tieredHousehold/progressive 용도는 지자체 조례
+ * 강화표가 없어 PARKING_STANDARDS의 legalBasis를 그대로 쓴다.
+ */
+export function describeParkingLegalBasis(usage: ParkingUsageCode, lawdCd: string | null): string {
+  const std = PARKING_STANDARDS[usage];
+  if (std.mode !== "area") return std.legalBasis;
+  const basis = resolveAreaPerSpace(usage, lawdCd);
+  if (basis.sourceType === "ordinance" && basis.region) {
+    return `${basis.region.ordinanceName} (지자체 강화 기준 — 시행령 별표1을 조례로 강화)`;
+  }
+  if (basis.sourceType === "seoul-default") {
+    return "서울특별시 주차장 설치 및 관리 조례 (지번 미조회 — 서울 기준 가정, 실제 관할 조례 확인 필요)";
+  }
+  return `${std.legalBasis} (조례 미수록 지자체 — 법정 기준 그대로 적용, 관할 조례 확인 필요)`;
+}
+
 /** 국가법령정보센터 자치법규 검색 링크 (지자체 조례 직접 확인용) */
 export function ordinanceSearchUrl(regionName: string): string {
   return `https://www.law.go.kr/lsSc.do?menuId=9&query=${encodeURIComponent(

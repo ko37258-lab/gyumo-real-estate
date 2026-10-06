@@ -241,21 +241,28 @@ export function computePlan(p: PlanInputs): PlanResult {
   const pilotiExcludedSqm = parking.pilotiActive ? parking.groundAreaSqm : 0;
   const sunlightLossPct = farCapSqm > 0 ? Math.max(0, (1 - aboveGroundSumSqm / farCapSqm) * 100) : 0;
 
-  const levelCapacitySqm = footprintSqm;
+  // 지하 1개 층 바닥면적 가정 — 1층 건축면적(footprintSqm)이 아니라 대지면적×85%로 본다.
+  // 건축면적 기준이면 "마지막 층만 남는 면적만큼"(예: 12.48㎡) 생기는데, 그런 지하층은
+  // 현실에 존재할 수 없다(docs/report-trust-audit-20261006.md A5). 지하는 보통 대지
+  // 경계 가까이까지 굴토하므로 1층보다 넓게 잡는 쪽이 현실적이다. 층수는 올림(ceil)하고
+  // 모든 층을 같은 바닥면적으로 두며, 필요면적을 넘는 차액은 기계·전기실 등으로 본다.
+  const BASEMENT_FOOTPRINT_RATIO = 0.85;
+  const levelCapacitySqm = lotSqm * BASEMENT_FOOTPRINT_RATIO;
   const levels: PlanBasementLevel[] = [];
-  let rem = parking.basementAreaSqm;
-  let lv = 1;
-  while (rem > 0.5 && lv <= MAX_BASEMENT_LEVELS && levelCapacitySqm > 0) {
-    const a = Math.min(levelCapacitySqm, rem);
-    levels.push({ level: lv, areaSqm: a });
-    rem -= a;
-    lv++;
+  let basementNote = "지하 없음";
+  if (parking.basementAreaSqm > 0.5 && levelCapacitySqm > 0) {
+    const neededLevels = Math.ceil(parking.basementAreaSqm / levelCapacitySqm);
+    if (neededLevels <= MAX_BASEMENT_LEVELS) {
+      for (let lv = 1; lv <= neededLevels; lv++) levels.push({ level: lv, areaSqm: levelCapacitySqm });
+      const extra = neededLevels * levelCapacitySqm - parking.basementAreaSqm;
+      basementNote = `지하 1개 층 = 대지면적×${Math.round(BASEMENT_FOOTPRINT_RATIO * 100)}% 가정 · 주차 외 여유면적 약 ${Math.round(extra)}㎡는 기계·전기실 등으로 가정(실 배치 미검토)`;
+    } else {
+      for (let lv = 1; lv <= MAX_BASEMENT_LEVELS; lv++) levels.push({ level: lv, areaSqm: levelCapacitySqm });
+      const shortfall = parking.basementAreaSqm - MAX_BASEMENT_LEVELS * levelCapacitySqm;
+      basementNote = `지하 ${MAX_BASEMENT_LEVELS}개 층으로도 주차 계획면적을 다 담지 못합니다(부족 ${Math.round(shortfall)}㎡). 배치 재검토가 필요합니다.`;
+    }
   }
   const basementTotal = levels.reduce((s, l) => s + l.areaSqm, 0);
-  const basementNote =
-    rem > 0.5
-      ? `지하 ${MAX_BASEMENT_LEVELS}개 층으로도 주차 계획면적을 다 담지 못합니다(부족 ${Math.round(rem)}㎡). 배치 재검토가 필요합니다.`
-      : "지하 1개 층 = 건축면적 가정 · 주차 계획면적만 반영(기계·전기실·코어 등 별도)";
 
   return {
     lotSqm,

@@ -13,6 +13,7 @@ import { DEFAULT_SUNLIGHT_RULE, sunlightRuleForDate, todayYmd, type SunlightRule
 import { SQM_PER_PYEONG } from "@/lib/utils/area";
 import type { ParcelShape } from "@/lib/geo/parcel";
 import { findOrdinanceLimit, type OrdinanceLimit } from "@/lib/ordinance-db";
+import { EXAMPLE_ADDRESS } from "@/lib/report/dataStatus";
 
 export type LotInfo = {
   address: string;
@@ -166,7 +167,7 @@ const initialParking = (() => {
 })();
 
 export const useSimulatorStore = create<SimulatorState>((set, get) => ({
-  address: "서울특별시 강남구 역삼동 825-3",
+  address: EXAMPLE_ADDRESS,
   lotInfo: null,
   zone: "2il",
   lotSqm: 200 * SQM_PER_PYEONG,

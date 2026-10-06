@@ -17,9 +17,12 @@ import { calculateSchematic, RESIDENTIAL_USAGES } from "@/lib/calc/schematic";
 import { estimateRevenue } from "@/lib/report/revenue";
 import { computePlan, floorLabel } from "@/lib/plan/computePlan";
 import { planInputsFromState } from "@/lib/plan/usePlan";
-import { computeCostSnapshot, computeProfitSnapshot } from "@/lib/plan/finance";
+import { computeCostSnapshot, computeProfitSnapshot, computeLandPriceScenarios } from "@/lib/plan/finance";
 import { scaleConstraintsFrom, ALWAYS_UNVERIFIED } from "@/lib/plan/scaleConstraints";
 import { todayYmd } from "@/lib/calc/sunlight";
+import { determineAddressStatus } from "@/lib/report/dataStatus";
+import { estimateRoadWidthFromRoadSide } from "@/lib/report/consistency";
+import { describeParkingLegalBasis } from "@/lib/parking-regions";
 
 /** 시뮬레이터·비용 store에서 PDF/AI용 ReportInputs를 합성. 클라이언트에서 호출. */
 export function buildReportInputs(): ReportInputs {
@@ -105,6 +108,18 @@ export function buildReportInputs(): ReportInputs {
       : undefined;
   const constraints = scaleConstraintsFrom(land ? land.useAttrs ?? [] : undefined);
 
+  // A6 — 전면도로 폭 가정. "접도 유무만 보고 넣은 6m 고정 가정값"이 도로접면 코드(광대·중로·
+  // 소로·세로)와 모순되던 문제 — 코드가 있으면 그 등급의 통상 하한 폭을 쓰고 출처를 밝힌다.
+  // 사용자가 직접 입력한 값은 그대로 존중한다.
+  const roadSideWidth = estimateRoadWidthFromRoadSide(land?.roadSide);
+  const roadWidthSource: "assumed" | "input" | "roadside" =
+    sim.roadMSource === "input" ? "input" : roadSideWidth != null ? "roadside" : "assumed";
+  const roadWidthEffective = roadWidthSource === "roadside" && roadSideWidth != null ? roadSideWidth : sim.roadM;
+
+  // A7 — 실제 적용된 주차 기준의 법적 근거. 지자체 조례로 강화된 값인데 근거를 항상
+  // "시행령 별표1"로만 적어 수치(예: 100㎡당 1대)와 근거 조문(150㎡당 1대)이 어긋나던 문제.
+  const parkingLegalBasis = describeParkingLegalBasis(sim.parkingUsage, sim.parkingLawdCd);
+
   // 사업성 — 화면 사업성 탭과 같은 계산원. 기본값이면 판정은 '보류'로 수록(수록 여부는 보고서 선택창에서).
   const profit = useProfitStore.getState();
   const profitSnap = computeProfitSnapshot({
@@ -116,6 +131,11 @@ export function buildReportInputs(): ReportInputs {
       });
   const profitResult = profitSnap?.result ?? null;
   const effectiveLoanAmountEok = profitSnap?.loanAmountEok ?? 0;
+  // C1 — 토지가가 초기 기본값이면 IRR·ROE 큰 숫자 카드 대신 [입력/공시지가/실거래] 비교표를 쓴다.
+  const landScenarios =
+    profitSnap && profitSnap.landPriceSource === "default"
+      ? computeLandPriceScenarios({ plan, cost: costSnap, profit, land })
+      : undefined;
 
   // 주변 시세·임대료 (사업성 탭에서 조회된 경우)
   const marketState = useMarketStore.getState();
@@ -194,6 +214,7 @@ export function buildReportInputs(): ReportInputs {
 
   return {
     address: sim.address || undefined,
+    addressStatus: determineAddressStatus({ address: sim.address, lotInfo: sim.lotInfo }),
     reviewDate: new Date().toISOString().slice(0, 10),
     land,
     usePrices,
@@ -215,7 +236,7 @@ export function buildReportInputs(): ReportInputs {
         : sim.parkingLawdCd?.startsWith("11")
           ? "서울특별시 도시계획 조례 (2026 기준 · 검토: 고상철 대표)"
           : "국토계획법 시행령 제84·85조 상한 기준 (해당 지자체 조례 미확인)",
-      roadWidth: sim.roadM,
+      roadWidth: roadWidthEffective,
       buildingArea: bldArea,
       legalFloorArea: legalGfa,
       actualFloorArea: plan.estimatedFarAreaSqm,
@@ -247,6 +268,7 @@ export function buildReportInputs(): ReportInputs {
         : undefined,
       usageLabel: std.label,
       parkingBasisLabel,
+      parkingLegalBasis,
       floorTable,
       sunlightImpact,
       totalUnits,
@@ -259,7 +281,7 @@ export function buildReportInputs(): ReportInputs {
       lotAreaSource: sim.lotAreaSource,
       officialLotSqm: sim.officialLotSqm,
       shapeAreaSqm: sim.parcelShape?.areaSqm ?? null,
-      roadWidthSource: sim.roadMSource,
+      roadWidthSource,
       ruleBasisDate: sim.permitDate ?? todayYmd(),
       ruleBasisIsPermitDate: Boolean(sim.permitDate),
       parkingRoundingNote: pk.roundingNote,
@@ -342,6 +364,7 @@ export function buildReportInputs(): ReportInputs {
           },
           landPriceSource: profitSnap!.landPriceSource,
           salesPriceSource: profitSnap!.salesPriceSource,
+          landScenarios: landScenarios ?? undefined,
         }
       : undefined,
   };

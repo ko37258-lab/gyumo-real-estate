@@ -6,6 +6,10 @@
 
 import type { ReportInputs } from "@/lib/ai/types";
 import { formatArea, sqmToPyeong } from "@/lib/utils/area";
+import { AREA_TERMS } from "@/lib/report/areaTerms";
+import { buildReportTitle, type AddressStatus } from "@/lib/report/dataStatus";
+import { describeParkingNote } from "@/lib/report/parkingNote";
+import { groupFloorRows } from "@/lib/report/floorTable";
 
 export interface OnePagerRow {
   label: string;
@@ -23,9 +27,18 @@ export interface OnePagerKpi {
 export interface OnePagerFields {
   title: string;
   subtitle: string;
+  /** 조회 전(예시값·미조회 입력)이면 true — 상단에 눈에 띄는 배지를 그려야 한다 */
+  showUnverifiedBadge: boolean;
+  /** 배지 문구 (showUnverifiedBadge=false면 null) */
+  badgeLabel: string | null;
+  addressStatus: AddressStatus;
   kpis: OnePagerKpi[];
   landRows: OnePagerRow[];
   scaleRows: OnePagerRow[];
+  /** 층별 개요 — 상세 보고서(FloorDetailPage)와 같은 floorTable·같은 그룹화 규칙에서 파생 */
+  floorRows: OnePagerRow[];
+  /** floorRows에서 자르고 남은(표시 안 한) 구간 수 — "외 N건" 표시용 */
+  floorRowsOmitted: number;
   costRows: OnePagerRow[];
   verdict?: { kind: "hold" | "loss" | "risk" | "ok"; title: string; reason?: string };
   /** 하단 "확인 전 전제" 목록 */
@@ -40,6 +53,13 @@ export const eok = (won: number): string =>
   Math.abs(won) >= 1e8
     ? `${(won / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억원`
     : `${num(Math.round(won / 1e4))}만원`;
+
+/** 층별 개요(요약) 비고 압축 — 괄호 안 법령 근거는 떼고 핵심(용도·부분층)만 남긴다. */
+const MAX_FLOOR_NOTE_LEN = 26;
+function shortenFloorNote(note: string): string {
+  const base = note.split(" (")[0];
+  return base.length > MAX_FLOOR_NOTE_LEN ? `${base.slice(0, MAX_FLOOR_NOTE_LEN - 1)}…` : base;
+}
 
 const LOT_SOURCE_LABEL: Record<string, string> = {
   official: "공부(토지대장) 면적",
@@ -59,7 +79,11 @@ export function buildOnePagerFields(input: ReportInputs): OnePagerFields {
   const land = input.land;
   const addr = (input.address || land?.address || "").trim();
 
-  const title = addr || "주소 미입력";
+  // 조회 전(예시값·미조회 입력)이면 주소를 제목으로 쓰지 않는다 — lib/report/dataStatus 단일 판정원.
+  // buildInput.ts가 채운 input.addressStatus 가 있으면 그대로, 없으면(테스트 등) 기존처럼 주소를 신뢰한다.
+  const addressStatus = input.addressStatus ?? "fetched";
+  const titleInfo = buildReportTitle({ status: addressStatus, address: addr });
+  const title = titleInfo.title;
   const subtitle = [
     s.zoneName,
     `대지 ${formatArea(s.landAreaSqm, 1)}`,
@@ -71,14 +95,18 @@ export function buildOnePagerFields(input: ReportInputs): OnePagerFields {
   /* ── 핵심 4칸 ── */
   const kpis: OnePagerKpi[] = [
     {
-      label: "건축면적",
+      label: AREA_TERMS.buildingFootprint,
       value: `${num(s.buildingArea, 1)}㎡`,
       sub: `${num(sqmToPyeong(s.buildingArea))}평 · 건폐율 ${num(s.coverRatio)}% 적용`,
     },
     {
-      label: "지상 연면적(추정)",
+      // ⚠️ 이 값은 "지상 연면적"(aboveGroundGfa, 주차 포함)이 아니라 지상 부속주차를
+      // 제외한 용적률 산정용 추정치다 — 라벨을 AREA_TERMS.farEstimateGfa로 고정해
+      // 다른 화면·상세 보고서와 같은 이름을 쓴다(과거 "지상 연면적(추정)"으로 표기되어
+      // 값과 이름이 어긋났던 문제). 이름 안에 이미 "추정"이 있으니 "(추정)"을 또 붙이지 않는다.
+      label: AREA_TERMS.farEstimateGfa,
       value: `${num(s.actualFloorArea, 1)}㎡`,
-      sub: `${num(sqmToPyeong(s.actualFloorArea))}평 · 용적률 상한 ${num(s.legalFloorArea, 1)}㎡`,
+      sub: `${num(sqmToPyeong(s.actualFloorArea))}평 · ${AREA_TERMS.farCapGfa} ${num(s.legalFloorArea, 1)}㎡`,
     },
     {
       label: "층수 · 높이",
@@ -137,17 +165,17 @@ export function buildOnePagerFields(input: ReportInputs): OnePagerFields {
   /* ── 규모 ── */
   const scaleRows: OnePagerRow[] = [];
   scaleRows.push({
-    label: "건축면적",
+    label: AREA_TERMS.buildingFootprint,
     value: `${num(s.buildingArea, 1)}㎡`,
     note: `건폐율 ${num(s.coverRatio)}% 적용 (상한 ${num(s.legalCovMax ?? s.coverRatio)}%)`,
   });
   scaleRows.push({
-    label: "용적률 산정 연면적 상한",
+    label: AREA_TERMS.farCapGfa,
     value: `${num(s.legalFloorArea, 1)}㎡`,
     note: `용적률 ${num(s.floorRatio)}% (상한 ${num(s.legalFarMax ?? s.floorRatio)}%)`,
   });
   scaleRows.push({
-    label: "입력 조건 기준 추정 연면적",
+    label: AREA_TERMS.farEstimateGfa,
     value: `${num(s.actualFloorArea, 1)}㎡`,
     note:
       s.sunlightApplied && s.sunlightLoss > 0
@@ -156,7 +184,7 @@ export function buildOnePagerFields(input: ReportInputs): OnePagerFields {
   });
   if (s.totalFloorArea)
     scaleRows.push({
-      label: "총연면적(지상+지하)",
+      label: AREA_TERMS.totalGfa,
       value: `${num(s.totalFloorArea, 1)}㎡`,
       note: s.basementLevels?.length
         ? `지하 ${s.basementLevels.length}개 층 포함`
@@ -168,6 +196,8 @@ export function buildOnePagerFields(input: ReportInputs): OnePagerFields {
     note: s.heightNote ?? (s.floorHeightM ? `기준층 층고 ${num(s.floorHeightM, 1)}m 가정` : undefined),
   });
   // 주차는 대수·배치를 한 줄로 합친다 (한장 보고서는 줄 수가 곧 페이지 수)
+  // 설명 문구는 실제 배치 형식에 맞춰 생성(lib/report/parkingNote 단일 출처) — 지하 전량 배치인데
+  // "1층 필로티 가정"이 남아 있던 문제(필로티는 지상 배치일 때만 의미가 있다)를 여기서 고친다.
   scaleRows.push({
     label: "법정 주차",
     value:
@@ -175,13 +205,7 @@ export function buildOnePagerFields(input: ReportInputs): OnePagerFields {
       (s.parkingPlacement !== "none"
         ? ` · ${PLACEMENT_LABEL[s.parkingPlacement] ?? s.parkingPlacement} (지상 ${num(s.groundSpaces)}/지하 ${num(s.basementSpaces)})`
         : ""),
-    note: [
-      s.parkingRawSpaces !== undefined ? `산정 ${num(s.parkingRawSpaces, 2)}대` : "",
-      s.parkingBasisLabel ?? "",
-      s.pilotiMode ? "1층 필로티 가정" : "",
-    ]
-      .filter(Boolean)
-      .join(" · "),
+    note: describeParkingNote(s),
   });
   if (s.sunlightApplied)
     scaleRows.push({
@@ -191,6 +215,36 @@ export function buildOnePagerFields(input: ReportInputs): OnePagerFields {
         ? `${s.ruleBasisDate} 기준${s.ruleBasisIsPermitDate ? " (허가 신청 예정일)" : " (검토일)"}`
         : undefined,
     });
+
+  /* ── 층별 개요(요약) ── 상세 보고서(ReportDocument FloorDetailPage)와 같은 floorTable ·
+     같은 groupFloorRows 규칙에서 파생한다 — 두 보고서의 층별 숫자가 서로 어긋나지 않게. */
+  const floorRowsAll: OnePagerRow[] = [];
+  if (s.floorTable) {
+    const ft = s.floorTable;
+    const groundGroups = groupFloorRows(
+      [...ft.rows].reverse().map((r) => ({
+        label: `${r.floor}F`,
+        area: r.areaSqm,
+        setback: r.legalSetbackM,
+        note: r.note,
+      })),
+    );
+    const basementGroups = groupFloorRows(
+      ft.basement.map((b) => ({ label: `B${b.level}`, area: b.areaSqm, setback: 0, note: b.note })),
+    );
+    for (const g of [...groundGroups, ...basementGroups]) {
+      floorRowsAll.push({
+        label: g.label,
+        value: `${num(g.area, 1)}㎡${g.count > 1 ? ` ×${g.count}개 층` : ""}`,
+        // 한장 보고서는 줄 수가 곧 공간이라 법령 근거 괄호는 떼고 용도·부분층만 남긴다
+        // (전체 근거는 상세 보고서 층별표에 그대로 있다 — 상세 보고서는 그대로 두었다).
+        note: shortenFloorNote(g.note),
+      });
+    }
+  }
+  const FLOOR_ROWS_MAX = 6;
+  const floorRows = floorRowsAll.slice(0, FLOOR_ROWS_MAX);
+  const floorRowsOmitted = Math.max(0, floorRowsAll.length - FLOOR_ROWS_MAX);
 
   /* ── 비용·사업성 ── */
   const costRows: OnePagerRow[] = [];
@@ -240,9 +294,14 @@ export function buildOnePagerFields(input: ReportInputs): OnePagerFields {
   return {
     title,
     subtitle,
+    showUnverifiedBadge: !titleInfo.isVerified,
+    badgeLabel: titleInfo.badgeLabel,
+    addressStatus,
     kpis,
     landRows,
     scaleRows,
+    floorRows,
+    floorRowsOmitted,
     costRows,
     verdict,
     cautions,
