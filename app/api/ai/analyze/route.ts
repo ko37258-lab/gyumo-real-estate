@@ -54,7 +54,7 @@ function parseAnalysis(raw: string): Omit<AIAnalysis, "provider" | "generatedAt"
 async function callGemini(apiKey: string, userPrompt: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-flash-latest",
     systemInstruction: SYSTEM_PROMPT,
     generationConfig: { responseMimeType: "application/json" },
   });
