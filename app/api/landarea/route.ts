@@ -13,12 +13,15 @@
 //     이를 "나대지(정상 0건)"와 구분하여 transient 로 처리 → 재시도 + 캐시 stale 제공 +
 //     사용자에게 "잠시 후 다시" 안내(200평 기본값으로 조용히 떨어지지 않게).
 //   - PNU별 결과 24시간 캐싱 → 동일 주소 재조회 시 API 호출 없음(트래픽·장애 보호).
+//   - VWorld 키 오류(2026-10-19 사고)는 "자료 없음"이 아니라 장애다 → 캐시하지 않고 keyError 로 알린다.
+//     빈 결과·일부만 받은 결과는 10분만 캐시한다(장애가 끝나면 곧바로 제대로 나오도록).
 import { NextResponse } from "next/server";
 import {
   fetchVworldLandChar,
   fetchVworldLandUseAttr,
   fetchVworldParcelPolygon,
 } from "@/lib/vworld-data";
+import { VworldKeyError } from "@/lib/vworld-fail";
 import { buildParcelShape } from "@/lib/geo/parcel";
 import { normalizeJimok } from "@/lib/jimok";
 
@@ -52,11 +55,16 @@ interface AreaResult {
 type SourceOutcome =
   | { status: "ok"; data: AreaResult }
   | { status: "empty" } // 정상 응답이나 매칭 0건 (나대지) → 다음 소스
-  | { status: "transient" }; // 빈/비정상 응답 → 재시도 대상
+  | { status: "transient" } // 빈/비정상 응답 → 재시도 대상
+  | { status: "key_error"; code: string }; // VWorld 키·한도 오류 → 재시도 무의미, 캐시 금지
 
 // PNU 캐시 — 24시간 TTL. 동일 PNU 반복 호출 시 API 미호출.
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const cache = new Map<string, { at: number; data: AreaResult }>();
+const PARTIAL_CACHE_TTL_MS = 10 * 60 * 1000;
+const cache = new Map<string, { at: number; ttl: number; data: AreaResult }>();
+
+const KEY_ERROR_MESSAGE =
+  "토지 자료 서버(VWorld) 인증 오류로 면적·용도지역을 받지 못했습니다. 규모 계산은 아직 이 필지 기준이 아닙니다. 이번 조회는 크레딧을 차감하지 않았으니 잠시 후 다시 시도해 주세요.";
 
 function asArray(raw: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(raw)) return raw as Array<Record<string, unknown>>;
@@ -160,7 +168,8 @@ async function fromVworldLandChar(pnu: string): Promise<SourceOutcome> {
   let lc;
   try {
     lc = await fetchVworldLandChar(pnu);
-  } catch {
+  } catch (e) {
+    if (e instanceof VworldKeyError) return { status: "key_error", code: e.code };
     // 전송 실패·빈응답 = 일시 장애 → 재시도 대상
     return { status: "transient" };
   }
@@ -202,7 +211,8 @@ async function fromCadastralPolygon(pnu: string): Promise<SourceOutcome> {
   let poly;
   try {
     poly = await fetchVworldParcelPolygon(pnu);
-  } catch {
+  } catch (e) {
+    if (e instanceof VworldKeyError) return { status: "key_error", code: e.code };
     return { status: "transient" };
   }
   if (!poly?.ring || poly.ring.length < 3) return { status: "empty" };
@@ -253,7 +263,7 @@ export async function GET(request: Request) {
 
   // 캐시 적중 (24h)
   const cached = cache.get(pnu);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+  if (cached && Date.now() - cached.at < cached.ttl) {
     return NextResponse.json({ ...cached.data, cached: true });
   }
 
@@ -262,12 +272,25 @@ export async function GET(request: Request) {
     //   - 건축물대장(getBrTitleInfo): 건물 있는 땅의 대지면적 + 건폐율·용적률·주용도.
     //   - VWorld NED(getLandCharacteristics): 면적 + 공시지가 + 지목 + 용도지역(비도시 포함).
     // 면적은 건축물대장 우선(인허가 기준), 나머지(용도지역·공시지가·지목)는 NED에서.
-    const [building, vworld, useAttrs] = await Promise.all([
+    const [building, vworld, attrs] = await Promise.all([
       trySourceWithRetry(() => fromBuildingLedger(pnu, pkey)),
       trySourceWithRetry(() => fromVworldLandChar(pnu)),
       // 토지이용계획 지역·지구 — best-effort (실패해도 나머지 응답에 영향 없음)
-      fetchVworldLandUseAttr(pnu).catch(() => null),
+      fetchVworldLandUseAttr(pnu).catch((e) => (e instanceof VworldKeyError ? e : null)),
     ]);
+    const useAttrs = attrs instanceof VworldKeyError ? null : attrs;
+    const keyFail =
+      vworld.status === "key_error"
+        ? vworld.code
+        : attrs instanceof VworldKeyError
+          ? attrs.code
+          : null;
+    if (keyFail) console.error("[landarea] VWorld 키 오류:", keyFail);
+
+    // 키 오류면 예전에 제대로 받아 둔 값이 있을 때 그것을 내준다
+    if (keyFail && cached && (cached.data.area || cached.data.zone)) {
+      return NextResponse.json({ ...cached.data, cached: true, stale: true, keyError: true });
+    }
 
     const b = building.status === "ok" ? building.data : null;
     const v = vworld.status === "ok" ? vworld.data : null;
@@ -286,7 +309,7 @@ export async function GET(request: Request) {
 
     // 최후 폴백: 두 소스 다 면적이 없으면 연속지적도 폴리곤 근사 면적.
     let cad: AreaResult | null = null;
-    if (!area) {
+    if (!area && !keyFail) {
       const cadOut = await trySourceWithRetry(() => fromCadastralPolygon(pnu));
       if (cadOut.status === "ok") {
         cad = cadOut.data;
@@ -320,7 +343,17 @@ export async function GET(request: Request) {
         // 토지이용계획 지역·지구 (NED getLandUseAttr)
         useAttrs: useAttrs ?? undefined,
       };
-      cache.set(pnu, { at: Date.now(), data: merged });
+      if (keyFail) {
+        // 건축물대장 값만 있는 반쪽 결과 — 캐시하지 않고 그대로 알린다
+        return NextResponse.json({ ...merged, keyError: true, message: KEY_ERROR_MESSAGE });
+      }
+      // 지역·지구를 못 받았거나 일시 장애가 섞였으면 곧 다시 물어보도록 짧게만 캐시
+      const complete = useAttrs !== null && !sawTransient;
+      cache.set(pnu, {
+        at: Date.now(),
+        ttl: complete ? CACHE_TTL_MS : PARTIAL_CACHE_TTL_MS,
+        data: merged,
+      });
       if (area && areaSource === "cadastral") {
         return NextResponse.json({
           ...merged,
@@ -335,6 +368,13 @@ export async function GET(request: Request) {
         message:
           "대지면적 미확인(나대지/미등록) — 용도지역·공시지가·지목은 조회됨. 면적은 수동 입력.",
       });
+    }
+
+    if (keyFail) {
+      return NextResponse.json(
+        { area: null, source: null, keyError: true, message: KEY_ERROR_MESSAGE },
+        { status: 503 },
+      );
     }
 
     // 양쪽 다 데이터 없음. transient가 있었으면 일시 장애로 안내(기본값 회피).
@@ -356,7 +396,7 @@ export async function GET(request: Request) {
 
     // 진짜 데이터 없음 — 나대지이거나 미등록 필지.
     const empty: AreaResult = { area: null, source: null };
-    cache.set(pnu, { at: Date.now(), data: empty });
+    cache.set(pnu, { at: Date.now(), ttl: PARTIAL_CACHE_TTL_MS, data: empty });
     return NextResponse.json({
       ...empty,
       message: "면적 정보 없음 (나대지이거나 미등록) — 수동 입력 필요",

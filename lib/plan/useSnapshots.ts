@@ -25,7 +25,7 @@ export function useProfitSnapshot() {
   const land = useLandInfoStore((s) => s.data);
   return useMemo(() => {
     const landForThis = land && land.address === address ? land : null;
-    const cons = scaleConstraintsFrom(landForThis ? landForThis.useAttrs ?? [] : undefined);
+    const cons = scaleConstraintsFrom(landForThis?.useAttrs);
     const unresolved = cons.fetched ? cons.items.map((c) => c.label) : ["토지이용계획 미조회"];
     return {
       costSnap,

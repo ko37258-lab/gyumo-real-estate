@@ -254,6 +254,17 @@ TOSS_SECRET_KEY=
 
 ## 10. 작업 로그
 
+- **2026-11-04** — **VWorld 키 장애 복구 + 키 오류를 자료 없음으로 삼키지 않기 + 취락지구 건폐율·용적률 반영** (대표님 지시, 계기: 제주시 한경면 조수리 364-3).
+  - **장애 원인**: 운영 VWORLD_KEY 가 2026-10-19 무렵부터 VWorld 에서 `INVALID_KEY`(등록되지 않은 인증키)로 거절됐다. 도메인 문제(`INCORRECT_KEY`)나 서버 지역 문제가 아니다. Vercel 값은 6월 이후 수정 없음. 이유는 VWorld 콘솔을 봐야 안다. `fetchVworldLandChar` 가 이 오류를 "해당 필지 없음"으로 처리해 "나대지이거나 미등록"으로 안내하고 24시간 캐시했다. 건강검진 메일은 17일간 왔지만 「응답 없음」이라 원인을 알 수 없었고 읽히지 않았다. 조회 전에 크레딧을 먼저 차감해 빈 결과에도 차감됐다.
+  - **판별법**: `/api/wms` 프록시는 VWorld 오류 XML 을 그대로 내주므로 운영 키 상태를 가려진 값 없이 확인할 수 있다. 로컬 대조 — 없는 키·BOM 붙은 키 = `INVALID_KEY`, 맞는 키+틀린 도메인 = `INCORRECT_KEY`.
+  - **키 오류 처리** `lib/vworld-fail.ts`(`VworldKeyError`, `vworldKeyFailCode`): `lib/vworld-data.ts` 의 지적·NED·도로·건물 조회가 키·한도 오류를 던진다. `/api/landarea` 는 캐시하지 않고 `keyError` 로 알린다(자료가 하나도 없으면 503, 건축물대장 값이 있으면 200). `/api/vworld` 는 503. 빈 결과·지역지구 누락 결과 캐시는 24시간 → 10분. 건강검진에 토지이용계획 항목 추가, 실패 사유에 코드 표시, 키 오류면 메일 제목을 「토지 조회 장애」로.
+  - **크레딧**: `LandLookup` 이 토지 자료를 받은 뒤에 차감한다. 키 장애·일시 장애·주소 변환 실패는 차감하지 않는다.
+  - **접함**: `getLandUseAttr` 의 `cnflcAtNm` 은 포함/저촉/접함이다. `(접함)` 으로 표기하고 규제 판정(`scaleConstraints`·`regulation-checklist`)에서 뺀다.
+  - **취락지구** `lib/settlement.ts` + `lib/data/settlement-density.json`(372law `src/data/settlementDensity.js` 와 같은 표, 184개 코드, 조례가 바뀌면 함께 갱신): 필지 전체 포함이면 상한을 바꾸고, 일부 저촉·합필은 값을 두고 시나리오 안내, 접함은 무시, 집단취락지구는 자동 적용 안 함, 하남·포항은 시행령 60%+확인 필요. store `parcelRegulation`·`settlement`, 공용 `resolveLimits`. 상한을 읽는 곳은 전부 `limitsWithSettlement` 를 거친다(ControlPanel·EnforcementFineSheet·buildInput). 보고서·AI 근거는 `ordinanceSource` 에 덧붙는다. 4층 이하·용도 제한은 계산에 넣지 않고 미확인 목록과 안내로 표시. 건축 가능 용도 판정표, 개발진흥지구 등 다른 지구는 미반영.
+  - 조수리 364-3 전후: 건폐율 40→60%, 용적률 80→100%, 건축면적 294.4→441.6㎡, 용적률 산정 연면적 588.8→736㎡.
+  - 함께 고침: 지역·지구 목록을 못 받으면 `[]`(규제 없음) 대신 「토지이용계획 미조회」로 표시. 서울 외 필지에 「출처: 서울특별시 도시계획 조례」 문구가 나오던 것.
+  - 검증: tsc 0 / eslint 0 / vitest 137(신규 35, 1건은 기존처럼 폰트 네트워크 시간 초과 시 건너뜀) / 개발 서버 실조회(조수리 364-3 값·안내·체크리스트, 375px 넘침 0, 키 오류 응답 흉내 시 안내 표시·차감 요청 0회). 운영 실측은 키 교체·배포 후.
+
 - **2026-09-23** — **등급별 이용 규칙 정비: 무제한 등급 + 월 15회 자동 지급** (대표님 지시).
   - 증상: 등급은 '정회원'인데 "크레딧이 부족합니다 — 정회원 신청" 이 뜬다(7명). 원인은 **등급과 크레딧이 따로**였기 때문 — gyumo 는 `allowed = credits > 0` 로만 판단하고 무제한은 관리자·스텝뿐이었는데, 유료 등급 12명 중 입금 승인으로 크레딧이 나간 건 2건뿐이고 나머지는 등급만 올려 둔 상태였다(잔액 0인 10명 전원 "가입 보너스 3개만 쓰고 0").
   - 규칙(단일 출처 = DB `gyumo_role_unlimited`/`gyumo_role_monthly_credits` + `lib/membership.ts` `UNLIMITED_ROLES`/`MONTHLY_CREDIT_ROLES`, **둘을 항상 같이 고칠 것**):
@@ -676,6 +687,8 @@ TOSS_SECRET_KEY=
 ## 11. Claude Code 작업 시 주의사항
 
 0. **🔑 DATAGO_KEY는 3개 앱 공유** — data.go.kr 키를 교체하면 **real-estate-infographic · gyumo · mrk-realestate(Supabase app_config.DATA_GO_KR_KEY)** 를 반드시 함께 바꿀 것. 2026-08-31 gyumo만 누락돼 시세 전 기능이 몇 주간 "자료 없음"으로 위장 실패했다. 키 상태는 `GET /api/health`로 즉시 확인 가능(매일 07시 크론이 실패 시 관리자 메일 발송).
+
+0-1. **🔑 VWORLD_KEY 는 도메인에 묶여 있다** — 운영 키와 `VWORLD_DOMAIN` 은 짝으로 맞아야 한다. `INVALID_KEY` = 키 자체가 등록 안 됨(만료·삭제), `INCORRECT_KEY` = 키와 도메인 불일치. 환경변수를 바꾸면 재배포해야 반영된다. 상태는 `GET /api/health`, 원인 코드는 `/api/wms` 응답으로 확인.
 
 1. **`prototype.html`을 절대 수정하지 말 것** — v0.1 참고 원본. React 컴포넌트는 `app/(app)/simulator/`에 새로 작성.
 2. **법령 인용은 정확하게** — 운영자가 "공법의 신" 브랜드이므로 부정확한 조문 인용은 신뢰도 치명타.

@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/select";
 import { SliderInputPair } from "@/components/ui/slider-input-pair";
 import { useSimulatorStore } from "@/store/simulator";
+import { limitsWithSettlement } from "@/lib/settlement";
+import { SettlementNotice } from "./SettlementNotice";
 import { ZONES, getEffectiveFloorRatioMax } from "@/lib/zones";
 import {
   PARKING_USAGE_LIST,
@@ -72,13 +74,18 @@ export function ControlPanel() {
   const parcelShape = useSimulatorStore((s) => s.parcelShape);
   const setIsCBD = useSimulatorStore((s) => s.setIsCBD);
   const ordinance = useSimulatorStore((s) => s.ordinance);
+  const settlement = useSimulatorStore((s) => s.settlement);
   const parkingLawdCd = useSimulatorStore((s) => s.parkingLawdCd);
 
   const z = ZONES[zone];
   // 지자체 조례 상한이 확인된 경우(서울 외 지역) 그 값을 최우선으로 쓴다.
   // 서울은 ordinance가 항상 null이라 zones.ts의 서울도심 특례(CBD)가 그대로 산다.
-  const maxCov = ordinance?.coverRatioMax ?? z.maxCov;
-  const effectiveFarMax = ordinance?.floorRatioMax ?? getEffectiveFloorRatioMax(z, isCBD);
+  // 취락지구가 필지 전체에 걸리면 그 값이 상한이다(lib/settlement.ts).
+  const { cov: maxCov, far: effectiveFarMax } = limitsWithSettlement(
+    ordinance?.coverRatioMax ?? z.maxCov,
+    ordinance?.floorRatioMax ?? getEffectiveFloorRatioMax(z, isCBD),
+    settlement,
+  );
   const cbdAvailable = !ordinance && !!z.floorRatioCBD;
   const useStyle = getUseStyle(parkingUsage);
 
@@ -326,6 +333,16 @@ export function ControlPanel() {
         )
       )}
 
+      {settlement && (
+        <SettlementNotice
+          settlement={settlement}
+          onTry={(cov, far) => {
+            setCovPct(cov);
+            setFarPct(far);
+          }}
+        />
+      )}
+
       <SliderInputPair
         label="전면도로"
         value={roadM}
@@ -411,9 +428,12 @@ export function ControlPanel() {
         />
       )}
 
-      <p className="text-[10px] text-muted-foreground/80 pt-2 border-t border-border/60">
-        <Icon name="scale" /> 출처: 서울특별시 도시계획 조례 (2026 기준) · 검토: 고상철 대표
-      </p>
+      {/* 다른 지역 필지에서는 위 조례 안내가 근거다 — 서울 문구가 함께 나오면 어긋난다 */}
+      {(!parkingLawdCd || parkingLawdCd.startsWith("11")) && (
+        <p className="text-[10px] text-muted-foreground/80 pt-2 border-t border-border/60">
+          <Icon name="scale" /> 출처: 서울특별시 도시계획 조례 (2026 기준) · 검토: 고상철 대표
+        </p>
+      )}
     </div>
   );
 }

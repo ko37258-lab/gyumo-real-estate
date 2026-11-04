@@ -11,6 +11,7 @@
  */
 
 import { FOREST_SURCHARGE_CAP } from "@/lib/calc/cost";
+import { findSettlement, isSettlementZone } from "@/lib/settlement";
 import type { ZoneCode } from "@/lib/zones";
 import { ZONES } from "@/lib/zones";
 
@@ -51,12 +52,30 @@ const MEDIUM_RISK_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /지구단위계획구역/, label: "지구단위계획구역 — 별도 지침 확인 필요" },
 ];
 
+/** 경계만 맞닿은(접함) 지역·지구는 지정된 것이 아니다 */
+const designated = (useAttrs: string[] | undefined) =>
+  (useAttrs ?? []).filter((a) => !a.includes("(접함)"));
+
+/** 취락지구 — 건폐율·용적률이 용도지역 값과 달라진다 (lib/settlement.ts) */
+function checkSettlement(useAttrs: string[] | undefined, zoneCode?: ZoneCode): ChecklistItem | null {
+  const hit = findSettlement(useAttrs);
+  if (!hit) return null;
+  if (hit.kind === "group") {
+    return { level: "warning", icon: "warning", title: "집단취락지구", detail: "개발제한구역법령을 따릅니다. 규모 계산에 자동으로 넣지 않았으니 관할 지자체에 확인하세요." };
+  }
+  if (zoneCode && !isSettlementZone(zoneCode)) return null;
+  if (hit.partial) {
+    return { level: "warning", icon: "warning", title: "자연취락지구 일부 저촉", detail: "필지 일부만 걸쳐 면적에 따라 건폐율·용적률이 달라집니다. ② 규모 검토의 안내를 확인하세요." };
+  }
+  return { level: "info", icon: "pin", title: "자연취락지구", detail: "용도지역과 다른 건폐율·용적률이 적용됩니다. ② 규모 검토에서 확인하세요. 건축물은 4층 이하입니다." };
+}
+
 function checkLandUsePlan(useAttrs: string[] | undefined): ChecklistItem[] {
   if (!useAttrs || useAttrs.length === 0) return [];
   const hits: ChecklistItem[] = [];
   const seen = new Set<string>();
 
-  for (const attr of useAttrs) {
+  for (const attr of designated(useAttrs)) {
     for (const { pattern, label } of HIGH_RISK_PATTERNS) {
       if (pattern.test(attr) && !seen.has(label)) {
         seen.add(label);
@@ -81,7 +100,7 @@ function checkFarmland(
 ): ChecklistItem | null {
   if (!jimok || !["전", "답", "과수원"].includes(jimok)) return null;
 
-  const inZone = (useAttrs ?? []).some((a) => /농업진흥구역/.test(a));
+  const inZone = designated(useAttrs).some((a) => /농업진흥구역/.test(a));
   const rate = inZone ? 30 : 20;
   if (publicPricePerSqm && areaSqm > 0) {
     const unit = Math.min(publicPricePerSqm * (rate / 100), 50000);
@@ -109,7 +128,7 @@ function checkForest(
 ): ChecklistItem | null {
   if (jimok !== "임야") return null;
 
-  const isPreserved = (useAttrs ?? []).some((a) => /보전산지|공익용산지|임업용산지/.test(a));
+  const isPreserved = designated(useAttrs).some((a) => /보전산지|공익용산지|임업용산지/.test(a));
   const base = 8340 * (isPreserved ? 1.3 : 1);
   if (publicPricePerSqm && areaSqm > 0) {
     const surcharge = Math.min(publicPricePerSqm * 0.001, FOREST_SURCHARGE_CAP);
@@ -158,6 +177,7 @@ export function buildRegulationChecklist(input: {
 }): ChecklistItem[] {
   const items: ChecklistItem[] = [
     ...checkLandUsePlan(input.useAttrs),
+    checkSettlement(input.useAttrs, input.zoneCode),
     checkFarmland(input.jimok, input.useAttrs, input.areaSqm, input.publicPricePerSqm),
     checkForest(input.jimok, input.useAttrs, input.areaSqm, input.publicPricePerSqm),
     checkSunlight(input.zoneCode),

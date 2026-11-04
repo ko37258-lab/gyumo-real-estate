@@ -3106,17 +3106,18 @@ function FloorDetailPage({
             </DetailRow>
             {input.land.useAttrs.map((raw, i) => {
               const conflict = raw.includes("(저촉)");
-              const name = raw.replace("(저촉)", "").trim();
+              const touching = raw.includes("(접함)");
+              const name = raw.replace(/\((저촉|접함)\)/, "").trim();
               return (
                 <DetailRow key={raw + i} last={i === input.land!.useAttrs!.length - 1}>
                   <DetailCell text={String(i + 1)} width="8%" align="center" color={COLORS.GRAY} />
                   <DetailCell text={name} width="66%" />
                   <DetailCell
-                    text={conflict ? "저촉" : "포함"}
+                    text={conflict ? "저촉" : touching ? "접함" : "포함"}
                     width="26%"
                     align="center"
                     bold
-                    color={conflict ? "#DC2626" : "#15803D"}
+                    color={conflict ? "#DC2626" : touching ? COLORS.GRAY : "#15803D"}
                   />
                 </DetailRow>
               );

@@ -22,6 +22,9 @@ const PATTERNS: Array<{ re: RegExp; c: ScaleConstraint }> = [
   { re: /개발제한구역/, c: { key: "gb", label: "개발제한구역", effect: "건축 원칙적 제한", where: "관할 지자체" } },
   // "(한강)폐기물매립시설 설치제한지역(저촉)" 같은 제한지역·권역은 대지 축소와 무관 → 제외
   { re: /^(?!.*(제한지역|권역)).*(도로|[소중대광]로|공원|녹지|광장|주차장|학교|하천|철도|시설).*\(저촉\)/, c: { key: "conflict", label: "도시계획시설 등 저촉", effect: "저촉 부분 대지면적·건축 가능 범위 축소", where: "토지이음 도면" } },
+  { re: /집단취락지구/, c: { key: "settlement-group", label: "집단취락지구", effect: "개발제한구역법령을 따름 — 건폐율·용적률 자동 계산에 넣지 않음", where: "관할 지자체" } },
+  { re: /자연취락지구\(저촉\)/, c: { key: "settlement-partial", label: "자연취락지구 일부 저촉", effect: "필지 일부만 걸쳐 건폐율·용적률이 면적에 따라 달라짐(국토계획법 제84조) — 자동 계산에 넣지 않음", where: "토지이용계획확인서 · 관할 지자체" } },
+  { re: /^자연취락지구$/, c: { key: "settlement-floors", label: "자연취락지구 층수·용도 제한", effect: "건축물 4층 이하, 지을 수 있는 용도 제한 — 건폐율·용적률만 자동 반영하고 층수·용도는 계산에 넣지 않음", where: "국토계획법 시행령 별표 23 · 도시계획 조례" } },
   { re: /정비구역|재정비촉진/, c: { key: "renewal", label: "정비구역", effect: "정비계획에 따른 규모·용도", where: "정비계획 고시" } },
   // 아래 3종은 "대지 축소·건축 가능 범위"가 아니라 취득·보유 단계의 비용·절차에 영향을 준다
   // (docs/report-trust-audit-20261006.md B7 — 규모 산정엔 안 빠졌지만 사업성·취득 리스크에서
@@ -46,6 +49,7 @@ export function scaleConstraintsFrom(useAttrs: string[] | undefined | null): {
   const out: ScaleConstraint[] = [];
   const seen = new Set<string>();
   for (const a of useAttrs) {
+    if (a.includes("(접함)")) continue; // 경계만 맞닿음 — 지정된 것이 아니다
     for (const { re, c } of PATTERNS) {
       if (re.test(a) && !seen.has(c.key)) {
         seen.add(c.key);
