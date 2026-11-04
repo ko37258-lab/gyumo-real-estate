@@ -13,6 +13,7 @@ import { DEFAULT_SUNLIGHT_RULE, sunlightRuleForDate, todayYmd, type SunlightRule
 import { SQM_PER_PYEONG } from "@/lib/utils/area";
 import type { ParcelShape } from "@/lib/geo/parcel";
 import { findOrdinanceLimit, type OrdinanceLimit } from "@/lib/ordinance-db";
+import { limitsWithSettlement, settlementDensity, type SettlementRule } from "@/lib/settlement";
 import { EXAMPLE_ADDRESS } from "@/lib/report/dataStatus";
 
 export type LotInfo = {
@@ -31,6 +32,13 @@ export type LotInfo = {
 export type MergedParcel = {
   label: string;   // 지번 표시 (예: "825-3")
   areaSqm: number;
+};
+
+/** 조회한 필지의 토지이용계획 — 취락지구 판정 재료. 같은 필지에서 용도지역만 바꿔도 다시 판정한다 */
+export type ParcelRegulation = {
+  pnu: string;
+  useAttrs?: string[];
+  merged: boolean;
 };
 
 /** 대지면적의 출처 — 공부상 면적(조회) / 사용자 입력 / 초기 예시값 */
@@ -109,8 +117,15 @@ type SimulatorState = {
    * 서울은 항상 null(zones.ts가 서울 조례 정본).
    */
   ordinance: OrdinanceLimit | null;
+  parcelRegulation: ParcelRegulation | null;
+  /**
+   * 취락지구 판정 결과. applied 일 때만 상한이 바뀐다(lib/settlement.ts limitsWithSettlement).
+   * 일부 저촉·합필·집단취락은 안내만 하고 값을 바꾸지 않는다.
+   */
+  settlement: SettlementRule | null;
 
   setAddress: (v: string) => void;
+  setParcelRegulation: (r: ParcelRegulation) => void;
   setMergedParcels: (parcels: MergedParcel[]) => void;
   applyLotInfo: (info: LotInfo) => void;
   setZone: (z: ZoneCode) => void;
@@ -166,6 +181,19 @@ const initialParking = (() => {
   };
 })();
 
+/** 용도지역·지자체·토지이용계획으로 적용 상한을 정한다 — applyLotInfo·setZone 공용 */
+function resolveLimits(zoneCode: ZoneCode, lawdCd: string | null, reg: ParcelRegulation | null) {
+  const z = ZONES[zoneCode];
+  const ordinance = findOrdinanceLimit(lawdCd, zoneCode);
+  const baseCov = ordinance?.coverRatioMax ?? z.maxCov;
+  const baseFar = ordinance?.floorRatioMax ?? z.farMax;
+  const settlement = reg
+    ? settlementDensity({ pnu: reg.pnu, zone: zoneCode, useAttrs: reg.useAttrs, baseCov, baseFar, merged: reg.merged })
+    : null;
+  const { cov, far } = limitsWithSettlement(baseCov, baseFar, settlement);
+  return { ordinance, settlement, covMax: cov, farMax: far, baseFar };
+}
+
 export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   address: EXAMPLE_ADDRESS,
   lotInfo: null,
@@ -193,8 +221,11 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   schematicEfficiencyPct: 78,
   newbuildResUnitWon: 0,
   ordinance: null,
+  parcelRegulation: null,
+  settlement: null,
 
   setAddress: (v) => set({ address: v }),
+  setParcelRegulation: (r) => set({ parcelRegulation: r, settlement: null }),
   setMergedParcels: (parcels) => set({ mergedParcels: parcels }),
 
   applyLotInfo: (info) => {
@@ -202,9 +233,12 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
     // pnu 앞 10자리가 법정동코드. 조례 DB는 5자리(시군구)로 조회하지만
     // 주차 조례 쪽은 기존에 5자리를 써왔으므로 그대로 유지.
     const lawdCd = info.pnu ? info.pnu.slice(0, 5) : null;
-    const ord = findOrdinanceLimit(lawdCd, info.zone);
-    const covMax = ord?.coverRatioMax ?? z.maxCov;
-    const farMax = ord?.floorRatioMax ?? z.farMax;
+    const reg = get().parcelRegulation;
+    const { ordinance, settlement, covMax, farMax, baseFar } = resolveLimits(
+      info.zone,
+      lawdCd,
+      reg && reg.pnu === info.pnu ? reg : null,
+    );
     const next: Partial<SimulatorState> = {
       address: info.address,
       lotInfo: info,
@@ -215,12 +249,14 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
       lotAreaSource: "official",
       officialLotSqm: info.lotSqm,
       covPct: covMax,
-      farPct: Math.min(z.defFar, farMax),
+      // 취락지구로 용적률이 달라진 필지는 그 값을 그대로 쓴다(용도지역 기본값보다 클 수 있다)
+      farPct: settlement?.applied && farMax !== baseFar ? farMax : Math.min(z.defFar, farMax),
       roadM: info.roadM,
       roadMSource: "assumed",
       sunOn: z.sunlight,
       parkingLawdCd: lawdCd,
-      ordinance: ord,
+      ordinance,
+      settlement,
     };
     // 지자체 조례 기준으로 주차 원단위 자동 갱신 (area 모드 용도만)
     const usage = get().parkingUsage;
@@ -232,19 +268,22 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
 
   setZone: (code) => {
     const z = ZONES[code];
-    const { covPct, farPct, parkingLawdCd } = get();
+    const { covPct, farPct, parkingLawdCd, parcelRegulation } = get();
     // 용도지역을 바꿔도 같은 지자체 조례를 그대로 적용 — 예: 조회한 땅이
     // 준주거였다가 사용자가 일반상업으로 바꿔 보면, 그 지자체의 일반상업
     // 조례값을 다시 찾는다.
-    const ord = findOrdinanceLimit(parkingLawdCd, code);
-    const covMax = ord?.coverRatioMax ?? z.maxCov;
-    const farMax = ord?.floorRatioMax ?? z.farMax;
+    const { ordinance, settlement, covMax, farMax } = resolveLimits(
+      code,
+      parcelRegulation?.pnu.slice(0, 5) ?? parkingLawdCd,
+      parcelRegulation,
+    );
     set({
       zone: code,
       covPct: Math.min(covPct, covMax) || covMax,
       farPct: farPct >= z.farMin && farPct <= farMax ? farPct : Math.min(z.defFar, farMax),
       sunOn: z.sunlight,
-      ordinance: ord,
+      ordinance,
+      settlement,
     });
   },
 

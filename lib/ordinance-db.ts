@@ -26,7 +26,7 @@ type RawOrdEntry = {
 const DB = ordinanceRaw as unknown as Record<string, RawOrdEntry>;
 
 /** gyumo ZoneCode → 조례 DB의 zone key */
-const ZONE_KEY: Record<ZoneCode, string> = {
+export const ZONE_KEY: Record<ZoneCode, string> = {
   "1jeon": "excl1",
   "2jeon": "excl2",
   "1il": "gen1",

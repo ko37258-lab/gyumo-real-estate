@@ -19,6 +19,7 @@ import { computePlan, floorLabel } from "@/lib/plan/computePlan";
 import { planInputsFromState } from "@/lib/plan/usePlan";
 import { computeCostSnapshot, computeProfitSnapshot, computeLandPriceScenarios } from "@/lib/plan/finance";
 import { scaleConstraintsFrom, ALWAYS_UNVERIFIED } from "@/lib/plan/scaleConstraints";
+import { limitsWithSettlement, settlementSourceText } from "@/lib/settlement";
 import { todayYmd } from "@/lib/calc/sunlight";
 import { determineAddressStatus } from "@/lib/report/dataStatus";
 import { estimateRoadWidthFromRoadSide } from "@/lib/report/consistency";
@@ -106,7 +107,12 @@ export function buildReportInputs(): ReportInputs {
     landData && sim.address && landData.address === sim.address
       ? landData
       : undefined;
-  const constraints = scaleConstraintsFrom(land ? land.useAttrs ?? [] : undefined);
+  const constraints = scaleConstraintsFrom(land?.useAttrs);
+  const legal = limitsWithSettlement(
+    sim.ordinance?.coverRatioMax ?? z.maxCov,
+    sim.ordinance?.floorRatioMax ?? z.farMax,
+    sim.settlement,
+  );
 
   // A6 — 전면도로 폭 가정. "접도 유무만 보고 넣은 6m 고정 가정값"이 도로접면 코드(광대·중로·
   // 소로·세로)와 모순되던 문제 — 코드가 있으면 그 등급의 통상 하한 폭을 쓰고 출처를 밝힌다.
@@ -229,13 +235,18 @@ export function buildReportInputs(): ReportInputs {
       floorRatio: sim.farPct,
       // 서울은 조례 DB(비서울 전용)가 아니라 zones.ts 정본(서울시 도시계획 조례)을 쓴다.
       // ordinance=null 을 "조례 미확인"으로 적으면 서울 필지에서 사실과 어긋난다.
-      ordinanceSource: sim.ordinance
-        ? sim.ordinance.hasPreciseSource
-          ? `${sim.ordinance.regionName} 도시계획조례 (${sim.ordinance.source})`
-          : `${sim.ordinance.regionName} 도시계획조례 (수치 검증 완료, 조문 링크 미확보)`
-        : sim.parkingLawdCd?.startsWith("11")
-          ? "서울특별시 도시계획 조례 (2026 기준 · 검토: 고상철 대표)"
-          : "국토계획법 시행령 제84·85조 상한 기준 (해당 지자체 조례 미확인)",
+      ordinanceSource: [
+        sim.ordinance
+          ? sim.ordinance.hasPreciseSource
+            ? `${sim.ordinance.regionName} 도시계획조례 (${sim.ordinance.source})`
+            : `${sim.ordinance.regionName} 도시계획조례 (수치 검증 완료, 조문 링크 미확보)`
+          : sim.parkingLawdCd?.startsWith("11")
+            ? "서울특별시 도시계획 조례 (2026 기준 · 검토: 고상철 대표)"
+            : "국토계획법 시행령 제84·85조 상한 기준 (해당 지자체 조례 미확인)",
+        settlementSourceText(sim.settlement),
+      ]
+        .filter(Boolean)
+        .join(" · "),
       roadWidth: roadWidthEffective,
       buildingArea: bldArea,
       legalFloorArea: legalGfa,
@@ -253,8 +264,8 @@ export function buildReportInputs(): ReportInputs {
       pilotiMode: sim.parkingPilotiMode,
       floorHeightM: sim.typicalFloorHeightM,
       floorsExact: floors,
-      legalCovMax: sim.ordinance?.coverRatioMax ?? z.maxCov,
-      legalFarMax: sim.ordinance?.floorRatioMax ?? z.farMax,
+      legalCovMax: legal.cov,
+      legalFarMax: legal.far,
       sunlightApplied,
       sunlightRule: sim.sunlightRule,
       sunlightCompare: sunlightApplied

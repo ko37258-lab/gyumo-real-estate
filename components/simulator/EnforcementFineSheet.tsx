@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSimulatorStore } from "@/store/simulator";
+import { limitsWithSettlement } from "@/lib/settlement";
 import { useLandInfoStore } from "@/store/landinfo";
 import { ZONES } from "@/lib/zones";
 import { lotPyToSqm } from "@/lib/calc/coverage";
@@ -43,9 +44,13 @@ function useExceedSuggestion() {
   const covPct = useSimulatorStore((s) => s.covPct);
   const farPct = useSimulatorStore((s) => s.farPct);
   const ordinance = useSimulatorStore((s) => s.ordinance);
+  const settlement = useSimulatorStore((s) => s.settlement);
   const z = ZONES[zone];
-  const covMax = ordinance?.coverRatioMax ?? z.maxCov;
-  const farMax = ordinance?.floorRatioMax ?? z.farMax;
+  const { cov: covMax, far: farMax } = limitsWithSettlement(
+    ordinance?.coverRatioMax ?? z.maxCov,
+    ordinance?.floorRatioMax ?? z.farMax,
+    settlement,
+  );
   const lotSqm = lotPyToSqm(lotPy);
   const covOver = covPct > covMax ? (lotSqm * (covPct - covMax)) / 100 : 0;
   const farOver = farPct > farMax ? (lotSqm * (farPct - farMax)) / 100 : 0;

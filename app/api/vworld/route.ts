@@ -21,6 +21,7 @@ import {
   hasVworldDataKey,
   fetchVworldRoadParcels,
 } from "@/lib/vworld-data";
+import { VworldKeyError } from "@/lib/vworld-fail";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -136,6 +137,10 @@ export async function GET(request: Request) {
       { status: 400 },
     );
   } catch (e) {
+    if (e instanceof VworldKeyError) {
+      console.error("[vworld] 키 오류:", e.code);
+      return NextResponse.json({ error: e.message, keyError: true, code: e.code }, { status: 503 });
+    }
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "조회 실패" },
       { status: 500 },

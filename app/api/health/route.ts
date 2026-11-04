@@ -9,7 +9,8 @@
 //                                  (Vercel 크론 user-agent 또는 HEALTH_TOKEN 필요)
 import { NextResponse } from "next/server";
 import { datagoKeyFail } from "@/lib/datago-fail";
-import { fetchVworldParcelPolygon, fetchVworldLandChar } from "@/lib/vworld-data";
+import { fetchVworldParcelPolygon, fetchVworldLandChar, fetchVworldLandUseAttr } from "@/lib/vworld-data";
+import { VworldKeyError } from "@/lib/vworld-fail";
 import { sendAdminEmail } from "@/lib/notify/email";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 const PROBE_PNU = "1168010100007370000"; // 강남 테헤란로 152 — 항상 존재
 const PROBE_LAWD = "11680";
 
-type Check = { name: string; ok: boolean; ms: number; detail: string };
+type Check = { name: string; ok: boolean; ms: number; detail: string; code?: string };
 
 async function timed(name: string, fn: () => Promise<{ ok: boolean; detail: string }>): Promise<Check> {
   const t0 = Date.now();
@@ -25,7 +26,13 @@ async function timed(name: string, fn: () => Promise<{ ok: boolean; detail: stri
     const r = await fn();
     return { name, ...r, ms: Date.now() - t0 };
   } catch (e) {
-    return { name, ok: false, ms: Date.now() - t0, detail: e instanceof Error ? e.message : "예외" };
+    return {
+      name,
+      ok: false,
+      ms: Date.now() - t0,
+      detail: e instanceof Error ? e.message : "예외",
+      code: e instanceof VworldKeyError ? e.code : undefined,
+    };
   }
 }
 
@@ -64,6 +71,10 @@ export async function GET(request: Request) {
       const c = await fetchVworldLandChar(PROBE_PNU);
       return { ok: Boolean(c && c.price > 0), detail: c ? `${c.priceYear}년 ${c.price.toLocaleString()}원/㎡` : "응답 없음" };
     }),
+    timed("VWorld NED(토지이용계획)", async () => {
+      const attrs = await fetchVworldLandUseAttr(PROBE_PNU);
+      return { ok: Boolean(attrs?.length), detail: attrs ? `지역·지구 ${attrs.length}건` : "응답 없음" };
+    }),
     timed("카카오 지오코딩", async () => {
       const kk = process.env.KAKAO_KEY || "";
       if (!kk) return { ok: false, detail: "KAKAO_KEY 미설정" };
@@ -86,9 +97,15 @@ export async function GET(request: Request) {
     const allowed = ua.includes("vercel-cron") || (process.env.HEALTH_TOKEN && token === process.env.HEALTH_TOKEN);
     if (allowed) {
       const rows = failing.map((c) => `<li><b>${c.name}</b> — ${c.detail} (${c.ms}ms)</li>`).join("");
+      const keyFail = failing.find((c) => c.code)?.code;
       await sendAdminEmail(
-        `🩺 [gyumo] 외부 키 건강검진 실패 ${failing.length}건`,
-        `<p>매일 자동 점검에서 아래 항목이 실패했습니다. 키 만료·교체 누락을 확인하세요.</p><ul>${rows}</ul>` +
+        keyFail
+          ? `🚨 [gyumo] 토지 조회 장애 — VWorld 인증키 오류 (${keyFail})`
+          : `🩺 [gyumo] 외부 키 건강검진 실패 ${failing.length}건`,
+        (keyFail
+          ? `<p><b>회원 화면에 면적·용도지역·지적도가 나오지 않는 상태입니다.</b> VWorld 콘솔에서 키 상태를 확인하고 Vercel 의 VWORLD_KEY·VWORLD_DOMAIN 을 고친 뒤 재배포하세요.</p>`
+          : `<p>매일 자동 점검에서 아래 항목이 실패했습니다. 키 만료·교체 누락을 확인하세요.</p>`) +
+          `<ul>${rows}</ul>` +
           `<p style="color:#888">data.go.kr 키 교체 시 공법앱·gyumo·mrk 3곳을 함께 바꿔야 합니다.</p>`,
       );
     }

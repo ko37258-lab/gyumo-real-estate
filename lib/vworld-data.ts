@@ -12,19 +12,33 @@
 //   LT_C_UQ111       → uname="제2종일반주거지역"
 
 import { normalizeJimok } from "./jimok";
+import { VworldKeyError, throwIfVworldKeyFail } from "./vworld-fail";
 
 const VWORLD_DATA_ENDPOINT = "https://api.vworld.kr/req/data";
 
 function vworldKey(): string {
-  return process.env.VWORLD_DATA_KEY || process.env.VWORLD_KEY || "";
+  return (process.env.VWORLD_DATA_KEY || process.env.VWORLD_KEY || "").trim();
 }
 
 function vworldDomain(): string {
-  return process.env.VWORLD_DOMAIN || "";
+  return (process.env.VWORLD_DOMAIN || "").trim();
 }
 
 export function hasVworldDataKey(): boolean {
   return Boolean(vworldKey());
+}
+
+/** 키가 없으면 "자료 없음"이 아니라 설정 오류다 */
+function requireKey(): string {
+  const key = vworldKey();
+  if (!key) throw new VworldKeyError("NO_KEY");
+  return key;
+}
+
+/** best-effort 조회용 — 일시 장애는 null 로 넘기되 키 오류는 위로 올린다 */
+function nullUnlessKeyFail(e: unknown): null {
+  if (e instanceof VworldKeyError) throw e;
+  return null;
 }
 
 /**
@@ -67,6 +81,7 @@ function jimokFromJibun(jibun: string): string {
  * VWorld 데이터 API 호출. 전송 실패·빈응답·비정상(non-JSON)은 throw(=transient),
  * 정상 JSON은 반환(status가 OK가 아닐 수도 있음 — NOT_FOUND 등은 "데이터 없음").
  * 호출부에서 throw(일시 장애)와 status!=OK(데이터 없음)를 구분 처리한다.
+ * 키·한도 오류는 VworldKeyError 로 던진다 — 자료 없음이 아니다.
  */
 async function callVworldData(url: string): Promise<FeatureResponse> {
   const domain = vworldDomain();
@@ -80,7 +95,9 @@ async function callVworldData(url: string): Promise<FeatureResponse> {
   if (!res.ok) throw new Error(`VWorld HTTP ${res.status}`);
   const text = await res.text();
   if (!text.trim()) throw new Error("VWorld 빈 응답");
-  return JSON.parse(text) as FeatureResponse; // 비정상 본문이면 throw
+  const data = JSON.parse(text) as FeatureResponse; // 비정상 본문이면 throw
+  throwIfVworldKeyFail(data);
+  return data;
 }
 
 export interface VworldLandChar {
@@ -130,13 +147,13 @@ function pickLatestField(
  *   일반상업)·비도시(파주 송촌동578-11 공장용지/624㎡/계획관리지역)·임야(춘천 산1 임야/5,157㎡)
  *   모두 정상. 폴리곤 면적 계산·LT_C_UQ111(비도시 NOT_FOUND) 의존 제거.
  *
- * stdrYear 생략 → 전 연도 반환되므로 최신 행 선택. 전송실패/빈응답/비정상 본문은 throw(transient).
+ * stdrYear 생략 → 전 연도 반환되므로 최신 행 선택. 전송실패/빈응답/비정상 본문은 throw(transient),
+ * 키·한도 오류는 VworldKeyError.
  */
 export async function fetchVworldLandChar(
   pnu: string,
 ): Promise<VworldLandChar | null> {
-  const key = vworldKey();
-  if (!key) return null;
+  const key = requireKey();
   const vpnu = toVworldPnu(pnu);
   const url =
     `${VWORLD_NED_ENDPOINT}/getLandCharacteristics` +
@@ -153,8 +170,8 @@ export async function fetchVworldLandChar(
   const text = await res.text();
   if (!text.trim()) throw new Error("VWorld NED 빈 응답");
   const data = JSON.parse(text) as NedResponse; // 비정상 본문이면 throw
+  throwIfVworldKeyFail(data); // 키 오류는 "해당 필지 없음"이 아니다
 
-  // 인증키 오류 등은 데이터 없음으로 취급(무한 재시도 방지).
   const field = pickLatestField(data.landCharacteristicss?.field);
   if (!field) return null; // 해당 필지 없음(나대지 외 미등록) 또는 totalCount 0
 
@@ -187,14 +204,14 @@ type NedLandUseResponse = {
 
 /**
  * VWorld NED 토지이용계획속성(getLandUseAttr) — 국토계획법 지역·지구 전체 목록.
- * 플렉시티의 "토지이용계획" 배지에 대응. 저촉 필지는 "(저촉)" 표기.
- * best-effort — 실패/미제공 시 null (핵심 조회 흐름을 막지 않음).
+ * 플렉시티의 "토지이용계획" 배지에 대응.
+ * 표기: 포함 = 이름 / 일부 걸침 = 이름(저촉) / 경계만 맞닿음 = 이름(접함, 지정된 것이 아님).
+ * best-effort — 실패/미제공 시 null (핵심 조회 흐름을 막지 않음). 키·한도 오류는 VworldKeyError.
  */
 export async function fetchVworldLandUseAttr(
   pnu: string,
 ): Promise<string[] | null> {
-  const key = vworldKey();
-  if (!key) return null;
+  const key = requireKey();
   const vpnu = toVworldPnu(pnu);
   const url =
     `${VWORLD_NED_ENDPOINT}/getLandUseAttr` +
@@ -211,6 +228,7 @@ export async function fetchVworldLandUseAttr(
     const text = await res.text();
     if (!text.trim()) return null;
     const data = JSON.parse(text) as NedLandUseResponse;
+    throwIfVworldKeyFail(data);
     const raw = data.landUses?.field;
     const rows = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter(
       (x): x is Record<string, unknown> => !!x && typeof x === "object",
@@ -221,13 +239,13 @@ export async function fetchVworldLandUseAttr(
         r.prposAreaDstrcCodeNm ?? r.prposAreaDstrcNm ?? "",
       ).trim();
       if (!nm) continue;
-      const cnflc = String(r.cnflcAtNm ?? r.cnflcAt ?? "").trim();
-      const label = /저촉/.test(cnflc) ? `${nm}(저촉)` : nm;
+      const cnflc = String(r.cnflcAtNm ?? "").trim();
+      const label = /저촉/.test(cnflc) ? `${nm}(저촉)` : /접함/.test(cnflc) ? `${nm}(접함)` : nm;
       if (!names.includes(label)) names.push(label);
     }
     return names.length > 0 ? names : null;
-  } catch {
-    return null;
+  } catch (e) {
+    return nullUnlessKeyFail(e);
   }
 }
 
@@ -246,8 +264,7 @@ export interface VworldParcelPolygon {
 export async function fetchVworldParcelPolygon(
   pnu: string,
 ): Promise<VworldParcelPolygon | null> {
-  const key = vworldKey();
-  if (!key) return null;
+  const key = requireKey();
   const vpnu = toVworldPnu(pnu);
   const url =
     `${VWORLD_DATA_ENDPOINT}?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN` +
@@ -339,7 +356,7 @@ export async function fetchVworldZone(
     `&key=${key}&format=json&geomFilter=POINT(${x} ${y})` +
     `&geometry=false&attribute=true&crs=EPSG:4326&size=1&domain=${vworldDomain()}`;
   // 용도지역은 best-effort — 일시 장애/데이터없음 모두 null.
-  const data = await callVworldData(url).catch(() => null);
+  const data = await callVworldData(url).catch(nullUnlessKeyFail);
   if (data?.response?.status !== "OK") return null;
   const feature = data.response.result?.featureCollection?.features?.[0];
   if (!feature) return null;
@@ -376,7 +393,7 @@ export async function fetchVworldRoads(
     `&key=${key}&format=json&geomFilter=${box}` +
     `&geometry=false&attribute=true&crs=EPSG:4326&size=100&domain=${vworldDomain()}`;
   // 도로 판정은 best-effort — 일시 장애/데이터없음 모두 null.
-  const data = await callVworldData(url).catch(() => null);
+  const data = await callVworldData(url).catch(nullUnlessKeyFail);
   if (data?.response?.status !== "OK") return null;
   const features = data.response.result?.featureCollection?.features ?? [];
   const roads = features
@@ -425,7 +442,7 @@ export async function fetchVworldRoadParcels(
     `${VWORLD_DATA_ENDPOINT}?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN` +
     `&key=${key}&format=json&geomFilter=${box}&geometry=true&attribute=true` +
     `&crs=EPSG:4326&size=400&domain=${vworldDomain()}`;
-  const data = await callVworldData(url).catch(() => null);
+  const data = await callVworldData(url).catch(nullUnlessKeyFail);
   if (!data || data.response?.status !== "OK") return null;
   const features = data.response.result?.featureCollection?.features ?? [];
   const roads: RoadParcel[] = [];
@@ -465,7 +482,7 @@ export async function fetchVworldBuildings(
     `${VWORLD_DATA_ENDPOINT}?service=data&request=GetFeature&data=LT_C_SPBD` +
     `&key=${key}&format=json&geomFilter=${box}&geometry=true&attribute=true` +
     `&crs=EPSG:4326&size=400&domain=${vworldDomain()}`;
-  const data = await callVworldData(url).catch(() => null);
+  const data = await callVworldData(url).catch(nullUnlessKeyFail);
   if (!data || data.response?.status !== "OK") return null;
 
   const features = data.response.result?.featureCollection?.features ?? [];

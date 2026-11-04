@@ -64,6 +64,7 @@ type LandArea = {
   landUse?: string; // 토지이용상황 (NED)
   useAttrs?: string[]; // 토지이용계획 지역·지구 목록 (NED getLandUseAttr)
   transient?: boolean; // 일시 장애 (재시도 안내)
+  keyError?: boolean; // VWorld 인증키 오류 — 자료 없음이 아니라 장애
   message?: string;
 };
 
@@ -208,6 +209,7 @@ export function LandLookup({
   const setMergedParcels = useSimulatorStore((s) => s.setMergedParcels);
   const setParcelShape = useSimulatorStore((s) => s.setParcelShape);
   const setNewbuildResUnitWon = useSimulatorStore((s) => s.setNewbuildResUnitWon);
+  const setParcelRegulation = useSimulatorStore((s) => s.setParcelRegulation);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -284,19 +286,6 @@ export function LandLookup({
     setShowAllTrades(false);
     setShowAllNewbuild(false);
 
-    // 사용량 증가 (서버에서 원자적으로 처리)
-    if (usage?.isLoggedIn) {
-      const incRes = await fetch("/api/usage", { method: "POST" });
-      if (incRes.status === 429) {
-        setError(creditMessage);
-        setLoading(false);
-        setUsage((prev) => prev ? { ...prev, allowed: false, remaining: 0, credits: 0 } : prev);
-        return;
-      }
-      const updated = await incRes.json().catch(() => null) as typeof usage | null;
-      if (updated) setUsage((prev) => prev ? { ...prev, ...updated } : prev);
-    }
-
     try {
       // 1) 주소 → 좌표 + PNU (서버 프록시, KAKAO_KEY)
       const geoRes = await fetch(`/api/geocode?address=${encodeURIComponent(q)}`);
@@ -318,7 +307,8 @@ export function LandLookup({
       //    용도지역·도로      = /api/vworld (VWorld 서버 프록시)
       const [landAreaRes, zoneVW, roads, parcelPoly, permits] = await Promise.all([
         fetch(`/api/landarea?pnu=${geo.pnu}`)
-          .then(async (r) => (r.ok ? ((await r.json()) as LandArea) : null))
+          // 503 은 키 오류 안내가 본문에 담겨 온다
+          .then(async (r) => (r.ok || r.status === 503 ? ((await r.json()) as LandArea) : null))
           .catch(() => null),
         fetchZoneByCoord(geo.x, geo.y).catch(() => {
           errors.push("용도지역 조회 실패");
@@ -338,7 +328,24 @@ export function LandLookup({
           .catch(() => null),
       ]);
 
-      if (landAreaRes?.transient) {
+      // 사용량 증가 (서버에서 원자적으로 처리).
+      // 크레딧은 토지 자료를 받은 뒤에 차감한다 — 키 장애·일시 장애로 비어 돌아온 조회,
+      // 주소 변환 실패에는 받지 않는다 (2026-10-19 키 장애 때 빈 결과에도 차감됐다).
+      const landFailed = !landAreaRes || landAreaRes.keyError || landAreaRes.transient;
+      if (usage?.isLoggedIn && !landFailed) {
+        const incRes = await fetch("/api/usage", { method: "POST" });
+        if (incRes.status === 429) {
+          setError(creditMessage);
+          setUsage((prev) => prev ? { ...prev, allowed: false, remaining: 0, credits: 0 } : prev);
+          return;
+        }
+        const updated = await incRes.json().catch(() => null) as typeof usage | null;
+        if (updated) setUsage((prev) => prev ? { ...prev, ...updated } : prev);
+      }
+
+      if (landAreaRes?.keyError) {
+        errors.push(landAreaRes.message ?? "토지 자료 서버 인증 오류 — 잠시 후 다시 시도");
+      } else if (landAreaRes?.transient) {
         errors.push(
           landAreaRes.message ?? "면적 조회 일시 불안정 — 잠시 후 다시 시도",
         );
@@ -497,6 +504,13 @@ export function LandLookup({
       setAddress(geo.refined);
       // 서울도심(종로구·중구) 자동 판별 — 그 외 지역은 CBD 토글 OFF
       setIsCBD(isLikelyCBD(geo.refined));
+
+      // 취락지구 판정 재료 — setZone·applyLotInfo 가 이 값으로 상한을 정한다
+      setParcelRegulation({
+        pnu: geo.pnu,
+        useAttrs: landAreaRes?.useAttrs,
+        merged: Boolean(merged),
+      });
 
       const zoneCode = findZoneCodeByName(zoneName);
       if (zoneCode) setZone(zoneCode);
