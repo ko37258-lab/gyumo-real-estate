@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
  *
  * 같은 필지를 다시 조회하면 (user_id, pnu) 유니크 인덱스 위에서 upsert 되어
  * 행이 늘지 않고 최신 정보로 갱신된다.
+ * ⚠ 이 인덱스에 WHERE 를 붙이면 upsert 가 42P10 으로 실패한다 — supabase/schema_history_upsert.sql
  */
 
 const NO_STORE = { headers: { "Cache-Control": "no-store, max-age=0" } };
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
     .filter((r) => r && r.pnu && r.address)
     .slice(0, 300);
   if (list.length === 0) {
+    console.warn("[history] 저장 건너뜀 — pnu·주소가 있는 record 없음");
     return NextResponse.json({ error: "record 필요" }, { status: 400 });
   }
 
@@ -105,7 +107,17 @@ export async function POST(request: Request) {
   const { error } = await supabase
     .from("gyumo_history")
     .upsert(rows, { onConflict: "user_id,pnu" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // 화면은 이 응답을 보지 않는다(fire-and-forget) — 여기서 안 남기면 실패를 아무도 모른다.
+    // error.details 에는 행 값(회원·필지)이 실릴 수 있어 남기지 않는다.
+    console.error("[history] 저장 실패", {
+      code: error.code,
+      message: error.message,
+      hint: error.hint,
+      count: rows.length,
+    });
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ ok: true, count: rows.length });
 }
 
