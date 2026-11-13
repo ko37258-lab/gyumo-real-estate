@@ -27,6 +27,9 @@ export const metadata: Metadata = {
   other: {
     google: "notranslate",
   },
+  // 아이폰 홈 화면 아이콘·앱 이름(홈 화면에 추가)
+  icons: { apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "규모검토", statusBarStyle: "default" },
 };
 
 export default function RootLayout({
